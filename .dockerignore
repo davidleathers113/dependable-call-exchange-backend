@@ -1,0 +1,55 @@
+# Version control
+.git
+.gitignore
+
+# Documentation
+README.md
+CHANGELOG.md
+LICENSE
+
+# Development tools
+Makefile
+.air.toml
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+bin/
+dist/
+build/
+
+# Test artifacts
+*.test
+coverage.*
+*.out
+
+# Environment files
+.env*
+!.env.example
+
+# Temporary files
+tmp/
+temp/
+
+# Dependencies (already in image)
+vendor/
+
+# Docker files
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Research and docs (for this specific project)
+research/

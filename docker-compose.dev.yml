@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+      - "2345:2345" # delve debugger port
+    environment:
+      - DCE_ENVIRONMENT=development
+      - DCE_LOG_LEVEL=debug
+      - DCE_DATABASE_URL=postgres://postgres:password@postgres:5432/dce_dev?sslmode=disable
+      - DCE_REDIS_URL=redis:6379
+    volumes:
+      - .:/app
+      - go_modules:/go/pkg/mod
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - dce-network
+    stdin_open: true
+    tty: true
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: dce_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    networks:
+      - dce-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - dce-network
+
+volumes:
+  postgres_dev_data:
+  go_modules:
+
+networks:
+  dce-network:
+    driver: bridge

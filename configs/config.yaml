@@ -1,0 +1,49 @@
+# Development Configuration
+version: "0.1.0"
+environment: "development"
+log_level: "debug"
+
+server:
+  port: 8080
+  read_timeout: "30s"
+  write_timeout: "30s"
+  shutdown_timeout: "30s"
+  grpc:
+    port: 9090
+
+database:
+  url: "postgres://localhost:5432/dce_dev?sslmode=disable"
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: "5m"
+
+redis:
+  url: "localhost:6379"
+  password: ""
+  db: 0
+
+kafka:
+  brokers: ["localhost:9092"]
+  group_id: "dce-backend"
+
+telephony:
+  sip_proxy: "sip.example.com:5060"
+  stun_servers: 
+    - "stun:stun.l.google.com:19302"
+    - "stun:stun1.l.google.com:19302"
+
+compliance:
+  tcpa_enabled: true
+  gdpr_enabled: true
+  allowed_timezones:
+    - "America/New_York"
+    - "America/Chicago" 
+    - "America/Denver"
+    - "America/Los_Angeles"
+
+security:
+  jwt_secret: "your-jwt-secret-change-in-production"
+  token_expiry: "24h"
+  rate_limit:
+    requests_per_second: 100
+    burst_size: 200
