@@ -44,12 +44,28 @@ test: ## Run tests
 test-race: ## Run tests with race detection
 	$(GOTEST) -race -v ./...
 
+test-synctest: ## Run tests with Go 1.24 synctest (requires GOEXPERIMENT=synctest)
+	GOEXPERIMENT=synctest $(GOTEST) -v ./...
+
+test-integration: ## Run integration tests
+	$(GOTEST) -tags=integration -v ./test/...
+
+test-property: ## Run property-based tests  
+	$(GOTEST) -v -run="Property" ./...
+
 coverage: ## Run tests with coverage
 	$(GOTEST) -coverprofile=coverage.out -covermode=atomic ./...
 	$(GOCMD) tool cover -html=coverage.out -o coverage.html
 
+coverage-synctest: ## Run coverage with synctest
+	GOEXPERIMENT=synctest $(GOTEST) -coverprofile=coverage-synctest.out -covermode=atomic ./...
+	$(GOCMD) tool cover -html=coverage-synctest.out -o coverage-synctest.html
+
 bench: ## Run benchmarks
 	$(GOTEST) -bench=. -benchmem ./...
+
+bench-property: ## Run property-based benchmarks
+	$(GOTEST) -bench=Property -benchmem ./...
 
 deps: ## Download dependencies
 	$(GOMOD) download
