@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
-	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 )
@@ -99,6 +99,22 @@ func (m *BidRepository) GetByBuyer(ctx context.Context, buyerID uuid.UUID) ([]*b
 	return args.Get(0).([]*bid.Bid), args.Error(1)
 }
 
+func (m *BidRepository) GetBidByID(ctx context.Context, id uuid.UUID) (*bid.Bid, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*bid.Bid), args.Error(1)
+}
+
+func (m *BidRepository) GetExpiredBids(ctx context.Context, before time.Time) ([]*bid.Bid, error) {
+	args := m.Called(ctx, before)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*bid.Bid), args.Error(1)
+}
+
 func (m *BidRepository) CleanupExpiredBids(ctx context.Context) error {
 	args := m.Called(ctx)
 	return args.Error(0)
@@ -148,34 +164,21 @@ func (m *AccountRepository) List(ctx context.Context, filters map[string]interfa
 	return args.Get(0).([]*account.Account), args.Error(1)
 }
 
-// MetricsCollector mock
-type MetricsCollector struct {
-	mock.Mock
+func (m *AccountRepository) UpdateQualityScore(ctx context.Context, accountID uuid.UUID, score float64) error {
+	args := m.Called(ctx, accountID, score)
+	return args.Error(0)
 }
 
-func (m *MetricsCollector) RecordCallRouted(ctx context.Context, algorithm string, duration time.Duration) {
-	m.Called(ctx, algorithm, duration)
+func (m *AccountRepository) UpdateBalance(ctx context.Context, id uuid.UUID, amount float64) error {
+	args := m.Called(ctx, id, amount)
+	return args.Error(0)
 }
 
-func (m *MetricsCollector) RecordCallCompleted(ctx context.Context, callID uuid.UUID, duration int, cost float64) {
-	m.Called(ctx, callID, duration, cost)
+func (m *AccountRepository) GetBalance(ctx context.Context, id uuid.UUID) (float64, error) {
+	args := m.Called(ctx, id)
+	return args.Get(0).(float64), args.Error(1)
 }
 
-func (m *MetricsCollector) RecordBidPlaced(ctx context.Context, bidID uuid.UUID, amount float64) {
-	m.Called(ctx, bidID, amount)
-}
-
-func (m *MetricsCollector) IncrementCounter(name string, tags map[string]string) {
-	m.Called(name, tags)
-}
-
-func (m *MetricsCollector) RecordHistogram(name string, value float64, tags map[string]string) {
-	m.Called(name, value, tags)
-}
-
-func (m *MetricsCollector) RecordGauge(name string, value float64, tags map[string]string) {
-	m.Called(name, value, tags)
-}
 
 // NotificationService mock
 type NotificationService struct {
@@ -199,6 +202,26 @@ func (m *NotificationService) SendBidWon(ctx context.Context, bidID uuid.UUID, c
 
 func (m *NotificationService) SendBidLost(ctx context.Context, bidID uuid.UUID, callID uuid.UUID, reason string) error {
 	args := m.Called(ctx, bidID, callID, reason)
+	return args.Error(0)
+}
+
+func (m *NotificationService) NotifyBidPlaced(ctx context.Context, b *bid.Bid) error {
+	args := m.Called(ctx, b)
+	return args.Error(0)
+}
+
+func (m *NotificationService) NotifyBidWon(ctx context.Context, b *bid.Bid) error {
+	args := m.Called(ctx, b)
+	return args.Error(0)
+}
+
+func (m *NotificationService) NotifyBidLost(ctx context.Context, b *bid.Bid) error {
+	args := m.Called(ctx, b)
+	return args.Error(0)
+}
+
+func (m *NotificationService) NotifyBidExpired(ctx context.Context, b *bid.Bid) error {
+	args := m.Called(ctx, b)
 	return args.Error(0)
 }
 
@@ -270,6 +293,23 @@ func (m *ComplianceService) RecordConsent(ctx context.Context, phoneNumber strin
 func (m *ComplianceService) RevokeConsent(ctx context.Context, phoneNumber string) error {
 	args := m.Called(ctx, phoneNumber)
 	return args.Error(0)
+}
+
+// MetricsCollector mock
+type MetricsCollector struct {
+	mock.Mock
+}
+
+func (m *MetricsCollector) RecordBidPlaced(ctx context.Context, b *bid.Bid) {
+	m.Called(ctx, b)
+}
+
+func (m *MetricsCollector) RecordAuctionDuration(ctx context.Context, callID uuid.UUID, duration time.Duration) {
+	m.Called(ctx, callID, duration)
+}
+
+func (m *MetricsCollector) RecordBidAmount(ctx context.Context, amount float64) {
+	m.Called(ctx, amount)
 }
 
 // Helper methods to setup common mock behaviors

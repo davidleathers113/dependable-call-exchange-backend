@@ -173,3 +173,30 @@ The system is designed for:
 3. Use conventional commits: `feat:`, `fix:`, `docs:`
 4. Ensure migrations are backward compatible
 5. Update API documentation for endpoint changes
+
+## Memories
+
+- Check context7 mcp server for Go's documentation often so that you can meet the standard of strict adherence to official Go docs.
+- Remember to use the fixture builders internal/testutil/fixtures/ wherever we have manual data setup so that all of our tests can be cleaner and more robust. Also, use sub-tests where appropriate and always seek to reduce boilerplate code when there's an established best practice to follow that would naturally reduce boilerplate code.
+
+## Anchor Comments
+
+Use these prefixes throughout the codebase for searchable inline knowledge:
+- `AIDEV-NOTE:` - Important implementation details
+- `AIDEV-TODO:` - Tasks to complete  
+- `AIDEV-QUESTION:` - Clarifications needed
+
+Always grep for existing `AIDEV-*` comments before scanning files.
+
+## Subdirectory Context
+
+This project uses nested CLAUDE.md files for area-specific guidance:
+
+- **internal/api/CLAUDE.md**: API implementation status (currently empty)
+- **internal/domain/CLAUDE.md**: Domain entities and known issues
+- **internal/infrastructure/CLAUDE.md**: Database patterns and missing components
+- **internal/service/CLAUDE.md**: Service anti-patterns and refactoring priorities
+- **test/CLAUDE.md**: Current testing issues and patterns
+- **cmd/CLAUDE.md**: CLI tools and migration status
+
+Claude Code will automatically include these when working in those directories.

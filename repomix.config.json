@@ -1,0 +1,86 @@
+{
+  "$schema": "https://repomix.com/schemas/latest/schema.json",
+  "input": {
+    "maxFileSize": 50000000
+  },
+  "output": {
+    "filePath": "repomix-output.md",
+    "style": "markdown",
+    "parsableStyle": false,
+    "compress": true,
+    "headerText": "DependableCallExchangeBackEnd - Go Telecommunications Service Backend\nComprehensive TDD implementation with Go 1.24 features, Domain-Driven Design architecture.",
+    "fileSummary": true,
+    "directoryStructure": true,
+    "files": true,
+    "removeComments": false,
+    "removeEmptyLines": false,
+    "topFilesLength": 10,
+    "showLineNumbers": true,
+    "copyToClipboard": false,
+    "includeEmptyDirectories": false,
+    "git": {
+      "sortByChanges": true,
+      "sortByChangesMaxCommits": 100,
+      "includeDiffs": false
+    }
+  },
+  "include": [
+    "**/*.go",
+    "**/*.md",
+    "**/*.yaml",
+    "**/*.yml",
+    "**/*.sql",
+    "**/*.json",
+    "go.mod",
+    "go.sum",
+    "Makefile",
+    "Dockerfile*",
+    "docker-compose*.yml",
+    "*.env.example",
+    "CLAUDE.md",
+    "README.md",
+    "CONTRIBUTING.md",
+    "LICENSE"
+  ],
+  "ignore": {
+    "useGitignore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": [
+      "**/*.log",
+      "**/*.tmp",
+      "**/tmp/",
+      "**/temp/",
+      "**/.DS_Store",
+      "**/vendor/",
+      "**/bin/",
+      "**/dist/",
+      "**/build/",
+      "**/.env",
+      "**/.env.local",
+      "**/.env.*.local",
+      "**/coverage.out",
+      "**/coverage.html",
+      "**/*_test.go.bak",
+      "**/*.test",
+      "**/*.prof",
+      "**/*.pprof",
+      "**/testdata/large_files/",
+      "**/.air.toml",
+      "**/air_tmp/",
+      "**/.vscode/settings.json",
+      "**/.idea/",
+      "**/node_modules/",
+      "research/deprecated/",
+      "**/OLD_*",
+      "**/*_OLD.*",
+      "**/*.backup",
+      "**/migrations/*_CRITICAL_ISSUES.md"
+    ]
+  },
+  "security": {
+    "enableSecurityCheck": true
+  },
+  "tokenCount": {
+    "encoding": "o200k_base"
+  }
+}

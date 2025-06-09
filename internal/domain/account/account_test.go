@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
-	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil/fixtures"
 )
 
@@ -83,7 +82,8 @@ func TestNewAccount(t *testing.T) {
 	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := account.NewAccount(tt.email, tt.userName, tt.accountType)
+			a, err := account.NewAccount(tt.email, tt.userName, tt.accountType)
+			require.NoError(t, err)
 			require.NotNil(t, a)
 			tt.validate(t, a)
 		})
@@ -492,7 +492,7 @@ func TestAccount_Performance(t *testing.T) {
 		count := 10000
 		
 		for i := 0; i < count; i++ {
-			_ = account.NewAccount("test@example.com", "Test User", account.TypeBuyer)
+			_, _ = account.NewAccount("test@example.com", "Test User", account.TypeBuyer)
 		}
 		
 		elapsed := time.Since(start)

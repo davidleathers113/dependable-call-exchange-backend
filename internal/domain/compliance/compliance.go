@@ -156,11 +156,23 @@ type ConsentRecord struct {
 type ConsentType int
 
 const (
-	ConsentTypeTCPA ConsentType = iota
-	ConsentTypeGDPR
-	ConsentTypeCCPA
-	ConsentTypeMarketing
+	ConsentTypeExpress ConsentType = iota
+	ConsentTypeImplied
+	ConsentTypePriorBusiness
 )
+
+func (t ConsentType) String() string {
+	switch t {
+	case ConsentTypeExpress:
+		return "express"
+	case ConsentTypeImplied:
+		return "implied"
+	case ConsentTypePriorBusiness:
+		return "prior_business"
+	default:
+		return "unknown"
+	}
+}
 
 type ConsentStatus int
 

@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/compliance"
-	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil/fixtures"
 )
 
@@ -81,14 +80,14 @@ func TestNewConsentRecord(t *testing.T) {
 		{
 			name:        "creates TCPA consent record",
 			phoneNumber: "+15551234567",
-			consentType: compliance.ConsentTypeTCPA,
+			consentType: compliance.ConsentTypeExpress,
 			source:      "web_form",
 			ipAddress:   "192.168.1.100",
 			userAgent:   "Mozilla/5.0",
 			validate: func(t *testing.T, c *compliance.ConsentRecord) {
 				assert.NotEqual(t, uuid.Nil, c.ID)
 				assert.Equal(t, "+15551234567", c.PhoneNumber)
-				assert.Equal(t, compliance.ConsentTypeTCPA, c.ConsentType)
+				assert.Equal(t, compliance.ConsentTypeExpress, c.ConsentType)
 				assert.Equal(t, compliance.ConsentStatusActive, c.Status)
 				assert.Equal(t, "web_form", c.Source)
 				assert.Equal(t, "192.168.1.100", c.IPAddress)
@@ -100,12 +99,12 @@ func TestNewConsentRecord(t *testing.T) {
 		{
 			name:        "creates GDPR consent record",
 			phoneNumber: "+442012345678",
-			consentType: compliance.ConsentTypeGDPR,
+			consentType: compliance.ConsentTypeImplied,
 			source:      "mobile_app",
 			ipAddress:   "10.0.0.1",
 			userAgent:   "MobileApp/1.0",
 			validate: func(t *testing.T, c *compliance.ConsentRecord) {
-				assert.Equal(t, compliance.ConsentTypeGDPR, c.ConsentType)
+				assert.Equal(t, compliance.ConsentTypeImplied, c.ConsentType)
 				assert.Equal(t, "mobile_app", c.Source)
 			},
 		},
@@ -586,7 +585,7 @@ func TestCompliance_Performance(t *testing.T) {
 		count := 10000
 		
 		for i := 0; i < count; i++ {
-			_ = compliance.NewConsentRecord("+15551234567", compliance.ConsentTypeTCPA, 
+			_ = compliance.NewConsentRecord("+15551234567", compliance.ConsentTypeExpress, 
 				"web", "192.168.1.1", "Mozilla")
 		}
 		

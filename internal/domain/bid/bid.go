@@ -1,9 +1,11 @@
 package bid
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/validation"
 )
 
 type Bid struct {
@@ -141,7 +143,34 @@ func (s AuctionStatus) String() string {
 	}
 }
 
-func NewBid(callID, buyerID, sellerID uuid.UUID, amount float64, criteria BidCriteria) *Bid {
+func NewBid(callID, buyerID, sellerID uuid.UUID, amount float64, criteria BidCriteria) (*Bid, error) {
+	// Validate UUIDs
+	if callID == uuid.Nil {
+		return nil, fmt.Errorf("call ID cannot be nil")
+	}
+	if buyerID == uuid.Nil {
+		return nil, fmt.Errorf("buyer ID cannot be nil")
+	}
+	if sellerID == uuid.Nil {
+		return nil, fmt.Errorf("seller ID cannot be nil")
+	}
+	
+	// Validate amount
+	if err := validation.ValidateAmount(amount, "bid amount"); err != nil {
+		return nil, err
+	}
+	
+	// Minimum bid amount
+	const minBidAmount = 0.01
+	if amount < minBidAmount {
+		return nil, fmt.Errorf("bid amount must be at least $%.2f", minBidAmount)
+	}
+	
+	// Validate criteria
+	if err := validateBidCriteria(criteria); err != nil {
+		return nil, fmt.Errorf("invalid bid criteria: %w", err)
+	}
+	
 	now := time.Now()
 	return &Bid{
 		ID:        uuid.New(),
@@ -155,7 +184,31 @@ func NewBid(callID, buyerID, sellerID uuid.UUID, amount float64, criteria BidCri
 		ExpiresAt: now.Add(5 * time.Minute), // 5-minute expiry
 		CreatedAt: now,
 		UpdatedAt: now,
+	}, nil
+}
+
+func validateBidCriteria(criteria BidCriteria) error {
+	// Validate time window
+	if criteria.TimeWindow.StartHour < 0 || criteria.TimeWindow.StartHour > 23 {
+		return fmt.Errorf("invalid start hour: must be between 0 and 23")
 	}
+	if criteria.TimeWindow.EndHour < 0 || criteria.TimeWindow.EndHour > 23 {
+		return fmt.Errorf("invalid end hour: must be between 0 and 23")
+	}
+	
+	// Validate max budget if set
+	if criteria.MaxBudget > 0 {
+		if err := validation.ValidateAmount(criteria.MaxBudget, "max budget"); err != nil {
+			return err
+		}
+	}
+	
+	// Validate geography radius if set
+	if criteria.Geography.Radius != nil && *criteria.Geography.Radius < 0 {
+		return fmt.Errorf("radius cannot be negative")
+	}
+	
+	return nil
 }
 
 func (b *Bid) Accept() {
@@ -170,7 +223,17 @@ func (b *Bid) Reject() {
 	b.UpdatedAt = time.Now()
 }
 
-func NewAuction(callID uuid.UUID, reservePrice float64) *Auction {
+func NewAuction(callID uuid.UUID, reservePrice float64) (*Auction, error) {
+	// Validate call ID
+	if callID == uuid.Nil {
+		return nil, fmt.Errorf("call ID cannot be nil")
+	}
+	
+	// Validate reserve price
+	if err := validation.ValidateAmount(reservePrice, "reserve price"); err != nil {
+		return nil, err
+	}
+	
 	now := time.Now()
 	return &Auction{
 		ID:           uuid.New(),
@@ -183,5 +246,5 @@ func NewAuction(callID uuid.UUID, reservePrice float64) *Auction {
 		MaxDuration:  30,
 		CreatedAt:    now,
 		UpdatedAt:    now,
-	}
+	}, nil
 }

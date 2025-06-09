@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
-	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil/fixtures"
 )
 
@@ -73,7 +72,8 @@ func TestNewBid(t *testing.T) {
 	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := bid.NewBid(tt.callID, tt.buyerID, tt.sellerID, tt.amount, tt.criteria)
+			b, err := bid.NewBid(tt.callID, tt.buyerID, tt.sellerID, tt.amount, tt.criteria)
+			require.NoError(t, err)
 			require.NotNil(t, b)
 			tt.validate(t, b)
 		})
@@ -209,7 +209,8 @@ func TestStatus_String(t *testing.T) {
 
 func TestBid_Expiration(t *testing.T) {
 	t.Run("default expiration is 5 minutes", func(t *testing.T) {
-		b := bid.NewBid(uuid.New(), uuid.New(), uuid.New(), 10.00, bid.BidCriteria{})
+		b, err := bid.NewBid(uuid.New(), uuid.New(), uuid.New(), 10.00, bid.BidCriteria{})
+		require.NoError(t, err)
 		
 		expectedExpiry := b.PlacedAt.Add(5 * time.Minute)
 		assert.WithinDuration(t, expectedExpiry, b.ExpiresAt, time.Second)
@@ -437,7 +438,8 @@ func TestNewAuction(t *testing.T) {
 	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := bid.NewAuction(tt.callID, tt.reservePrice)
+			a, err := bid.NewAuction(tt.callID, tt.reservePrice)
+			require.NoError(t, err)
 			require.NotNil(t, a)
 			tt.validate(t, a)
 		})
@@ -549,7 +551,7 @@ func TestBid_Performance(t *testing.T) {
 		count := 10000
 		
 		for i := 0; i < count; i++ {
-			_ = bid.NewBid(uuid.New(), uuid.New(), uuid.New(), 10.00, criteria)
+			_, _ = bid.NewBid(uuid.New(), uuid.New(), uuid.New(), 10.00, criteria)
 		}
 		
 		elapsed := time.Since(start)

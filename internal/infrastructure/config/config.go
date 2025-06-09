@@ -48,9 +48,15 @@ type DatabaseConfig struct {
 }
 
 type RedisConfig struct {
-	URL      string `koanf:"url"`
-	Password string `koanf:"password"`
-	DB       int    `koanf:"db"`
+	URL          string        `koanf:"url"`
+	Password     string        `koanf:"password"`
+	DB           int           `koanf:"db"`
+	PoolSize     int           `koanf:"pool_size"`
+	MinIdleConns int           `koanf:"min_idle_conns"`
+	MaxRetries   int           `koanf:"max_retries"`
+	DialTimeout  time.Duration `koanf:"dial_timeout"`
+	ReadTimeout  time.Duration `koanf:"read_timeout"`
+	WriteTimeout time.Duration `koanf:"write_timeout"`
 }
 
 type KafkaConfig struct {
@@ -103,7 +109,13 @@ func Load() (*Config, error) {
 			ConnMaxLifetime: 5 * time.Minute,
 		},
 		Redis: RedisConfig{
-			DB: 0,
+			DB:           0,
+			PoolSize:     10,
+			MinIdleConns: 2,
+			MaxRetries:   3,
+			DialTimeout:  5 * time.Second,
+			ReadTimeout:  3 * time.Second,
+			WriteTimeout: 3 * time.Second,
 		},
 		Compliance: ComplianceConfig{
 			TCPAEnabled: true,

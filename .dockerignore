@@ -1,55 +1,213 @@
-# Version control
+# .dockerignore - Optimized for 2025 Go Backend with DDD Architecture
+# Reduces Docker build context and improves build performance
+
+# Version control (never needed in containers)
 .git
 .gitignore
+.gitattributes
+.gitmodules
 
-# Documentation
+# Documentation and metadata (not needed in runtime)
 README.md
 CHANGELOG.md
 LICENSE
+CONTRIBUTING.md
+*.md
+!CLAUDE.md
 
-# Development tools
+# Development tools and configuration
 Makefile
 .air.toml
+.air.toml.local
+.editorconfig
+.pre-commit-config.yaml
 
-# IDE files
+# IDE and editor files (2025 comprehensive list)
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
+.sublime-project
+.sublime-workspace
+*.code-workspace
 
-# OS files
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
 
-# Build artifacts
+# Go build artifacts and binaries
 bin/
 dist/
 build/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 
-# Test artifacts
+# Go testing artifacts (2025 comprehensive)
 *.test
 coverage.*
-*.out
+*.coverprofile
+profile.cov
+coverage-synctest.*
+coverage-merged.*
+*.prof
+*.trace
+*.memprofile
+*.cpuprofile
+*.blockprofile
+*.mutexprofile
+*.benchmem
+*.benchtime
+cpu.out
+mem.out
+block.out
+mutex.out
+trace.out
 
-# Environment files
+# Go 1.24 advanced testing and fuzzing
+*.fuzz
+fuzz/
+**/testdata/large_files/
+
+# Air hot reload artifacts
+air_tmp/
+build-errors.log
+
+# Security and vulnerability reports (never in containers)
+*.sarif
+*.sbom
+govulncheck.*
+vuln-report.json
+gosec-report.sarif
+
+# Environment and configuration files
 .env*
 !.env.example
+config.local.*
+*.local.yaml
+*.local.yml
 
-# Temporary files
+# Database development files (not for production containers)
+*.db-journal
+*.db-wal
+*.db-shm
+migrations/*.backup
+data/
+pgdata/
+postgres-data/
+
+# Security and secrets (critical for 2025 security)
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+*secret*
+*token*
+*cert*
+!**/*_test.key
+!**/*_test.crt
+!**/testdata/**/*.pem
+
+# Modern Go development tools
+.goreleaser/
+*.snap
+go.work.local
+.tool-versions
+
+# Dependencies (handled by multi-stage builds)
+vendor/
+go.sum.backup
+go.mod.backup
+
+# Temporary files and caches
 tmp/
 temp/
+cache/
+.cache/
 
-# Dependencies (already in image)
-vendor/
-
-# Docker files
+# Container and orchestration files
 Dockerfile*
 docker-compose*
 .dockerignore
+k8s-local/
+helm-local/
+docker-data/
+*.pid
 
-# CI/CD
+# CI/CD configurations (not needed in runtime)
 .github/
 .gitlab-ci.yml
+.travis.yml
+.circleci/
+azure-pipelines.yml
+jenkins/
+.buildkite/
 
-# Research and docs (for this specific project)
+# Research and documentation working files (project-specific)
 research/
+research/drafts/
+research/tmp/
+research/deprecated/
+docs/generated/
+*.draft.md
+
+# Log files and debugging
+*.log
+debug/
+logs/
+
+# Repomix outputs (development tools)
+repomix-output*.md
+repomix-output*.xml
+repomix-archive/
+scripts/generate-repomix.sh
+
+# Test directories for integration tests (use multi-stage builds instead)
+test/
+!test/fixtures/
+**/fixtures/test_data.go
+
+# Development scripts and utilities
+scripts/
+!scripts/init-db.sql
+
+# Project-specific artifacts
+migrations/*.md
+deployments/local/
+configs/local/
+
+# Backup and archive files
+*.backup
+*.bak
+*_backup
+*.old
+*_old
+*.orig
+
+# Node.js artifacts (if any frontend components)
+node_modules/
+npm-debug.log
+yarn-error.log
+.npm/
+.yarn/
+
+# Package manager locks (Go modules handle this)
+package-lock.json
+yarn.lock
+
+# IDE workspace files
+*.code-workspace
+.history/
+
+# Performance and profiling data
+*.pprof

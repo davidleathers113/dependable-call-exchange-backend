@@ -11,365 +11,425 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRoundRobinRouter(t *testing.T) {
+func TestRoundRobinRouter_Route(t *testing.T) {
 	ctx := context.Background()
 	router := NewRoundRobinRouter()
 
-	testCall := &call.Call{
-		ID:     uuid.New(),
-		Status: call.StatusPending,
-	}
-
-	tests := []struct {
-		name          string
-		bids          []*bid.Bid
-		expectedError bool
-		expectedIndex int
-	}{
-		{
-			name: "routes to first bid initially",
-			bids: []*bid.Bid{
-				{ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New()},
-				{ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New()},
-			},
-			expectedError: false,
-			expectedIndex: 0,
-		},
-		{
-			name: "routes in round-robin fashion",
-			bids: []*bid.Bid{
-				{ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New()},
-				{ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New()},
-				{ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New()},
-			},
-			expectedError: false,
-			expectedIndex: 1, // Second call should go to index 1
-		},
-		{
-			name:          "errors on empty bids",
-			bids:          []*bid.Bid{},
-			expectedError: true,
-		},
-		{
-			name: "errors when no active bids",
-			bids: []*bid.Bid{
-				{ID: uuid.New(), Status: bid.StatusExpired, BuyerID: uuid.New()},
-				{ID: uuid.New(), Status: bid.StatusWon, BuyerID: uuid.New()},
-			},
-			expectedError: true,
-		},
-		{
-			name: "skips inactive bids",
-			bids: []*bid.Bid{
-				{ID: uuid.New(), Status: bid.StatusExpired, BuyerID: uuid.New()},
-				{ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New()},
-				{ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New()},
-			},
-			expectedError: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			decision, err := router.Route(ctx, testCall, tt.bids)
-			
-			if tt.expectedError {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				assert.NotNil(t, decision)
-				assert.Equal(t, "round-robin", decision.Algorithm)
-				assert.Equal(t, 1.0, decision.Score)
-				assert.NotZero(t, decision.BidID)
-				assert.NotZero(t, decision.BuyerID)
-				
-				// Check metadata
-				metadata := decision.Metadata
-				assert.Contains(t, metadata, "index")
-				assert.Contains(t, metadata, "total")
-			}
-		})
-	}
-}
-
-func TestSkillBasedRouter(t *testing.T) {
-	ctx := context.Background()
-	
-	skillWeights := map[string]float64{
-		"sales":    2.0,
-		"support":  1.5,
-		"billing":  1.0,
-	}
-	
-	router := NewSkillBasedRouter(skillWeights)
+	// Create fixed UUIDs for deterministic testing
+	bid1ID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	bid2ID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	bid3ID := uuid.MustParse("00000000-0000-0000-0000-000000000003")
+	bid4ID := uuid.MustParse("00000000-0000-0000-0000-000000000004")
 
 	tests := []struct {
 		name            string
 		call            *call.Call
 		bids            []*bid.Bid
 		expectedError   bool
-		expectedWinner  int // Index of expected winning bid
-		expectedMinScore float64
+		expectedBidIDs  []uuid.UUID // Expected sequence of bid IDs
 	}{
 		{
-			name: "selects bid with best skill match",
+			name: "cycles through bids in order",
 			call: &call.Call{
 				ID:     uuid.New(),
 				Status: call.StatusPending,
-				Metadata: map[string]interface{}{
-					"required_skills": []string{"sales", "support"},
-				},
 			},
 			bids: []*bid.Bid{
-				{
-					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
-					Criteria: map[string]interface{}{
-						"skills": []string{"sales"},
-					},
-				},
-				{
-					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
-					Criteria: map[string]interface{}{
-						"skills": []string{"sales", "support"},
-					},
-				},
-				{
-					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
-					Criteria: map[string]interface{}{
-						"skills": []string{"billing"},
-					},
-				},
+				{ID: bid1ID, Status: bid.StatusActive, BuyerID: uuid.New()},
+				{ID: bid2ID, Status: bid.StatusActive, BuyerID: uuid.New()},
+				{ID: bid3ID, Status: bid.StatusActive, BuyerID: uuid.New()},
 			},
-			expectedError:   false,
-			expectedWinner:  1, // Bid with both skills
-			expectedMinScore: 1.0,
+			expectedError:  false,
+			expectedBidIDs: []uuid.UUID{bid1ID, bid2ID, bid3ID, bid1ID, bid2ID}, // Round-robin pattern
 		},
 		{
-			name: "handles weighted skills correctly",
+			name: "handles single bid",
 			call: &call.Call{
 				ID:     uuid.New(),
 				Status: call.StatusPending,
-				Metadata: map[string]interface{}{
-					"required_skills": []string{"sales", "billing"},
-				},
 			},
 			bids: []*bid.Bid{
-				{
-					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
-					Criteria: map[string]interface{}{
-						"skills": []string{"billing"}, // weight 1.0
-					},
-				},
-				{
-					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
-					Criteria: map[string]interface{}{
-						"skills": []string{"sales"}, // weight 2.0
-					},
-				},
+				{ID: bid1ID, Status: bid.StatusActive, BuyerID: uuid.New()},
 			},
-			expectedError:   false,
-			expectedWinner:  1, // Sales has higher weight
-			expectedMinScore: 0.5,
+			expectedError:  false,
+			expectedBidIDs: []uuid.UUID{bid1ID, bid1ID, bid1ID}, // Always selects the only bid
 		},
 		{
-			name: "handles call without required skills",
-			call: &call.Call{
-				ID:       uuid.New(),
-				Status:   call.StatusPending,
-				Metadata: map[string]interface{}{},
-			},
-			bids: []*bid.Bid{
-				{ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New()},
-			},
-			expectedError: false,
-			expectedMinScore: 1.0, // Default score
-		},
-		{
-			name: "handles bid without skills",
+			name: "filters out inactive bids",
 			call: &call.Call{
 				ID:     uuid.New(),
 				Status: call.StatusPending,
-				Metadata: map[string]interface{}{
-					"required_skills": []string{"sales"},
-				},
 			},
 			bids: []*bid.Bid{
-				{
-					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
-					Criteria: map[string]interface{}{},
-				},
+				{ID: bid1ID, Status: bid.StatusExpired, BuyerID: uuid.New()},
+				{ID: bid2ID, Status: bid.StatusActive, BuyerID: uuid.New()},
+				{ID: bid3ID, Status: bid.StatusCanceled, BuyerID: uuid.New()},
+				{ID: bid4ID, Status: bid.StatusActive, BuyerID: uuid.New()},
 			},
-			expectedError: false,
-			expectedMinScore: 0.5, // Partial score
+			expectedError:  false,
+			expectedBidIDs: []uuid.UUID{bid2ID, bid4ID, bid2ID}, // Only active bids (bid2 and bid4)
+		},
+		{
+			name:          "errors with no bids",
+			call:          &call.Call{ID: uuid.New(), Status: call.StatusPending},
+			bids:          []*bid.Bid{},
+			expectedError: true,
+		},
+		{
+			name: "errors with no active bids",
+			call: &call.Call{ID: uuid.New(), Status: call.StatusPending},
+			bids: []*bid.Bid{
+				{ID: uuid.New(), Status: bid.StatusExpired, BuyerID: uuid.New()},
+				{ID: uuid.New(), Status: bid.StatusCanceled, BuyerID: uuid.New()},
+			},
+			expectedError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Reset router state for each test
+			router = NewRoundRobinRouter()
+
+			if tt.expectedError {
+				_, err := router.Route(ctx, tt.call, tt.bids)
+				require.Error(t, err)
+			} else {
+				// Test the sequence of selections
+				for i, expectedBidID := range tt.expectedBidIDs {
+					decision, err := router.Route(ctx, tt.call, tt.bids)
+					require.NoError(t, err, "routing failed at iteration %d", i)
+					assert.Equal(t, expectedBidID, decision.BidID, "wrong bid selected at iteration %d", i)
+					assert.Equal(t, "round-robin", decision.Algorithm)
+					assert.Equal(t, 1.0, decision.Score)
+				}
+			}
+		})
+	}
+}
+
+func TestSkillBasedRouter_Route(t *testing.T) {
+	ctx := context.Background()
+	
+	tests := []struct {
+		name           string
+		call           *call.Call
+		bids           []*bid.Bid
+		skillWeights   map[string]float64
+		expectedError  bool
+		expectedWinner int // Index of expected winning bid
+	}{
+		{
+			name: "selects bid with matching call type",
+			call: &call.Call{
+				ID:        uuid.New(),
+				Status:    call.StatusPending,
+				Direction: call.DirectionInbound,
+			},
+			bids: []*bid.Bid{
+				{
+					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
+					Criteria: bid.BidCriteria{
+						CallType: []string{"outbound"},
+					},
+					Quality: bid.QualityMetrics{
+						ConversionRate:   0.20,
+						FraudScore:       0.05,
+						HistoricalRating: 4.5,
+					},
+				},
+				{
+					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
+					Criteria: bid.BidCriteria{
+						CallType: []string{"inbound"},
+					},
+					Quality: bid.QualityMetrics{
+						ConversionRate:   0.15,
+						FraudScore:       0.08,
+						HistoricalRating: 4.0,
+					},
+				},
+			},
+			expectedError:  false,
+			expectedWinner: 1, // Bid that accepts inbound calls
+		},
+		{
+			name: "prioritizes quality metrics",
+			call: &call.Call{
+				ID:        uuid.New(),
+				Status:    call.StatusPending,
+				Direction: call.DirectionInbound,
+			},
+			bids: []*bid.Bid{
+				{
+					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
+					Criteria: bid.BidCriteria{
+						CallType: []string{"inbound"},
+					},
+					Quality: bid.QualityMetrics{
+						ConversionRate:   0.10,
+						FraudScore:       0.15,
+						HistoricalRating: 3.0,
+					},
+				},
+				{
+					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
+					Criteria: bid.BidCriteria{
+						CallType: []string{"inbound"},
+					},
+					Quality: bid.QualityMetrics{
+						ConversionRate:   0.25,
+						FraudScore:       0.02,
+						HistoricalRating: 4.8,
+					},
+				},
+			},
+			expectedError:  false,
+			expectedWinner: 1, // Bid with better quality metrics
+		},
+		{
+			name: "considers geographic match",
+			call: &call.Call{
+				ID:        uuid.New(),
+				Status:    call.StatusPending,
+				Direction: call.DirectionInbound,
+				Location: &call.Location{
+					State: "CA",
+				},
+			},
+			bids: []*bid.Bid{
+				{
+					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
+					Criteria: bid.BidCriteria{
+						CallType: []string{"inbound"},
+						Geography: bid.GeoCriteria{
+							States: []string{"NY", "TX"},
+						},
+					},
+					Quality: bid.QualityMetrics{
+						ConversionRate:   0.20,
+						FraudScore:       0.05,
+						HistoricalRating: 4.5,
+					},
+				},
+				{
+					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
+					Criteria: bid.BidCriteria{
+						CallType: []string{"inbound"},
+						Geography: bid.GeoCriteria{
+							States: []string{"CA", "WA"},
+						},
+					},
+					Quality: bid.QualityMetrics{
+						ConversionRate:   0.18,
+						FraudScore:       0.06,
+						HistoricalRating: 4.3,
+					},
+				},
+			},
+			expectedError:  false,
+			expectedWinner: 1, // Bid with geographic match gets bonus
+		},
+		{
+			name:          "errors with no bids",
+			call:          &call.Call{ID: uuid.New(), Status: call.StatusPending},
+			bids:          []*bid.Bid{},
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := NewSkillBasedRouter(tt.skillWeights)
+			
 			decision, err := router.Route(ctx, tt.call, tt.bids)
 			
 			if tt.expectedError {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				assert.NotNil(t, decision)
+				assert.Equal(t, tt.bids[tt.expectedWinner].ID, decision.BidID)
 				assert.Equal(t, "skill-based", decision.Algorithm)
-				assert.GreaterOrEqual(t, decision.Score, tt.expectedMinScore)
-				
-				if tt.expectedWinner >= 0 {
-					assert.Equal(t, tt.bids[tt.expectedWinner].ID, decision.BidID)
-				}
+				assert.Greater(t, decision.Score, 0.0)
 			}
 		})
 	}
 }
 
-func TestCostBasedRouter(t *testing.T) {
+func TestCostBasedRouter_Route(t *testing.T) {
 	ctx := context.Background()
 	
-	router := NewCostBasedRouter(0.4, 0.4, 0.2) // quality, price, capacity
-
-	testCall := &call.Call{
-		ID:     uuid.New(),
-		Status: call.StatusPending,
-	}
-
 	tests := []struct {
 		name            string
+		call            *call.Call
 		bids            []*bid.Bid
+		qualityWeight   float64
+		priceWeight     float64
+		capacityWeight  float64
 		expectedError   bool
 		expectedWinner  int
-		expectedMinScore float64
 	}{
 		{
-			name: "balances quality, price, and capacity",
+			name: "balances quality and price",
+			call: &call.Call{
+				ID:     uuid.New(),
+				Status: call.StatusPending,
+			},
 			bids: []*bid.Bid{
 				{
 					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
-					Amount: 10.0, QualityScore: 60,
-					Criteria: map[string]interface{}{
-						"available_capacity": 200.0,
+					Amount: 10.0, // High price
+					Quality: bid.QualityMetrics{
+						ConversionRate:   0.10,
+						AverageCallTime:  240,
+						FraudScore:       0.15,
+						HistoricalRating: 3.0,
 					},
 				},
 				{
 					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
-					Amount: 5.0, QualityScore: 90,
-					Criteria: map[string]interface{}{
-						"available_capacity": 500.0,
-					},
-				},
-				{
-					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
-					Amount: 7.0, QualityScore: 80,
-					Criteria: map[string]interface{}{
-						"available_capacity": 800.0,
+					Amount: 5.0, // Lower price
+					Quality: bid.QualityMetrics{
+						ConversionRate:   0.25,
+						AverageCallTime:  180,
+						FraudScore:       0.02,
+						HistoricalRating: 4.8,
 					},
 				},
 			},
-			expectedError:   false,
-			expectedWinner:  1, // Best balance
-			expectedMinScore: 0.5,
+			qualityWeight:  0.5,
+			priceWeight:    0.3,
+			capacityWeight: 0.2,
+			expectedError:  false,
+			expectedWinner: 1, // Better quality and lower price
 		},
 		{
-			name: "handles missing capacity data",
-			bids: []*bid.Bid{
-				{
-					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
-					Amount: 5.0, QualityScore: 80,
-					Criteria: map[string]interface{}{},
-				},
+			name: "handles equal bids",
+			call: &call.Call{
+				ID:     uuid.New(),
+				Status: call.StatusPending,
 			},
-			expectedError: false,
-			expectedMinScore: 0.3, // Should still calculate with default capacity
-		},
-		{
-			name: "normalizes weights correctly",
 			bids: []*bid.Bid{
 				{
 					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
-					Amount: 5.0, QualityScore: 100,
-					Criteria: map[string]interface{}{
-						"available_capacity": 1000.0,
+					Amount: 5.0,
+					Quality: bid.QualityMetrics{
+						ConversionRate:   0.15,
+						AverageCallTime:  180,
+						FraudScore:       0.05,
+						HistoricalRating: 4.0,
+					},
+				},
+				{
+					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
+					Amount: 5.0,
+					Quality: bid.QualityMetrics{
+						ConversionRate:   0.15,
+						AverageCallTime:  180,
+						FraudScore:       0.05,
+						HistoricalRating: 4.0,
 					},
 				},
 			},
-			expectedError: false,
-			expectedMinScore: 0.8, // High score expected
+			qualityWeight:  0.33,
+			priceWeight:    0.33,
+			capacityWeight: 0.34,
+			expectedError:  false,
+			expectedWinner: 0, // First bid when equal
+		},
+		{
+			name:           "errors with no bids",
+			call:           &call.Call{ID: uuid.New(), Status: call.StatusPending},
+			bids:           []*bid.Bid{},
+			qualityWeight:  0.5,
+			priceWeight:    0.5,
+			expectedError:  true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			decision, err := router.Route(ctx, testCall, tt.bids)
+			router := NewCostBasedRouter(tt.qualityWeight, tt.priceWeight, tt.capacityWeight)
+			
+			decision, err := router.Route(ctx, tt.call, tt.bids)
 			
 			if tt.expectedError {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				assert.NotNil(t, decision)
+				assert.Equal(t, tt.bids[tt.expectedWinner].ID, decision.BidID)
 				assert.Equal(t, "cost-based", decision.Algorithm)
-				assert.GreaterOrEqual(t, decision.Score, tt.expectedMinScore)
 				
-				// Verify metadata
+				// Verify metadata contains scores
 				metadata := decision.Metadata
 				assert.Contains(t, metadata, "quality_score")
 				assert.Contains(t, metadata, "price_score")
 				assert.Contains(t, metadata, "capacity_score")
 				assert.Contains(t, metadata, "weights")
-				
-				if tt.expectedWinner >= 0 {
-					assert.Equal(t, tt.bids[tt.expectedWinner].ID, decision.BidID)
-				}
 			}
 		})
 	}
 }
 
-func TestCostBasedRouter_EdgeCases(t *testing.T) {
-	ctx := context.Background()
-	testCall := &call.Call{
-		ID:     uuid.New(),
-		Status: call.StatusPending,
+func TestCostBasedRouter_WeightNormalization(t *testing.T) {
+	tests := []struct {
+		name                    string
+		qualityWeight           float64
+		priceWeight             float64
+		capacityWeight          float64
+		expectedQualityWeight   float64
+		expectedPriceWeight     float64
+		expectedCapacityWeight  float64
+	}{
+		{
+			name:                    "normalizes non-unit weights",
+			qualityWeight:           2.0,
+			priceWeight:             3.0,
+			capacityWeight:          5.0,
+			expectedQualityWeight:   0.2,
+			expectedPriceWeight:     0.3,
+			expectedCapacityWeight:  0.5,
+		},
+		{
+			name:                    "handles zero weights with defaults",
+			qualityWeight:           0,
+			priceWeight:             0,
+			capacityWeight:          0,
+			expectedQualityWeight:   0.33,
+			expectedPriceWeight:     0.33,
+			expectedCapacityWeight:  0.34,
+		},
+		{
+			name:                    "preserves unit weights",
+			qualityWeight:           0.4,
+			priceWeight:             0.4,
+			capacityWeight:          0.2,
+			expectedQualityWeight:   0.4,
+			expectedPriceWeight:     0.4,
+			expectedCapacityWeight:  0.2,
+		},
 	}
 
-	t.Run("handles zero weights", func(t *testing.T) {
-		router := NewCostBasedRouter(0, 0, 0)
-		// Should normalize to equal weights
-		assert.NotNil(t, router)
-	})
-
-	t.Run("handles same price for all bids", func(t *testing.T) {
-		router := NewCostBasedRouter(0.4, 0.4, 0.2)
-		
-		bids := []*bid.Bid{
-			{
-				ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
-				Amount: 5.0, QualityScore: 70,
-			},
-			{
-				ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
-				Amount: 5.0, QualityScore: 90,
-			},
-		}
-		
-		decision, err := router.Route(ctx, testCall, bids)
-		require.NoError(t, err)
-		
-		// Should pick higher quality when price is same
-		assert.Equal(t, bids[1].ID, decision.BidID)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := NewCostBasedRouter(tt.qualityWeight, tt.priceWeight, tt.capacityWeight)
+			
+			assert.InDelta(t, tt.expectedQualityWeight, router.qualityWeight, 0.01)
+			assert.InDelta(t, tt.expectedPriceWeight, router.priceWeight, 0.01)
+			assert.InDelta(t, tt.expectedCapacityWeight, router.capacityWeight, 0.01)
+		})
+	}
 }
 
-func BenchmarkRoundRobinRouter(b *testing.B) {
+func BenchmarkRoundRobinRouter_Route(b *testing.B) {
 	ctx := context.Background()
 	router := NewRoundRobinRouter()
 	
-	testCall := &call.Call{
+	call := &call.Call{
 		ID:     uuid.New(),
 		Status: call.StatusPending,
 	}
 	
-	// Create many bids
 	bids := make([]*bid.Bid, 100)
 	for i := 0; i < 100; i++ {
 		bids[i] = &bid.Bid{
@@ -382,73 +442,31 @@ func BenchmarkRoundRobinRouter(b *testing.B) {
 	b.ResetTimer()
 	
 	for i := 0; i < b.N; i++ {
-		_, _ = router.Route(ctx, testCall, bids)
+		_, _ = router.Route(ctx, call, bids)
 	}
 }
 
-func BenchmarkSkillBasedRouter(b *testing.B) {
-	ctx := context.Background()
-	router := NewSkillBasedRouter(map[string]float64{
-		"sales": 2.0,
-		"support": 1.5,
-	})
-	
-	testCall := &call.Call{
-		ID:     uuid.New(),
-		Status: call.StatusPending,
-		Metadata: map[string]interface{}{
-			"required_skills": []string{"sales", "support"},
-		},
-	}
-	
-	// Create many bids with varying skills
-	bids := make([]*bid.Bid, 100)
-	skills := [][]string{
-		{"sales"},
-		{"support"},
-		{"sales", "support"},
-		{"billing"},
-		{"sales", "billing"},
-	}
-	
-	for i := 0; i < 100; i++ {
-		bids[i] = &bid.Bid{
-			ID:      uuid.New(),
-			Status:  bid.StatusActive,
-			BuyerID: uuid.New(),
-			Criteria: map[string]interface{}{
-				"skills": skills[i%len(skills)],
-			},
-		}
-	}
-	
-	b.ResetTimer()
-	
-	for i := 0; i < b.N; i++ {
-		_, _ = router.Route(ctx, testCall, bids)
-	}
-}
-
-func BenchmarkCostBasedRouter(b *testing.B) {
+func BenchmarkCostBasedRouter_Route(b *testing.B) {
 	ctx := context.Background()
 	router := NewCostBasedRouter(0.4, 0.4, 0.2)
 	
-	testCall := &call.Call{
+	call := &call.Call{
 		ID:     uuid.New(),
 		Status: call.StatusPending,
 	}
 	
-	// Create many bids with varying attributes
 	bids := make([]*bid.Bid, 100)
 	for i := 0; i < 100; i++ {
 		bids[i] = &bid.Bid{
-			ID:           uuid.New(),
-			Status:       bid.StatusActive,
-			BuyerID:      uuid.New(),
-			Amount:       float64(i%20) + 1.0,
-			QualityScore: float64(50 + i%50),
-			Criteria: map[string]interface{}{
-				"available_capacity": float64(100 + i*10),
+			ID:      uuid.New(),
+			Status:  bid.StatusActive,
+			BuyerID: uuid.New(),
+			Amount:  float64(i%50) + 1.0,
+			Quality: bid.QualityMetrics{
+				ConversionRate:   float64(i%20) / 100.0,
+				AverageCallTime:  150 + i%100,
+				FraudScore:       float64(i%10) / 100.0,
+				HistoricalRating: 3.0 + float64(i%20)/10.0,
 			},
 		}
 	}
@@ -456,6 +474,6 @@ func BenchmarkCostBasedRouter(b *testing.B) {
 	b.ResetTimer()
 	
 	for i := 0; i < b.N; i++ {
-		_, _ = router.Route(ctx, testCall, bids)
+		_, _ = router.Route(ctx, call, bids)
 	}
 }

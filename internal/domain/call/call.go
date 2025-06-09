@@ -1,9 +1,11 @@
 package call
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/validation"
 )
 
 type Call struct {
@@ -101,7 +103,30 @@ type Location struct {
 	Timezone  string  `json:"timezone"`
 }
 
-func NewCall(fromNumber, toNumber string, buyerID uuid.UUID, direction Direction) *Call {
+func NewCall(fromNumber, toNumber string, buyerID uuid.UUID, direction Direction) (*Call, error) {
+	// Validate phone numbers
+	if err := validation.ValidatePhoneNumber(fromNumber); err != nil {
+		return nil, fmt.Errorf("invalid from number: %w", err)
+	}
+	
+	if err := validation.ValidatePhoneNumber(toNumber); err != nil {
+		return nil, fmt.Errorf("invalid to number: %w", err)
+	}
+	
+	// Validate buyer ID
+	if buyerID == uuid.Nil {
+		return nil, fmt.Errorf("buyer ID cannot be nil")
+	}
+	
+	// Validate direction
+	switch direction {
+	case DirectionInbound, DirectionOutbound:
+		// Valid directions
+	default:
+		return nil, fmt.Errorf("invalid call direction")
+	}
+	
+	now := clock.Now()
 	return &Call{
 		ID:          uuid.New(),
 		FromNumber:  fromNumber,
@@ -109,27 +134,38 @@ func NewCall(fromNumber, toNumber string, buyerID uuid.UUID, direction Direction
 		Status:      StatusPending,
 		Direction:   direction,
 		BuyerID:     buyerID,
-		StartTime:   time.Now(),
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
-	}
+		StartTime:   now,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}, nil
 }
 
 func (c *Call) UpdateStatus(status Status) {
 	c.Status = status
-	c.UpdatedAt = time.Now()
+	c.UpdatedAt = clock.Now()
 }
 
-func (c *Call) Complete(duration int, cost float64) {
-	now := time.Now()
+func (c *Call) Complete(duration int, cost float64) error {
+	// Validate duration
+	if err := validation.ValidateDuration(duration); err != nil {
+		return fmt.Errorf("invalid duration: %w", err)
+	}
+	
+	// Validate cost
+	if err := validation.ValidateAmount(cost, "cost"); err != nil {
+		return fmt.Errorf("invalid cost: %w", err)
+	}
+	
+	now := clock.Now()
 	c.Status = StatusCompleted
 	c.EndTime = &now
 	c.Duration = &duration
 	c.Cost = &cost
 	c.UpdatedAt = now
+	return nil
 }
 
 func (c *Call) Fail() {
 	c.Status = StatusFailed
-	c.UpdatedAt = time.Now()
+	c.UpdatedAt = clock.Now()
 }

@@ -13,6 +13,8 @@
 coverage.*
 *.coverprofile
 profile.cov
+coverage-synctest.*
+coverage-merged.*
 
 # Binary output directories
 **/bin/
@@ -25,11 +27,43 @@ vendor/
 # Go workspace files
 go.work
 go.work.sum
+go.work.local
+.tool-versions
+
+# Modern Go development tools (2025)
+.goreleaser/
+dist/
+*.snap
 
 # Environment files
 .env
 .env.local
 .env.*.local
+config.local.*
+*.local.yaml
+*.local.yml
+
+# Database development files
+*.db-journal
+*.db-wal
+*.db-shm
+migrations/*.backup
+data/
+pgdata/
+postgres-data/
+
+# Security and secrets (2025 security practices)
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+*secret*
+*token*
+*cert*
+!**/*_test.key
+!**/*_test.crt
+!**/testdata/**/*.pem
 
 # IDE specific files
 .idea/
@@ -52,6 +86,38 @@ Thumbs.db
 debug
 *.pprof
 
+# Go 1.24 advanced testing artifacts
+*.fuzz
+fuzz/
+**/testdata/large_files/
+*.benchmem
+*.benchtime
+
+# Profiling and performance analysis (2025 Go toolchain)
+*.prof
+*.trace
+*.memprofile
+*.cpuprofile
+*.blockprofile
+*.mutexprofile
+cpu.out
+mem.out
+block.out
+mutex.out
+trace.out
+
+# Air hot reload tool artifacts
+.air.toml.local
+build-errors.log
+air_tmp/
+
+# Security and vulnerability reports
+*.sarif
+*.sbom
+govulncheck.*
+vuln-report.json
+gosec-report.sarif
+
 # Temporary files
 tmp/
 temp/
@@ -61,3 +127,20 @@ build/
 
 # Local development
 docker-compose.override.yml
+
+# Container and orchestration (2025 practices)
+k8s-local/
+helm-local/
+docker-data/
+*.pid
+
+# Research and documentation working files
+research/drafts/
+research/tmp/
+docs/generated/
+*.draft.md
+
+# Repomix outputs
+repomix-output*.md
+repomix-output*.xml
+repomix-archive/

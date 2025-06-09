@@ -18,7 +18,9 @@ type RoundRobinRouter struct {
 
 // NewRoundRobinRouter creates a new round-robin router
 func NewRoundRobinRouter() *RoundRobinRouter {
-	return &RoundRobinRouter{}
+	return &RoundRobinRouter{
+		lastIndex: -1, // Start at -1 so first selection is index 0
+	}
 }
 
 // Route implements the Router interface for round-robin
@@ -121,42 +123,43 @@ func (r *SkillBasedRouter) Route(ctx context.Context, c *call.Call, bids []*bid.
 // calculateSkillScore calculates the skill match score
 func (r *SkillBasedRouter) calculateSkillScore(c *call.Call, b *bid.Bid) float64 {
 	score := 0.0
-	matchCount := 0
 
-	// Extract required skills from call metadata
-	requiredSkills, ok := c.Metadata["required_skills"].([]string)
-	if !ok {
-		return 1.0 // Default score if no skills specified
+	// Check if bid accepts the call direction
+	callType := "inbound"
+	if c.Direction == call.DirectionOutbound {
+		callType = "outbound"
 	}
-
-	// Extract buyer skills from bid criteria
-	buyerSkills, ok := b.Criteria["skills"].([]string)
-	if !ok {
-		return 0.5 // Partial score if buyer has no skills listed
-	}
-
-	// Calculate match score
-	for _, required := range requiredSkills {
-		weight := r.skillWeights[required]
-		if weight == 0 {
-			weight = 1.0 // Default weight
+	
+	// Check if bid accepts this call type
+	acceptsCallType := false
+	for _, ct := range b.Criteria.CallType {
+		if ct == callType {
+			acceptsCallType = true
+			break
 		}
-		
-		for _, skill := range buyerSkills {
-			if skill == required {
-				score += weight
-				matchCount++
+	}
+	
+	if !acceptsCallType {
+		return 0.0
+	}
+
+	// Base score on quality metrics
+	score = b.Quality.ConversionRate * 2.0 // Weight conversion rate heavily
+	score += (1.0 - b.Quality.FraudScore) // Lower fraud is better
+	score += b.Quality.HistoricalRating / 5.0 // Normalize rating to 0-1
+	
+	// Check geographic match if location is available
+	if c.Location != nil && len(b.Criteria.Geography.States) > 0 {
+		for _, state := range b.Criteria.Geography.States {
+			if state == c.Location.State {
+				score += 0.5 // Bonus for geographic match
 				break
 			}
 		}
 	}
 
-	// Normalize score
-	if len(requiredSkills) > 0 {
-		score = score / float64(len(requiredSkills))
-	}
-
-	return score
+	// Normalize score to 0-1 range
+	return math.Min(score/4.5, 1.0)
 }
 
 // GetAlgorithm returns the algorithm name
@@ -216,7 +219,10 @@ func (r *CostBasedRouter) Route(ctx context.Context, c *call.Call, bids []*bid.B
 	minPrice, maxPrice := findPriceRange(activeBids)
 	
 	for _, b := range activeBids {
-		quality := b.QualityScore / 100.0 // Normalize to 0-1
+		// Calculate quality score from quality metrics
+		quality := (b.Quality.ConversionRate + 
+			(1.0 - b.Quality.FraudScore) + 
+			b.Quality.HistoricalRating/5.0) / 3.0
 		price := normalizePriceScore(b.Amount, minPrice, maxPrice)
 		capacity := calculateCapacityScore(b)
 		
@@ -307,12 +313,17 @@ func normalizePriceScore(price, min, max float64) float64 {
 }
 
 func calculateCapacityScore(b *bid.Bid) float64 {
-	// Extract capacity metrics from bid criteria
-	capacity, ok := b.Criteria["available_capacity"].(float64)
-	if !ok {
-		return 0.5 // Default middle score
+	// Use average call time as a proxy for capacity
+	// Lower average call time might indicate higher capacity
+	if b.Quality.AverageCallTime == 0 {
+		return 0.5
 	}
 	
-	// Normalize capacity to 0-1 range (assuming max capacity of 1000)
-	return math.Min(capacity/1000.0, 1.0)
+	// Assume optimal call time is 180 seconds (3 minutes)
+	optimalTime := 180.0
+	difference := math.Abs(float64(b.Quality.AverageCallTime) - optimalTime)
+	
+	// Closer to optimal time = higher score
+	score := 1.0 - (difference / optimalTime)
+	return math.Max(0, math.Min(score, 1.0))
 }

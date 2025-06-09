@@ -50,38 +50,33 @@ func (s *service) RouteCall(ctx context.Context, callID uuid.UUID) (*RoutingDeci
 	// Get the call
 	c, err := s.callRepo.GetByID(ctx, callID)
 	if err != nil {
-		return nil, errors.NewAppError(
-			errors.ErrCodeNotFound,
-			fmt.Sprintf("call not found: %v", err),
-			err,
-		)
+		return nil, errors.NewNotFoundError("call").
+			WithDetails(map[string]interface{}{"call_id": callID}).
+			WithCause(err)
 	}
 
 	// Validate call is in correct state
 	if c.Status != call.StatusPending {
-		return nil, errors.NewAppError(
-			errors.ErrCodeValidation,
-			fmt.Sprintf("call is not in pending state: %s", c.Status),
-			nil,
-		)
+		return nil, errors.NewValidationError("INVALID_CALL_STATE", 
+			fmt.Sprintf("call is not in pending state: %s", c.Status)).
+			WithDetails(map[string]interface{}{
+				"call_id": callID,
+				"status": c.Status.String(),
+			})
 	}
 
 	// Get active bids for the call
 	bids, err := s.bidRepo.GetActiveBidsForCall(ctx, callID)
 	if err != nil {
-		return nil, errors.NewAppError(
-			errors.ErrCodeInternal,
-			fmt.Sprintf("failed to get bids: %v", err),
-			err,
-		)
+		return nil, errors.NewInternalError("failed to get bids").
+			WithCause(err).
+			WithDetails(map[string]interface{}{"call_id": callID})
 	}
 
 	if len(bids) == 0 {
-		return nil, errors.NewAppError(
-			errors.ErrCodeNotFound,
-			"no bids available for call",
-			nil,
-		)
+		return nil, errors.NewBusinessError("NO_BIDS_AVAILABLE", 
+			"no bids available for call").
+			WithDetails(map[string]interface{}{"call_id": callID})
 	}
 
 	// Route the call
@@ -91,32 +86,41 @@ func (s *service) RouteCall(ctx context.Context, callID uuid.UUID) (*RoutingDeci
 
 	decision, err := router.Route(ctx, c, bids)
 	if err != nil {
-		return nil, errors.NewAppError(
-			errors.ErrCodeInternal,
-			fmt.Sprintf("routing failed: %v", err),
-			err,
-		)
+		return nil, errors.NewInternalError("routing failed").
+			WithCause(err).
+			WithDetails(map[string]interface{}{
+				"call_id": callID,
+				"algorithm": router.GetAlgorithm(),
+			})
 	}
 
 	// Update timing information
 	decision.Latency = time.Since(start)
 
 	// Update call with routing information
-	c.Status = call.StatusRouted
-	c.Metadata["routing_decision"] = map[string]interface{}{
-		"bid_id":    decision.BidID.String(),
-		"buyer_id":  decision.BuyerID.String(),
-		"algorithm": decision.Algorithm,
-		"score":     decision.Score,
-		"timestamp": decision.Timestamp,
+	c.Status = call.StatusQueued
+	c.RouteID = &decision.BidID
+	c.UpdatedAt = time.Now()
+		
+	if err := s.callRepo.Update(ctx, c); err != nil {
+		return nil, errors.NewInternalError("failed to update call").
+			WithCause(err).
+			WithDetails(map[string]interface{}{"call_id": callID})
+	}
+
+	// Update winning bid status
+	winningBid, err := s.bidRepo.GetBidByID(ctx, decision.BidID)
+	if err != nil {
+		return nil, errors.NewInternalError("failed to get winning bid").
+			WithCause(err).
+			WithDetails(map[string]interface{}{"bid_id": decision.BidID})
 	}
 	
-	if err := s.callRepo.Update(ctx, c); err != nil {
-		return nil, errors.NewAppError(
-			errors.ErrCodeInternal,
-			fmt.Sprintf("failed to update call: %v", err),
-			err,
-		)
+	winningBid.Accept() // This sets status to "won"
+	if err := s.bidRepo.Update(ctx, winningBid); err != nil {
+		return nil, errors.NewInternalError("failed to update winning bid").
+			WithCause(err).
+			WithDetails(map[string]interface{}{"bid_id": decision.BidID})
 	}
 
 	// Record metrics
@@ -138,11 +142,7 @@ func (s *service) GetActiveRoutes(ctx context.Context) ([]*ActiveRoute, error) {
 // UpdateRoutingRules updates routing configuration
 func (s *service) UpdateRoutingRules(ctx context.Context, rules *RoutingRules) error {
 	if rules == nil {
-		return errors.NewAppError(
-			errors.ErrCodeValidation,
-			"rules cannot be nil",
-			nil,
-		)
+		return errors.NewValidationError("INVALID_RULES", "rules cannot be nil")
 	}
 
 	// Create new router based on new rules
@@ -167,11 +167,10 @@ func createRouter(rules *RoutingRules) Router {
 	case "round-robin":
 		return NewRoundRobinRouter()
 	case "skill-based":
-		// Extract skill weights from rules
+		// Extract skill weights from rules metadata if available
 		skillWeights := make(map[string]float64)
-		if weights, ok := rules.SkillRequirements["weights"].(map[string]float64); ok {
-			skillWeights = weights
-		}
+		// In a real implementation, skill weights might come from configuration
+		// For now, using default weights
 		return NewSkillBasedRouter(skillWeights)
 	case "cost-based":
 		return NewCostBasedRouter(

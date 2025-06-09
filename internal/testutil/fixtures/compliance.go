@@ -186,7 +186,7 @@ func NewConsentRecordBuilder(t *testing.T) *ConsentRecordBuilder {
 		t:              t,
 		id:             id,
 		phoneNumber:    "+15551234567",
-		consentType:    compliance.ConsentTypeTCPA,
+		consentType:    compliance.ConsentTypeExpress,
 		status:         compliance.ConsentStatusActive,
 		source:         "web_form",
 		ipAddress:      "192.168.1.100",

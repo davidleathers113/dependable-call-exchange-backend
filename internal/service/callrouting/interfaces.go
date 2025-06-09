@@ -34,6 +34,8 @@ type BidRepository interface {
 	GetActiveBidsForCall(ctx context.Context, callID uuid.UUID) ([]*bid.Bid, error)
 	// GetBidByID retrieves a specific bid
 	GetBidByID(ctx context.Context, bidID uuid.UUID) (*bid.Bid, error)
+	// Update modifies an existing bid
+	Update(ctx context.Context, bid *bid.Bid) error
 }
 
 // CallRepository defines the interface for call storage

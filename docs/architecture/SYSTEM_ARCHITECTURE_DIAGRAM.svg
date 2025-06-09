@@ -1,0 +1,160 @@
+<svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+  <!-- Title -->
+  <text x="600" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#333">
+    Dependable Call Exchange - System Architecture
+  </text>
+  
+  <!-- External Users -->
+  <g id="external-users">
+    <!-- Buyers -->
+    <rect x="50" y="80" width="120" height="60" rx="5" fill="#4A90E2" stroke="#2E5C8A" stroke-width="2"/>
+    <text x="110" y="115" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Buyers</text>
+    
+    <!-- Sellers -->
+    <rect x="50" y="160" width="120" height="60" rx="5" fill="#4A90E2" stroke="#2E5C8A" stroke-width="2"/>
+    <text x="110" y="195" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Sellers</text>
+    
+    <!-- Admins -->
+    <rect x="50" y="240" width="120" height="60" rx="5" fill="#4A90E2" stroke="#2E5C8A" stroke-width="2"/>
+    <text x="110" y="275" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Admins</text>
+  </g>
+  
+  <!-- API Gateway -->
+  <g id="api-gateway">
+    <rect x="250" y="120" width="160" height="140" rx="5" fill="#7ED321" stroke="#5A9E18" stroke-width="2"/>
+    <text x="330" y="145" text-anchor="middle" font-weight="bold" font-size="16">API Gateway</text>
+    <text x="330" y="170" text-anchor="middle" font-size="12">• REST API</text>
+    <text x="330" y="190" text-anchor="middle" font-size="12">• gRPC</text>
+    <text x="330" y="210" text-anchor="middle" font-size="12">• WebSocket</text>
+    <text x="330" y="230" text-anchor="middle" font-size="12">• Auth/Rate Limit</text>
+  </g>
+  
+  <!-- Core Services -->
+  <g id="core-services">
+    <!-- Service Container -->
+    <rect x="480" y="80" width="640" height="320" rx="10" fill="#F5F5F5" stroke="#999" stroke-width="2" stroke-dasharray="5,5"/>
+    <text x="800" y="105" text-anchor="middle" font-weight="bold" font-size="18" fill="#666">Core Services</text>
+    
+    <!-- Call Routing Service -->
+    <rect x="510" y="130" width="140" height="80" rx="5" fill="#FF9500" stroke="#CC7700" stroke-width="2"/>
+    <text x="580" y="155" text-anchor="middle" font-weight="bold" font-size="14">Call Routing</text>
+    <text x="580" y="175" text-anchor="middle" font-size="11">• Route Decision</text>
+    <text x="580" y="190" text-anchor="middle" font-size="11">• Load Balance</text>
+    
+    <!-- Bidding Service -->
+    <rect x="680" y="130" width="140" height="80" rx="5" fill="#FF9500" stroke="#CC7700" stroke-width="2"/>
+    <text x="750" y="155" text-anchor="middle" font-weight="bold" font-size="14">Bidding</text>
+    <text x="750" y="175" text-anchor="middle" font-size="11">• Auction Engine</text>
+    <text x="750" y="190" text-anchor="middle" font-size="11">• Bid Matching</text>
+    
+    <!-- Fraud Detection -->
+    <rect x="850" y="130" width="140" height="80" rx="5" fill="#FF9500" stroke="#CC7700" stroke-width="2"/>
+    <text x="920" y="155" text-anchor="middle" font-weight="bold" font-size="14">Fraud Detection</text>
+    <text x="920" y="175" text-anchor="middle" font-size="11">• ML Scoring</text>
+    <text x="920" y="190" text-anchor="middle" font-size="11">• Pattern Analysis</text>
+    
+    <!-- Telephony Service -->
+    <rect x="510" y="240" width="140" height="80" rx="5" fill="#FF9500" stroke="#CC7700" stroke-width="2"/>
+    <text x="580" y="265" text-anchor="middle" font-weight="bold" font-size="14">Telephony</text>
+    <text x="580" y="285" text-anchor="middle" font-size="11">• SIP/WebRTC</text>
+    <text x="580" y="300" text-anchor="middle" font-size="11">• Call Control</text>
+    
+    <!-- Analytics Service -->
+    <rect x="680" y="240" width="140" height="80" rx="5" fill="#FF9500" stroke="#CC7700" stroke-width="2"/>
+    <text x="750" y="265" text-anchor="middle" font-weight="bold" font-size="14">Analytics</text>
+    <text x="750" y="285" text-anchor="middle" font-size="11">• Real-time Metrics</text>
+    <text x="750" y="300" text-anchor="middle" font-size="11">• Reporting</text>
+    
+    <!-- Compliance Service -->
+    <rect x="850" y="240" width="140" height="80" rx="5" fill="#FF9500" stroke="#CC7700" stroke-width="2"/>
+    <text x="920" y="265" text-anchor="middle" font-weight="bold" font-size="14">Compliance</text>
+    <text x="920" y="285" text-anchor="middle" font-size="11">• TCPA/GDPR</text>
+    <text x="920" y="300" text-anchor="middle" font-size="11">• DNC Check</text>
+  </g>
+  
+  <!-- Domain Layer -->
+  <g id="domain-layer">
+    <rect x="480" y="430" width="640" height="80" rx="10" fill="#E6F3FF" stroke="#4A90E2" stroke-width="2"/>
+    <text x="800" y="455" text-anchor="middle" font-weight="bold" font-size="16" fill="#2E5C8A">Domain Layer</text>
+    <text x="580" y="485" text-anchor="middle" font-size="12" fill="#2E5C8A">Account</text>
+    <text x="680" y="485" text-anchor="middle" font-size="12" fill="#2E5C8A">Call</text>
+    <text x="750" y="485" text-anchor="middle" font-size="12" fill="#2E5C8A">Bid</text>
+    <text x="820" y="485" text-anchor="middle" font-size="12" fill="#2E5C8A">Compliance</text>
+    <text x="920" y="485" text-anchor="middle" font-size="12" fill="#2E5C8A">Financial</text>
+  </g>
+  
+  <!-- Infrastructure Layer -->
+  <g id="infrastructure">
+    <!-- Database -->
+    <rect x="300" y="560" width="180" height="120" rx="5" fill="#50C878" stroke="#3A9B5C" stroke-width="2"/>
+    <text x="390" y="585" text-anchor="middle" font-weight="bold" font-size="14">PostgreSQL</text>
+    <text x="390" y="605" text-anchor="middle" font-size="11">• TimescaleDB</text>
+    <text x="390" y="620" text-anchor="middle" font-size="11">• Partitioning</text>
+    <text x="390" y="635" text-anchor="middle" font-size="11">• Read Replicas</text>
+    <text x="390" y="650" text-anchor="middle" font-size="11">• Connection Pool</text>
+    
+    <!-- Cache -->
+    <rect x="520" y="560" width="140" height="120" rx="5" fill="#50C878" stroke="#3A9B5C" stroke-width="2"/>
+    <text x="590" y="585" text-anchor="middle" font-weight="bold" font-size="14">Redis</text>
+    <text x="590" y="605" text-anchor="middle" font-size="11">• Session Cache</text>
+    <text x="590" y="620" text-anchor="middle" font-size="11">• Rate Limiting</text>
+    <text x="590" y="635" text-anchor="middle" font-size="11">• Real-time Data</text>
+    
+    <!-- Message Queue -->
+    <rect x="700" y="560" width="140" height="120" rx="5" fill="#50C878" stroke="#3A9B5C" stroke-width="2"/>
+    <text x="770" y="585" text-anchor="middle" font-weight="bold" font-size="14">Kafka</text>
+    <text x="770" y="605" text-anchor="middle" font-size="11">• Event Stream</text>
+    <text x="770" y="620" text-anchor="middle" font-size="11">• Audit Log</text>
+    <text x="770" y="635" text-anchor="middle" font-size="11">• Analytics</text>
+    
+    <!-- Monitoring -->
+    <rect x="880" y="560" width="180" height="120" rx="5" fill="#50C878" stroke="#3A9B5C" stroke-width="2"/>
+    <text x="970" y="585" text-anchor="middle" font-weight="bold" font-size="14">Observability</text>
+    <text x="970" y="605" text-anchor="middle" font-size="11">• OpenTelemetry</text>
+    <text x="970" y="620" text-anchor="middle" font-size="11">• Prometheus</text>
+    <text x="970" y="635" text-anchor="middle" font-size="11">• Grafana</text>
+    <text x="970" y="650" text-anchor="middle" font-size="11">• ELK Stack</text>
+  </g>
+  
+  <!-- Arrows showing data flow -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>
+    </marker>
+  </defs>
+  
+  <!-- User to API Gateway -->
+  <line x1="170" y1="190" x2="250" y2="190" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- API Gateway to Services -->
+  <line x1="410" y1="190" x2="480" y2="190" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Services to Domain -->
+  <line x1="800" y1="400" x2="800" y2="430" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Domain to Infrastructure -->
+  <line x1="800" y1="510" x2="800" y2="540" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="800" y1="540" x2="390" y2="560" stroke="#666" stroke-width="1"/>
+  <line x1="800" y1="540" x2="590" y2="560" stroke="#666" stroke-width="1"/>
+  <line x1="800" y1="540" x2="770" y2="560" stroke="#666" stroke-width="1"/>
+  <line x1="800" y1="540" x2="970" y2="560" stroke="#666" stroke-width="1"/>
+  
+  <!-- Legend -->
+  <g id="legend" transform="translate(50, 700)">
+    <text x="0" y="0" font-weight="bold" font-size="14" fill="#333">Legend:</text>
+    <rect x="0" y="10" width="30" height="20" fill="#4A90E2"/>
+    <text x="40" y="25" font-size="12" fill="#333">External Users</text>
+    
+    <rect x="150" y="10" width="30" height="20" fill="#7ED321"/>
+    <text x="190" y="25" font-size="12" fill="#333">API Layer</text>
+    
+    <rect x="300" y="10" width="30" height="20" fill="#FF9500"/>
+    <text x="340" y="25" font-size="12" fill="#333">Business Services</text>
+    
+    <rect x="480" y="10" width="30" height="20" fill="#E6F3FF" stroke="#4A90E2"/>
+    <text x="520" y="25" font-size="12" fill="#333">Domain Models</text>
+    
+    <rect x="660" y="10" width="30" height="20" fill="#50C878"/>
+    <text x="700" y="25" font-size="12" fill="#333">Infrastructure</text>
+  </g>
+</svg>

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/validation"
 )
 
 type Account struct {
@@ -109,7 +110,25 @@ type AccountSettings struct {
 	MaxBidAmount           float64  `json:"max_bid_amount"`
 }
 
-func NewAccount(email, name string, accountType AccountType) *Account {
+func NewAccount(email, name string, accountType AccountType) (*Account, error) {
+	// Validate email
+	if err := validation.ValidateEmail(email); err != nil {
+		return nil, fmt.Errorf("invalid email: %w", err)
+	}
+	
+	// Validate name
+	if err := validation.ValidateName(name); err != nil {
+		return nil, fmt.Errorf("invalid name: %w", err)
+	}
+	
+	// Validate account type
+	switch accountType {
+	case TypeBuyer, TypeSeller, TypeAdmin:
+		// Valid types
+	default:
+		return nil, ErrInvalidAccountType
+	}
+	
 	now := time.Now()
 	return &Account{
 		ID:              uuid.New(),
@@ -134,7 +153,7 @@ func NewAccount(email, name string, accountType AccountType) *Account {
 		},
 		CreatedAt:       now,
 		UpdatedAt:       now,
-	}
+	}, nil
 }
 
 func (a *Account) UpdateBalance(amount float64) error {

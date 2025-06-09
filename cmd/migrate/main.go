@@ -11,7 +11,6 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
-	"github.com/google/uuid"
 	
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/infrastructure/config"
 )

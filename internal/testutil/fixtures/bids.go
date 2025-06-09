@@ -1,6 +1,7 @@
 package fixtures
 
 import (
+	"context"
 	"testing"
 	"time"
 	
@@ -8,11 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 	
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil"
 )
 
 // BidBuilder builds test Bid entities
 type BidBuilder struct {
 	t          *testing.T
+	testDB     *testutil.TestDB
 	id         uuid.UUID
 	callID     uuid.UUID
 	buyerID    uuid.UUID
@@ -28,22 +31,17 @@ type BidBuilder struct {
 }
 
 // NewBidBuilder creates a new BidBuilder with defaults
-func NewBidBuilder(t *testing.T) *BidBuilder {
-	t.Helper()
-	id, err := uuid.NewRandom()
-	require.NoError(t, err)
-	callID, err := uuid.NewRandom()
-	require.NoError(t, err)
-	buyerID, err := uuid.NewRandom()
-	require.NoError(t, err)
-	sellerID, err := uuid.NewRandom()
-	require.NoError(t, err)
-	auctionID, err := uuid.NewRandom()
-	require.NoError(t, err)
+func NewBidBuilder(testDB *testutil.TestDB) *BidBuilder {
+	id := uuid.New()
+	callID := uuid.New()
+	buyerID := uuid.New()
+	sellerID := uuid.New()
+	auctionID := uuid.New()
 	
 	now := time.Now().UTC()
 	return &BidBuilder{
-		t:         t,
+		t:         nil, // Will be set when Build is called
+		testDB:    testDB,
 		id:        id,
 		callID:    callID,
 		buyerID:   buyerID,
@@ -136,14 +134,32 @@ func (b *BidBuilder) WithRank(rank int) *BidBuilder {
 	return b
 }
 
-// WithExpiration sets the expiration time
+// WithPlacedAt sets when the bid was placed
+func (b *BidBuilder) WithPlacedAt(placedAt time.Time) *BidBuilder {
+	b.placedAt = placedAt
+	return b
+}
+
+// WithExpiration sets the expiration duration from placement time
 func (b *BidBuilder) WithExpiration(duration time.Duration) *BidBuilder {
 	b.expiresAt = b.placedAt.Add(duration)
 	return b
 }
 
+// WithQualityMetrics sets the quality metrics using individual values
+func (b *BidBuilder) WithQualityMetrics(conversionRate float64, avgCallTime int, fraudScore float64, rating float64) *BidBuilder {
+	b.quality = bid.QualityMetrics{
+		ConversionRate:   conversionRate,
+		AverageCallTime:  avgCallTime,
+		FraudScore:       fraudScore,
+		HistoricalRating: rating,
+	}
+	return b
+}
+
 // Build creates the Bid entity
-func (b *BidBuilder) Build() *bid.Bid {
+func (b *BidBuilder) Build(t *testing.T) *bid.Bid {
+	t.Helper()
 	now := time.Now().UTC()
 	bidEntity := &bid.Bid{
 		ID:        b.id,
@@ -168,173 +184,126 @@ func (b *BidBuilder) Build() *bid.Bid {
 		bidEntity.AcceptedAt = &acceptedAt
 	}
 	
+	// Note: The BuildWithRepo method should be used for DB persistence
+	
+	return bidEntity
+}
+
+// BuildWithRepo creates the Bid entity and saves it using the provided repository
+func (b *BidBuilder) BuildWithRepo(t *testing.T, repo interface{
+	Create(ctx context.Context, bid *bid.Bid) error
+}, ctx context.Context) *bid.Bid {
+	t.Helper()
+	bidEntity := b.Build(t)
+	
+	// Save using repository
+	err := repo.Create(ctx, bidEntity)
+	require.NoError(t, err, "failed to create bid via repository")
+	
 	return bidEntity
 }
 
 // BidScenarios provides common bid test scenarios
 type BidScenarios struct {
-	t *testing.T
+	t      *testing.T
+	testDB *testutil.TestDB
 }
 
 // NewBidScenarios creates a new BidScenarios helper
-func NewBidScenarios(t *testing.T) *BidScenarios {
+func NewBidScenarios(t *testing.T, testDB *testutil.TestDB) *BidScenarios {
 	t.Helper()
-	return &BidScenarios{t: t}
+	return &BidScenarios{t: t, testDB: testDB}
 }
 
-// HighValueBid creates a high value bid
+// HighValueBid creates a high-value bid scenario
 func (bs *BidScenarios) HighValueBid(callID uuid.UUID) *bid.Bid {
-	return NewBidBuilder(bs.t).
+	bs.t.Helper()
+	return NewBidBuilder(bs.testDB).
 		WithCallID(callID).
 		WithAmount(25.00).
 		WithCriteria(bid.BidCriteria{
 			Geography: bid.GeoCriteria{
-				States: []string{"CA", "NY"},
+				Countries: []string{"US", "CA"},
 			},
 			TimeWindow: bid.TimeWindow{
-				StartHour: 8,
-				EndHour:   20,
-				Days:      []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat"},
-				Timezone:  "America/New_York",
+				StartHour: 0,
+				EndHour:   24,
+				Days:      []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"},
 			},
-			CallType:  []string{"inbound"},
-			Keywords:  []string{"sales", "insurance", "premium"},
-			MaxBudget: 500.00,
+			CallType:   []string{"inbound", "outbound"},
+			MaxBudget:  500.00,
 		}).
 		WithQuality(bid.QualityMetrics{
-			ConversionRate:   0.25,
-			AverageCallTime:  240,
-			FraudScore:       0.02,
+			ConversionRate:   0.35,
+			AverageCallTime:  420,
+			FraudScore:       0.01,
 			HistoricalRating: 4.8,
 		}).
-		Build()
+		Build(bs.t)
 }
 
-// LowValueBid creates a low value bid
+// LowValueBid creates a low-value bid scenario
 func (bs *BidScenarios) LowValueBid(callID uuid.UUID) *bid.Bid {
-	return NewBidBuilder(bs.t).
+	bs.t.Helper()
+	return NewBidBuilder(bs.testDB).
 		WithCallID(callID).
 		WithAmount(2.50).
 		WithCriteria(bid.BidCriteria{
 			Geography: bid.GeoCriteria{
-				Countries: []string{"US"}, // Any US state
+				States: []string{"CA"},
 			},
 			TimeWindow: bid.TimeWindow{
 				StartHour: 9,
 				EndHour:   17,
 				Days:      []string{"Mon", "Tue", "Wed", "Thu", "Fri"},
-				Timezone:  "America/Chicago",
 			},
-			CallType:  []string{"inbound", "outbound"},
+			CallType:  []string{"inbound"},
 			MaxBudget: 50.00,
 		}).
 		WithQuality(bid.QualityMetrics{
 			ConversionRate:   0.08,
-			AverageCallTime:  90,
-			FraudScore:       0.10,
-			HistoricalRating: 3.5,
+			AverageCallTime:  120,
+			FraudScore:       0.15,
+			HistoricalRating: 3.2,
 		}).
-		Build()
+		Build(bs.t)
 }
 
-// ExpiredBid creates an expired bid
+// ExpiredBid creates an expired bid scenario
 func (bs *BidScenarios) ExpiredBid(callID uuid.UUID) *bid.Bid {
-	return NewBidBuilder(bs.t).
+	bs.t.Helper()
+	return NewBidBuilder(bs.testDB).
 		WithCallID(callID).
 		WithStatus(bid.StatusExpired).
-		WithExpiration(-1 * time.Minute). // Already expired
-		Build()
+		WithExpiration(-1 * time.Minute).
+		Build(bs.t)
 }
 
-// WinningBid creates a winning bid
+// WinningBid creates a winning bid scenario
 func (bs *BidScenarios) WinningBid(callID uuid.UUID) *bid.Bid {
-	return NewBidBuilder(bs.t).
+	bs.t.Helper()
+	return NewBidBuilder(bs.testDB).
 		WithCallID(callID).
 		WithStatus(bid.StatusWon).
 		WithAmount(15.00).
-		Build()
+		Build(bs.t)
 }
 
 // CompetingBids creates multiple competing bids for the same call
 func (bs *BidScenarios) CompetingBids(callID uuid.UUID, count int) []*bid.Bid {
+	bs.t.Helper()
 	bids := make([]*bid.Bid, count)
-	baseAmount := 5.00
 	
 	for i := 0; i < count; i++ {
-		buyerID, err := uuid.NewRandom()
-		require.NoError(bs.t, err)
+		buyerID := uuid.New()
+		amount := 5.00 + float64(i)*2.50
 		
-		// Vary amounts to create competition
-		amount := baseAmount + float64(i)*0.50
-		
-		bids[i] = NewBidBuilder(bs.t).
+		bids[i] = NewBidBuilder(bs.testDB).
 			WithCallID(callID).
 			WithBuyerID(buyerID).
 			WithAmount(amount).
-			Build()
+			Build(bs.t)
 	}
 	
 	return bids
-}
-
-// CriteriaBuilder helps build complex bid criteria
-type CriteriaBuilder struct {
-	criteria bid.BidCriteria
-}
-
-// NewCriteriaBuilder creates a new CriteriaBuilder
-func NewCriteriaBuilder() *CriteriaBuilder {
-	return &CriteriaBuilder{
-		criteria: bid.BidCriteria{
-			Geography: bid.GeoCriteria{},
-			TimeWindow: bid.TimeWindow{
-				StartHour: 9,
-				EndHour:   17,
-				Timezone:  "America/New_York",
-			},
-			CallType: []string{},
-		},
-	}
-}
-
-// WithGeography sets geographic criteria
-func (cb *CriteriaBuilder) WithGeography(countries, states, cities []string) *CriteriaBuilder {
-	cb.criteria.Geography.Countries = countries
-	cb.criteria.Geography.States = states
-	cb.criteria.Geography.Cities = cities
-	return cb
-}
-
-// WithTimeWindow sets time window criteria
-func (cb *CriteriaBuilder) WithTimeWindow(startHour, endHour int, days []string, timezone string) *CriteriaBuilder {
-	cb.criteria.TimeWindow = bid.TimeWindow{
-		StartHour: startHour,
-		EndHour:   endHour,
-		Days:      days,
-		Timezone:  timezone,
-	}
-	return cb
-}
-
-// WithCallTypes sets accepted call types
-func (cb *CriteriaBuilder) WithCallTypes(types ...string) *CriteriaBuilder {
-	cb.criteria.CallType = append(cb.criteria.CallType, types...)
-	return cb
-}
-
-// WithKeywords adds keyword targeting
-func (cb *CriteriaBuilder) WithKeywords(keywords ...string) *CriteriaBuilder {
-	cb.criteria.Keywords = append(cb.criteria.Keywords, keywords...)
-	return cb
-}
-
-// WithMaxBudget sets the maximum budget
-func (cb *CriteriaBuilder) WithMaxBudget(budget float64) *CriteriaBuilder {
-	cb.criteria.MaxBudget = budget
-	return cb
-}
-
-// Build returns the constructed criteria
-func (cb *CriteriaBuilder) Build() bid.BidCriteria {
-	return cb.criteria
 }

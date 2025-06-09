@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil"
 )
 
 // AccountBuilder builds test Account entities
@@ -33,14 +34,12 @@ type AccountBuilder struct {
 }
 
 // NewAccountBuilder creates a new AccountBuilder with defaults
-func NewAccountBuilder(t *testing.T) *AccountBuilder {
-	t.Helper()
-	id, err := uuid.NewRandom()
-	require.NoError(t, err)
+func NewAccountBuilder(testDB *testutil.TestDB) *AccountBuilder {
+	id := uuid.New()
 	
 	company := "Test Company Inc"
 	return &AccountBuilder{
-		t:            t,
+		t:            nil, // Will be set when Build is called
 		id:           id,
 		email:        "test@example.com",
 		name:         "Test User",
@@ -179,7 +178,10 @@ func (b *AccountBuilder) WithSettings(settings account.AccountSettings) *Account
 }
 
 // Build creates the Account entity
-func (b *AccountBuilder) Build() *account.Account {
+func (b *AccountBuilder) Build(t *testing.T) *account.Account {
+	t.Helper()
+	b.t = t // Set the testing.T
+	
 	now := time.Now().UTC()
 	acc := &account.Account{
 		ID:              b.id,
@@ -214,13 +216,14 @@ func (b *AccountBuilder) Build() *account.Account {
 
 // AccountScenarios provides common account test scenarios
 type AccountScenarios struct {
-	t *testing.T
+	t      *testing.T
+	testDB *testutil.TestDB
 }
 
 // NewAccountScenarios creates a new AccountScenarios helper
-func NewAccountScenarios(t *testing.T) *AccountScenarios {
+func NewAccountScenarios(t *testing.T, testDB *testutil.TestDB) *AccountScenarios {
 	t.Helper()
-	return &AccountScenarios{t: t}
+	return &AccountScenarios{t: t, testDB: testDB}
 }
 
 // BuyerAccount creates a typical buyer account

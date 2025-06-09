@@ -1,6 +1,7 @@
 package mocks
 
 import (
+	"fmt"
 	"testing"
 	"time"
 	
@@ -158,7 +159,11 @@ func AnyContext() interface{} {
 // AnythingOfTypes matches any of the specified types
 func AnythingOfTypes(types ...string) interface{} {
 	return Match(func(arg interface{}) bool {
-		argType := mock.AnythingOfType("dummy").String()
+		// Get the actual type of the argument
+		if arg == nil {
+			return false
+		}
+		argType := fmt.Sprintf("%T", arg)
 		for _, t := range types {
 			if argType == t {
 				return true
