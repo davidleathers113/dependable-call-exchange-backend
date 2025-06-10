@@ -1,0 +1,125 @@
+rules:
+  - id: phone-number-validation
+    message: Phone numbers must be validated using the values.Phone type
+    languages: [go]
+    severity: ERROR
+    pattern-either:
+      - pattern: |
+          $PHONE := $INPUT
+          ...
+          $FUNC(..., $PHONE, ...)
+      - pattern: |
+          $STRUCT{..., Phone: $RAW, ...}
+      - pattern: |
+          $VAR.Phone = $RAW
+    pattern-not-inside: |
+      values.NewPhone($...)
+    pattern-not-inside: |
+      values.MustNewPhone($...)
+    metavariable-regex:
+      metavariable: $RAW
+      regex: '(^".*"$|^`.*`$)'
+    fix: values.MustNewPhone($RAW)
+
+  - id: tcpa-time-restriction-check
+    message: TCPA time restrictions must be checked before making calls
+    languages: [go]
+    severity: ERROR
+    pattern: |
+      func $FUNC(...) {
+        ...
+        $TELEPHONY.MakeCall(...)
+        ...
+      }
+    pattern-not-inside: |
+      func $FUNC(...) {
+        ...
+        $COMPLIANCE.CheckTCPACompliance(...)
+        ...
+        $TELEPHONY.MakeCall(...)
+        ...
+      }
+
+  - id: pii-logging-prevention
+    message: PII data (phone numbers, emails) must not be logged directly
+    languages: [go]
+    severity: ERROR
+    pattern-either:
+      - pattern: |
+          log.$METHOD(..., $VAR.Phone, ...)
+      - pattern: |
+          log.$METHOD(..., $VAR.Email, ...)
+      - pattern: |
+          fmt.$PRINT(..., $VAR.Phone, ...)
+      - pattern: |
+          fmt.$PRINT(..., $VAR.Email, ...)
+    pattern-not-inside: |
+      $VAR.Phone.Masked()
+    pattern-not-inside: |
+      $VAR.Email.Masked()
+
+  - id: call-recording-consent
+    message: Call recording requires explicit consent check
+    languages: [go]
+    severity: ERROR
+    pattern: |
+      $TELEPHONY.StartRecording($CALL)
+    pattern-not-inside: |
+      if $CALL.HasRecordingConsent() {
+        ...
+        $TELEPHONY.StartRecording($CALL)
+        ...
+      }
+
+  - id: phone-number-storage
+    message: Phone numbers must be stored using encryption or hashing
+    languages: [go]
+    severity: WARNING
+    pattern-either:
+      - pattern: |
+          INSERT INTO $TABLE (..., phone, ...) VALUES (..., $PHONE, ...)
+      - pattern: |
+          UPDATE $TABLE SET phone = $PHONE
+    pattern-not-inside: |
+      $CRYPTO.Encrypt($...)
+    pattern-not-inside: |
+      $CRYPTO.Hash($...)
+
+  - id: caller-id-spoofing-prevention
+    message: Caller ID must be verified before transmission
+    languages: [go]
+    severity: ERROR
+    pattern: |
+      $CALL.SetCallerID($ID)
+    pattern-not-inside: |
+      if $VERIFY.IsAuthorizedCallerID($ID) {
+        ...
+        $CALL.SetCallerID($ID)
+        ...
+      }
+
+  - id: dnc-list-check
+    message: Do Not Call (DNC) list must be checked before dialing
+    languages: [go]
+    severity: ERROR
+    pattern: |
+      $TELEPHONY.Dial($PHONE)
+    pattern-not-inside: |
+      if !$DNC.IsOnDNCList($PHONE) {
+        ...
+        $TELEPHONY.Dial($PHONE)
+        ...
+      }
+
+  - id: call-frequency-limit
+    message: Call frequency limits must be enforced per TCPA regulations
+    languages: [go]
+    severity: WARNING
+    pattern: |
+      for $I := range $CALLS {
+        ...
+        $TELEPHONY.MakeCall($CALLS[$I])
+        ...
+      }
+    pattern-not-inside: |
+      $RATELIMITER.CheckCallFrequency(...)

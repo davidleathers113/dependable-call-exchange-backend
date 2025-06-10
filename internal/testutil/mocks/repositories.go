@@ -7,6 +7,7 @@ import (
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 )
@@ -31,6 +32,11 @@ func (m *CallRepository) GetByID(ctx context.Context, id uuid.UUID) (*call.Call,
 
 func (m *CallRepository) Update(ctx context.Context, c *call.Call) error {
 	args := m.Called(ctx, c)
+	return args.Error(0)
+}
+
+func (m *CallRepository) UpdateWithStatusCheck(ctx context.Context, c *call.Call, expectedStatus call.Status) error {
+	args := m.Called(ctx, c, expectedStatus)
 	return args.Error(0)
 }
 
@@ -177,6 +183,14 @@ func (m *AccountRepository) UpdateBalance(ctx context.Context, id uuid.UUID, amo
 func (m *AccountRepository) GetBalance(ctx context.Context, id uuid.UUID) (float64, error) {
 	args := m.Called(ctx, id)
 	return args.Get(0).(float64), args.Error(1)
+}
+
+func (m *AccountRepository) GetBuyerQualityMetrics(ctx context.Context, buyerID uuid.UUID) (*values.QualityMetrics, error) {
+	args := m.Called(ctx, buyerID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*values.QualityMetrics), args.Error(1)
 }
 
 

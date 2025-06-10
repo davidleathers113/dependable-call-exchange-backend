@@ -1,0 +1,164 @@
+rules:
+  - id: gdpr-data-retention
+    message: Personal data must have retention period specified
+    languages: [go]
+    severity: ERROR
+    pattern: |
+      type $STRUCT struct {
+        ...
+        $FIELD $TYPE `db:"$NAME"`
+        ...
+      }
+    metavariable-regex:
+      metavariable: $NAME
+      regex: '(email|phone|name|address|ssn|dob)'
+    pattern-not-inside: |
+      type $STRUCT struct {
+        ...
+        $FIELD $TYPE `db:"$NAME" retention:"$PERIOD"`
+        ...
+      }
+
+  - id: gdpr-consent-tracking
+    message: Personal data processing requires consent tracking
+    languages: [go]
+    severity: ERROR
+    pattern-either:
+      - pattern: |
+          $REPO.SavePersonalData($DATA)
+      - pattern: |
+          $REPO.UpdatePersonalData($DATA)
+    pattern-not-inside: |
+      if $CONSENT.HasConsent($USER, $PURPOSE) {
+        ...
+        $REPO.$METHOD($DATA)
+        ...
+      }
+
+  - id: gdpr-right-to-erasure
+    message: Entities with personal data must implement deletion
+    languages: [go]
+    severity: WARNING
+    pattern: |
+      type $REPO struct {
+        ...
+      }
+    pattern-inside: |
+      func ($R *$REPO) Save(...) error {
+        ...
+      }
+    pattern-not-inside: |
+      func ($R *$REPO) Delete(...) error {
+        ...
+      }
+
+  - id: data-anonymization
+    message: Personal data in analytics must be anonymized
+    languages: [go]
+    severity: ERROR
+    pattern: |
+      $ANALYTICS.Track($EVENT, $DATA)
+    metavariable-pattern:
+      metavariable: $DATA
+      pattern-either:
+        - pattern: |
+            map[string]interface{}{
+              ...,
+              "phone": $PHONE,
+              ...
+            }
+        - pattern: |
+            map[string]interface{}{
+              ...,
+              "email": $EMAIL,
+              ...
+            }
+
+  - id: cross-border-data-transfer
+    message: Cross-border data transfers must be validated
+    languages: [go]
+    severity: WARNING
+    pattern: |
+      $CLIENT.Send($DATA, $DESTINATION)
+    pattern-not-inside: |
+      if $COMPLIANCE.IsValidTransfer($SOURCE, $DESTINATION) {
+        ...
+        $CLIENT.Send($DATA, $DESTINATION)
+        ...
+      }
+
+  - id: consent-expiry-check
+    message: Consent expiration must be checked before processing
+    languages: [go]
+    severity: ERROR
+    pattern: |
+      if $CONSENT.Exists($USER) {
+        ...
+        $PROCESS($DATA)
+        ...
+      }
+    pattern-not: |
+      if $CONSENT.IsValid($USER) {
+        ...
+        $PROCESS($DATA)
+        ...
+      }
+
+  - id: data-portability-format
+    message: Data export must be in machine-readable format
+    languages: [go]
+    severity: WARNING
+    pattern: |
+      func $EXPORT(...) []byte {
+        ...
+        return $DATA
+      }
+    pattern-not-inside: |
+      func $EXPORT(...) []byte {
+        ...
+        json.Marshal($DATA)
+        ...
+      }
+
+  - id: audit-log-completeness
+    message: All data access must be logged for audit
+    languages: [go]
+    severity: WARNING
+    pattern-either:
+      - pattern: |
+          func ($R *$REPO) Get$ENTITY(...) {
+            ...
+            return $RESULT, nil
+          }
+      - pattern: |
+          func ($R *$REPO) List$ENTITIES(...) {
+            ...
+            return $RESULTS, nil
+          }
+    pattern-not-inside: |
+      func ($R *$REPO) $METHOD(...) {
+        ...
+        $AUDIT.LogAccess(...)
+        ...
+        return $RESULT, nil
+      }
+
+  - id: encryption-at-rest
+    message: Sensitive fields must be encrypted at rest
+    languages: [go]
+    severity: ERROR
+    pattern: |
+      type $STRUCT struct {
+        ...
+        $FIELD string `db:"$NAME"`
+        ...
+      }
+    metavariable-regex:
+      metavariable: $NAME
+      regex: '(ssn|credit_card|bank_account|tax_id)'
+    pattern-not-inside: |
+      type $STRUCT struct {
+        ...
+        $FIELD string `db:"$NAME" encrypt:"true"`
+        ...
+      }

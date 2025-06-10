@@ -146,6 +146,16 @@ func NewComplianceError(violation, message string) *AppError {
 	}
 }
 
+func NewRateLimitError(message string) *AppError {
+	return &AppError{
+		Type:       ErrorTypeForbidden,
+		Code:       "RATE_LIMIT_EXCEEDED",
+		Message:    message,
+		Retryable:  true,
+		StatusCode: 429,
+	}
+}
+
 func NewFraudError(reason, message string) *AppError {
 	return &AppError{
 		Type:       ErrorTypeFraud,

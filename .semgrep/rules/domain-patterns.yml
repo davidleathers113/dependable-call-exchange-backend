@@ -1,0 +1,130 @@
+rules:
+  - id: repository-transaction-handling
+    message: Repository operations must use transaction context
+    languages: [go]
+    severity: ERROR
+    pattern-either:
+      - pattern: |
+          func ($R *$REPO) $METHOD(...) error {
+            ...
+            $R.$DB.Query(...)
+            ...
+          }
+      - pattern: |
+          func ($R *$REPO) $METHOD(...) error {
+            ...
+            $R.$DB.Exec(...)
+            ...
+          }
+    pattern-not-inside: |
+      func ($R *$REPO) $METHOD(..., ctx context.Context, ...) error {
+        ...
+      }
+    fix: |
+      func ($R *$REPO) $METHOD(ctx context.Context, ...) error {
+        ...
+      }
+
+  - id: money-arithmetic-safety
+    message: Money arithmetic must use value object methods, not raw operations
+    languages: [go]
+    severity: ERROR
+    pattern-either:
+      - pattern: $MONEY1.Amount + $MONEY2.Amount
+      - pattern: $MONEY1.Amount - $MONEY2.Amount
+      - pattern: $MONEY1.Amount * $FACTOR
+      - pattern: $MONEY1.Amount / $DIVISOR
+    fix-regex:
+      regex: '(\$MONEY1)\.Amount \+ (\$MONEY2)\.Amount'
+      replacement: '\1.Add(\2)'
+
+  - id: value-object-creation
+    message: Value objects must be created using factory methods
+    languages: [go]
+    severity: ERROR
+    pattern-either:
+      - pattern: |
+          &values.Money{Amount: $AMT, Currency: $CUR}
+      - pattern: |
+          &values.Phone{Number: $NUM}
+      - pattern: |
+          &values.Email{Address: $ADDR}
+    fix-regex:
+      regex: '&values\.Money\{Amount: (.*), Currency: (.*)\}'
+      replacement: 'values.NewMoney(\1, \2)'
+
+  - id: domain-event-publishing
+    message: Domain events must be published through the event bus
+    languages: [go]
+    severity: WARNING
+    pattern: |
+      $EVENT := &$EVENTTYPE{...}
+    pattern-not-inside: |
+      $EVENT := &$EVENTTYPE{...}
+      ...
+      $EVENTBUS.Publish($EVENT)
+
+  - id: aggregate-root-persistence
+    message: Only aggregate roots should be persisted directly
+    languages: [go]
+    severity: WARNING
+    pattern-either:
+      - pattern: |
+          $REPO.Save($ENTITY)
+      - pattern: |
+          $REPO.Update($ENTITY)
+    metavariable-regex:
+      metavariable: $ENTITY
+      regex: '.*(?:Item|Detail|Line)$'
+
+  - id: repository-error-wrapping
+    message: Repository errors must be wrapped with context
+    languages: [go]
+    severity: WARNING
+    pattern: |
+      if err != nil {
+        return err
+      }
+    pattern-inside: |
+      func ($R *$REPO) $METHOD(...) error {
+        ...
+      }
+    fix: |
+      if err != nil {
+        return fmt.Errorf("$METHOD: %w", err)
+      }
+
+  - id: bid-amount-validation
+    message: Bid amounts must be validated before persistence
+    languages: [go]
+    severity: ERROR
+    pattern: |
+      $BID.Amount = $VALUE
+    pattern-not-inside: |
+      if $VALUE.IsPositive() {
+        ...
+        $BID.Amount = $VALUE
+        ...
+      }
+
+  - id: call-status-transition
+    message: Call status transitions must use state machine methods
+    languages: [go]
+    severity: ERROR
+    pattern: |
+      $CALL.Status = $STATUS
+    pattern-not-inside: |
+      $CALL.TransitionTo($STATUS)
+
+  - id: quality-score-bounds
+    message: Quality scores must be validated to be within 0-100 range
+    languages: [go]
+    severity: WARNING
+    pattern: |
+      $METRICS.QualityScore = $SCORE
+    pattern-not-inside: |
+      if $SCORE >= 0 && $SCORE <= 100 {
+        ...
+        $METRICS.QualityScore = $SCORE
+        ...
+      }

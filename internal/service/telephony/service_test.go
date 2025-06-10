@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -339,7 +340,7 @@ func TestService_GetCallStatus(t *testing.T) {
 			name: "get status of active call",
 			setupMocks: func(cr *MockCallRepository, p *MockProvider) {
 				duration := 300
-				cost := 0.05
+				cost := values.MustNewMoneyFromFloat(0.05, "USD")
 				testCall := &call.Call{
 					ID:        callID,
 					CallSID:   "CALL123",
@@ -382,7 +383,7 @@ func TestService_GetCallStatus(t *testing.T) {
 					StartTime: time.Now().Add(-10 * time.Minute),
 					EndTime:   &endTime,
 					Duration:  intPtr(600),
-					Cost:      floatPtr(0.10),
+					Cost:      moneyPtr(values.MustNewMoneyFromFloat(0.10, "USD")),
 				}
 				cr.On("GetByID", ctx, callID).Return(testCall, nil)
 				// No provider call for completed calls
@@ -604,6 +605,10 @@ func TestService_BridgeCalls(t *testing.T) {
 
 func floatPtr(f float64) *float64 {
 	return &f
+}
+
+func moneyPtr(m values.Money) *values.Money {
+	return &m
 }
 
 func intPtr(i int) *int {

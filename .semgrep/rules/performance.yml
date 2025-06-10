@@ -1,0 +1,185 @@
+rules:
+  - id: n-plus-one-query
+    message: N+1 query pattern detected - use batch loading
+    languages: [go]
+    severity: WARNING
+    pattern: |
+      for _, $ITEM := range $ITEMS {
+        ...
+        $RESULT, err := $REPO.$GET($ITEM.$ID)
+        ...
+      }
+    fix: |
+      // Use batch loading instead
+      $IDS := make([]string, len($ITEMS))
+      for i, $ITEM := range $ITEMS {
+        $IDS[i] = $ITEM.$ID
+      }
+      $RESULTS, err := $REPO.$GET_BATCH($IDS)
+
+  - id: unbounded-query
+    message: Queries must have LIMIT clause to prevent memory issues
+    languages: [go]
+    severity: ERROR
+    pattern-either:
+      - pattern: |
+          SELECT * FROM $TABLE
+      - pattern: |
+          SELECT $FIELDS FROM $TABLE WHERE $CONDITIONS
+    pattern-not-inside: |
+      $QUERY LIMIT $N
+    pattern-not-inside: |
+      $QUERY.Limit($N)
+
+  - id: missing-context-timeout
+    message: Context should have timeout for external calls
+    languages: [go]
+    severity: WARNING
+    pattern-either:
+      - pattern: |
+          $CLIENT.$METHOD(context.Background(), ...)
+      - pattern: |
+          $CLIENT.$METHOD(ctx, ...)
+    pattern-not-inside: |
+      ctx, cancel := context.WithTimeout(...) 
+      defer cancel()
+      ...
+      $CLIENT.$METHOD(ctx, ...)
+
+  - id: inefficient-string-concatenation
+    message: Use strings.Builder for multiple concatenations
+    languages: [go]
+    severity: WARNING
+    pattern: |
+      $STR := ""
+      for ... {
+        ...
+        $STR += $APPEND
+        ...
+      }
+    fix: |
+      var $BUILDER strings.Builder
+      for ... {
+        ...
+        $BUILDER.WriteString($APPEND)
+        ...
+      }
+      $STR := $BUILDER.String()
+
+  - id: map-memory-leak
+    message: Maps in long-running processes should be cleared
+    languages: [go]
+    severity: WARNING
+    pattern: |
+      type $STRUCT struct {
+        ...
+        $MAP map[$KEY]$VALUE
+        ...
+      }
+    pattern-not-inside: |
+      func ($S *$STRUCT) Clear() {
+        ...
+        $S.$MAP = make(map[$KEY]$VALUE)
+        ...
+      }
+
+  - id: goroutine-leak
+    message: Goroutines must have exit condition
+    languages: [go]
+    severity: ERROR
+    pattern: |
+      go func() {
+        for {
+          ...
+        }
+      }()
+    pattern-not-inside: |
+      go func() {
+        for {
+          select {
+          case <-$DONE:
+            return
+          ...
+          }
+        }
+      }()
+
+  - id: defer-in-loop
+    message: Defer in loops can cause memory buildup
+    languages: [go]
+    severity: WARNING
+    pattern: |
+      for ... {
+        ...
+        defer $FUNC()
+        ...
+      }
+    fix: |
+      for ... {
+        func() {
+          ...
+          defer $FUNC()
+          ...
+        }()
+      }
+
+  - id: unnecessary-allocation
+    message: Avoid unnecessary allocations in hot paths
+    languages: [go]
+    severity: INFO
+    pattern-either:
+      - pattern: |
+          func $FUNC(...) []$TYPE {
+            return []$TYPE{}
+          }
+      - pattern: |
+          func $FUNC(...) map[$K]$V {
+            return map[$K]$V{}
+          }
+    fix: |
+      var $EMPTY []$TYPE // or map[$K]$V
+      func $FUNC(...) []$TYPE {
+        return $EMPTY
+      }
+
+  - id: channel-buffer-size
+    message: Unbuffered channels in high-throughput code
+    languages: [go]
+    severity: INFO
+    pattern: |
+      $CH := make(chan $TYPE)
+    pattern-inside: |
+      // High-throughput service
+      ...
+    fix: |
+      $CH := make(chan $TYPE, 100) // Adjust buffer size based on load
+
+  - id: json-marshal-in-loop
+    message: JSON marshaling in loops is expensive
+    languages: [go]
+    severity: WARNING
+    pattern: |
+      for ... {
+        ...
+        $DATA, err := json.Marshal($OBJ)
+        ...
+      }
+
+  - id: regex-compilation-in-function
+    message: Compile regex once at package level
+    languages: [go]
+    severity: WARNING
+    pattern: |
+      func $FUNC(...) {
+        ...
+        $RE := regexp.MustCompile($PATTERN)
+        ...
+      }
+    fix: |
+      var $RE = regexp.MustCompile($PATTERN)
+      
+      func $FUNC(...) {
+        ...
+        // Use $RE here
+        ...
+      }

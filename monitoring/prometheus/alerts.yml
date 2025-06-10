@@ -1,0 +1,193 @@
+groups:
+  - name: dce_performance
+    interval: 30s
+    rules:
+      # Call Routing Performance
+      - alert: HighCallRoutingLatency
+        expr: histogram_quantile(0.99, rate(dce_call_routing_latency_seconds_bucket[5m])) > 0.001
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+          domain: call_routing
+        annotations:
+          summary: "Call routing p99 latency exceeds 1ms target"
+          description: "Call routing latency p99 is {{ $value | humanizeDuration }} (target: <1ms)"
+          dashboard: "http://grafana:3000/d/call-routing/call-routing-performance"
+
+      - alert: HighCallRoutingLatencyP95
+        expr: histogram_quantile(0.95, rate(dce_call_routing_latency_seconds_bucket[5m])) > 0.0005
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+          domain: call_routing
+        annotations:
+          summary: "Call routing p95 latency exceeds 500μs"
+          description: "Call routing latency p95 is {{ $value | humanizeDuration }}"
+
+      # Bid Processing Performance
+      - alert: LowBidThroughput
+        expr: sum(rate(dce_bid_processing_total[1m])) < 50000
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+          domain: bidding
+        annotations:
+          summary: "Bid processing below 50K/sec threshold"
+          description: "Current bid throughput: {{ $value | humanize }}/sec (target: >50K/sec)"
+          dashboard: "http://grafana:3000/d/bid-processing/bid-processing-performance"
+
+      - alert: CriticalLowBidThroughput
+        expr: sum(rate(dce_bid_processing_total[1m])) < 10000
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+          domain: bidding
+        annotations:
+          summary: "Bid processing critically low (<10K/sec)"
+          description: "Current bid throughput: {{ $value | humanize }}/sec"
+
+      - alert: HighBidProcessingLatency
+        expr: histogram_quantile(0.99, rate(dce_bid_processing_duration_seconds_bucket[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+          domain: bidding
+        annotations:
+          summary: "Bid processing p99 latency exceeds 100ms"
+          description: "Bid processing latency p99 is {{ $value | humanizeDuration }}"
+
+  - name: dce_availability
+    interval: 30s
+    rules:
+      - alert: ServiceDown
+        expr: up{job=~"dce-.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "{{ $labels.job }} has been down for more than 1 minute"
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m])) by (service)
+          /
+          sum(rate(http_requests_total[5m])) by (service)
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High error rate in {{ $labels.service }}"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+  - name: dce_compliance
+    interval: 30s
+    rules:
+      - alert: HighComplianceCheckLatency
+        expr: histogram_quantile(0.95, rate(dce_compliance_check_duration_seconds_bucket[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          team: compliance
+          domain: compliance
+        annotations:
+          summary: "Compliance check latency high"
+          description: "Compliance check p95 latency is {{ $value | humanizeDuration }} (target: <50ms)"
+
+      - alert: DNCListGrowthRate
+        expr: rate(dce_compliance_dnc_list_size[1h]) > 1000
+        for: 30m
+        labels:
+          severity: warning
+          team: compliance
+          domain: compliance
+        annotations:
+          summary: "DNC list growing rapidly"
+          description: "DNC list growing at {{ $value | humanize }} entries/hour"
+
+  - name: dce_resource_usage
+    interval: 30s
+    rules:
+      - alert: HighMemoryUsage
+        expr: |
+          (go_memstats_alloc_bytes / go_memstats_sys_bytes) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High memory usage in {{ $labels.job }}"
+          description: "Memory usage is {{ $value | humanizePercentage }} of allocated"
+
+      - alert: HighGoroutineCount
+        expr: go_goroutines > 10000
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High goroutine count in {{ $labels.job }}"
+          description: "Goroutine count is {{ $value }}"
+
+      - alert: DatabaseConnectionPoolExhaustion
+        expr: |
+          (pgxpool_acquire_count - pgxpool_release_count) / pgxpool_max_conns > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+          component: database
+        annotations:
+          summary: "Database connection pool near exhaustion"
+          description: "Connection pool usage is {{ $value | humanizePercentage }}"
+
+  - name: dce_business_metrics
+    interval: 30s
+    rules:
+      - alert: LowCallConversionRate
+        expr: |
+          sum(rate(dce_call_completed_total[5m]))
+          /
+          sum(rate(dce_call_initiated_total[5m]))
+          < 0.7
+        for: 15m
+        labels:
+          severity: warning
+          team: business
+        annotations:
+          summary: "Low call conversion rate"
+          description: "Call conversion rate is {{ $value | humanizePercentage }} (target: >70%)"
+
+      - alert: HighCallAbandonmentRate
+        expr: |
+          sum(rate(dce_call_abandoned_total[5m]))
+          /
+          sum(rate(dce_call_initiated_total[5m]))
+          > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          team: business
+        annotations:
+          summary: "High call abandonment rate"
+          description: "Call abandonment rate is {{ $value | humanizePercentage }} (threshold: <10%)"
+
+      - alert: NoBidsForCalls
+        expr: |
+          sum(rate(dce_call_no_bids_total[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          team: business
+          domain: marketplace
+        annotations:
+          summary: "Calls receiving no bids"
+          description: "{{ $value | humanize }} calls/sec are receiving no bids"

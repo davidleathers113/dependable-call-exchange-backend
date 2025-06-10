@@ -6,6 +6,7 @@ import (
 
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -132,7 +133,7 @@ func TestSkillBasedRouter_Route(t *testing.T) {
 					Criteria: bid.BidCriteria{
 						CallType: []string{"outbound"},
 					},
-					Quality: bid.QualityMetrics{
+					Quality: values.QualityMetrics{
 						ConversionRate:   0.20,
 						FraudScore:       0.05,
 						HistoricalRating: 4.5,
@@ -143,7 +144,7 @@ func TestSkillBasedRouter_Route(t *testing.T) {
 					Criteria: bid.BidCriteria{
 						CallType: []string{"inbound"},
 					},
-					Quality: bid.QualityMetrics{
+					Quality: values.QualityMetrics{
 						ConversionRate:   0.15,
 						FraudScore:       0.08,
 						HistoricalRating: 4.0,
@@ -166,7 +167,7 @@ func TestSkillBasedRouter_Route(t *testing.T) {
 					Criteria: bid.BidCriteria{
 						CallType: []string{"inbound"},
 					},
-					Quality: bid.QualityMetrics{
+					Quality: values.QualityMetrics{
 						ConversionRate:   0.10,
 						FraudScore:       0.15,
 						HistoricalRating: 3.0,
@@ -177,7 +178,7 @@ func TestSkillBasedRouter_Route(t *testing.T) {
 					Criteria: bid.BidCriteria{
 						CallType: []string{"inbound"},
 					},
-					Quality: bid.QualityMetrics{
+					Quality: values.QualityMetrics{
 						ConversionRate:   0.25,
 						FraudScore:       0.02,
 						HistoricalRating: 4.8,
@@ -206,7 +207,7 @@ func TestSkillBasedRouter_Route(t *testing.T) {
 							States: []string{"NY", "TX"},
 						},
 					},
-					Quality: bid.QualityMetrics{
+					Quality: values.QualityMetrics{
 						ConversionRate:   0.20,
 						FraudScore:       0.05,
 						HistoricalRating: 4.5,
@@ -220,7 +221,7 @@ func TestSkillBasedRouter_Route(t *testing.T) {
 							States: []string{"CA", "WA"},
 						},
 					},
-					Quality: bid.QualityMetrics{
+					Quality: values.QualityMetrics{
 						ConversionRate:   0.18,
 						FraudScore:       0.06,
 						HistoricalRating: 4.3,
@@ -278,8 +279,8 @@ func TestCostBasedRouter_Route(t *testing.T) {
 			bids: []*bid.Bid{
 				{
 					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
-					Amount: 10.0, // High price
-					Quality: bid.QualityMetrics{
+					Amount: values.MustNewMoneyFromFloat(10.0, "USD"), // High price
+					Quality: values.QualityMetrics{
 						ConversionRate:   0.10,
 						AverageCallTime:  240,
 						FraudScore:       0.15,
@@ -288,8 +289,8 @@ func TestCostBasedRouter_Route(t *testing.T) {
 				},
 				{
 					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
-					Amount: 5.0, // Lower price
-					Quality: bid.QualityMetrics{
+					Amount: values.MustNewMoneyFromFloat(5.0, "USD"), // Lower price
+					Quality: values.QualityMetrics{
 						ConversionRate:   0.25,
 						AverageCallTime:  180,
 						FraudScore:       0.02,
@@ -312,8 +313,8 @@ func TestCostBasedRouter_Route(t *testing.T) {
 			bids: []*bid.Bid{
 				{
 					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
-					Amount: 5.0,
-					Quality: bid.QualityMetrics{
+					Amount: values.MustNewMoneyFromFloat(5.0, "USD"),
+					Quality: values.QualityMetrics{
 						ConversionRate:   0.15,
 						AverageCallTime:  180,
 						FraudScore:       0.05,
@@ -322,8 +323,8 @@ func TestCostBasedRouter_Route(t *testing.T) {
 				},
 				{
 					ID: uuid.New(), Status: bid.StatusActive, BuyerID: uuid.New(),
-					Amount: 5.0,
-					Quality: bid.QualityMetrics{
+					Amount: values.MustNewMoneyFromFloat(5.0, "USD"),
+					Quality: values.QualityMetrics{
 						ConversionRate:   0.15,
 						AverageCallTime:  180,
 						FraudScore:       0.05,
@@ -461,8 +462,8 @@ func BenchmarkCostBasedRouter_Route(b *testing.B) {
 			ID:      uuid.New(),
 			Status:  bid.StatusActive,
 			BuyerID: uuid.New(),
-			Amount:  float64(i%50) + 1.0,
-			Quality: bid.QualityMetrics{
+			Amount:  values.MustNewMoneyFromFloat(float64(i%50) + 1.0, "USD"),
+			Quality: values.QualityMetrics{
 				ConversionRate:   float64(i%20) / 100.0,
 				AverageCallTime:  150 + i%100,
 				FraudScore:       float64(i%10) / 100.0,

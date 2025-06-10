@@ -76,16 +76,16 @@ func (s *service) CheckCall(ctx context.Context, c *call.Call) (*FraudCheckResul
 	
 	// Blacklist check
 	if s.blacklistChecker != nil {
-		if isBlacklisted, reason, err := s.blacklistChecker.IsBlacklisted(ctx, c.FromNumber, "phone"); err == nil && isBlacklisted {
+		if isBlacklisted, reason, err := s.blacklistChecker.IsBlacklisted(ctx, c.FromNumber.String(), "phone"); err == nil && isBlacklisted {
 			result.Approved = false
 			result.Reasons = append(result.Reasons, fmt.Sprintf("From number blacklisted: %s", reason))
 			result.Flags = append(result.Flags, FraudFlag{
 				Type:        "blacklist",
 				Severity:    "critical",
 				Description: "Blacklisted phone number",
-				Score:       1.0,
+				Score:       RiskScoreCritical,
 			})
-			result.RiskScore = 1.0
+			result.RiskScore = RiskScoreCritical
 			// Save result before returning
 			if s.repo != nil {
 				s.repo.SaveCheckResult(ctx, result)
@@ -93,16 +93,16 @@ func (s *service) CheckCall(ctx context.Context, c *call.Call) (*FraudCheckResul
 			return result, nil
 		}
 		
-		if isBlacklisted, reason, err := s.blacklistChecker.IsBlacklisted(ctx, c.ToNumber, "phone"); err == nil && isBlacklisted {
+		if isBlacklisted, reason, err := s.blacklistChecker.IsBlacklisted(ctx, c.ToNumber.String(), "phone"); err == nil && isBlacklisted {
 			result.Approved = false
 			result.Reasons = append(result.Reasons, fmt.Sprintf("To number blacklisted: %s", reason))
 			result.Flags = append(result.Flags, FraudFlag{
 				Type:        "blacklist",
 				Severity:    "critical",
 				Description: "Blacklisted phone number",
-				Score:       1.0,
+				Score:       RiskScoreCritical,
 			})
-			result.RiskScore = 1.0
+			result.RiskScore = RiskScoreCritical
 			// Save result before returning
 			if s.repo != nil {
 				s.repo.SaveCheckResult(ctx, result)
@@ -119,9 +119,9 @@ func (s *service) CheckCall(ctx context.Context, c *call.Call) (*FraudCheckResul
 				Type:        "velocity",
 				Severity:    "high",
 				Description: fmt.Sprintf("High call velocity: %d calls in %v", velocityResult.Count, velocityResult.TimeWindow),
-				Score:       0.8,
+				Score:       RiskScoreHigh,
 			})
-			result.RiskScore = math.Max(result.RiskScore, 0.8)
+			result.RiskScore = math.Max(result.RiskScore, RiskScoreHigh)
 		}
 		
 		// Record the action
@@ -138,7 +138,7 @@ func (s *service) CheckCall(ctx context.Context, c *call.Call) (*FraudCheckResul
 			result.RiskScore = math.Max(result.RiskScore, prediction.FraudProbability)
 			result.Confidence = prediction.Confidence
 			
-			if prediction.FraudProbability > 0.7 {
+			if prediction.FraudProbability > RiskScoreMLAnomalyThreshold {
 				result.Flags = append(result.Flags, FraudFlag{
 					Type:        "ml_anomaly",
 					Severity:    "high",
@@ -195,8 +195,8 @@ func (s *service) CheckBid(ctx context.Context, b *bid.Bid, buyer *account.Accou
 		Metadata:   make(map[string]interface{}),
 	}
 	
-	// Account quality check
-	if buyer.QualityScore < 50 {
+	// Account quality check (quality scores are 0-100 scale in the domain)
+	if buyer.QualityMetrics.QualityScore < 50.0 {
 		result.Flags = append(result.Flags, FraudFlag{
 			Type:        "pattern",
 			Severity:    "medium",
@@ -207,7 +207,7 @@ func (s *service) CheckBid(ctx context.Context, b *bid.Bid, buyer *account.Accou
 	}
 	
 	// Suspicious bid amount patterns
-	if s.isSuspiciousBidAmount(b.Amount) {
+	if s.isSuspiciousBidAmount(b.Amount.ToFloat64()) {
 		result.Flags = append(result.Flags, FraudFlag{
 			Type:        "pattern",
 			Severity:    "low",
@@ -279,7 +279,7 @@ func (s *service) CheckAccount(ctx context.Context, acc *account.Account) (*Frau
 	}
 	
 	// Email domain check
-	if s.isSuspiciousEmailDomain(acc.Email) {
+	if s.isSuspiciousEmailDomain(acc.Email.String()) {
 		result.Flags = append(result.Flags, FraudFlag{
 			Type:        "pattern",
 			Severity:    "low",
@@ -290,7 +290,7 @@ func (s *service) CheckAccount(ctx context.Context, acc *account.Account) (*Frau
 	}
 	
 	// Phone number validation
-	if !s.isValidPhoneFormat(acc.PhoneNumber) {
+	if !s.isValidPhoneFormat(acc.PhoneNumber.String()) {
 		result.Flags = append(result.Flags, FraudFlag{
 			Type:        "pattern",
 			Severity:    "medium",
@@ -418,18 +418,20 @@ func (s *service) extractCallFeatures(c *call.Call) map[string]interface{} {
 	features := make(map[string]interface{})
 	
 	features["buyer_id"] = c.BuyerID.String()
-	features["from_number"] = c.FromNumber
-	features["to_number"] = c.ToNumber
+	features["from_number"] = c.FromNumber.String()
+	features["to_number"] = c.ToNumber.String()
 	features["direction"] = c.Direction.String()
 	features["hour_of_day"] = c.StartTime.Hour()
 	features["day_of_week"] = int(c.StartTime.Weekday())
 	
 	// Extract area codes
-	if len(c.FromNumber) >= 10 {
-		features["from_area_code"] = c.FromNumber[1:4]
+	fromNumber := c.FromNumber.String()
+	toNumber := c.ToNumber.String()
+	if len(fromNumber) >= 10 {
+		features["from_area_code"] = fromNumber[1:4]
 	}
-	if len(c.ToNumber) >= 10 {
-		features["to_area_code"] = c.ToNumber[1:4]
+	if len(toNumber) >= 10 {
+		features["to_area_code"] = toNumber[1:4]
 	}
 	
 	return features

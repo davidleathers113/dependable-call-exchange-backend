@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 )
 
 // Property-based tests using Go's built-in testing/quick package
@@ -98,7 +100,11 @@ func TestCall_PropertyDuration(t *testing.T) {
 			}
 			
 			// Complete may fail for invalid inputs (e.g., extreme values)
-			err = c.Complete(durationSeconds, cost)
+			costMoney, err := values.NewMoneyFromFloat(cost, "USD")
+			if err != nil {
+				return true // Skip invalid costs
+			}
+			err = c.Complete(durationSeconds, costMoney)
 			if err != nil {
 				return true // Skip invalid inputs that fail validation
 			}
@@ -155,7 +161,11 @@ func TestCall_PropertyDuration(t *testing.T) {
 			}
 			
 			// Complete may fail for invalid inputs
-			err = c.Complete(durationSeconds, cost)
+			costMoney, err := values.NewMoneyFromFloat(cost, "USD")
+			if err != nil {
+				return true // Skip invalid costs
+			}
+			err = c.Complete(durationSeconds, costMoney)
 			if err != nil {
 				return true // Skip invalid inputs that fail validation
 			}
@@ -164,7 +174,7 @@ func TestCall_PropertyDuration(t *testing.T) {
 				return false
 			}
 			
-			costPerSecond := *c.Cost / float64(*c.Duration)
+			costPerSecond := c.Cost.ToFloat64() / float64(*c.Duration)
 			
 			// Cost per second should be reasonable (between $0 and $10)
 			return costPerSecond >= 0 && costPerSecond <= 10.0
@@ -188,7 +198,7 @@ func TestCall_PropertyPhoneNumbers(t *testing.T) {
 			if err != nil {
 				return true // Skip invalid calls
 			}
-			return c.FromNumber == from && c.ToNumber == to
+			return c.FromNumber.String() == from && c.ToNumber.String() == to
 		}
 		
 		err := quick.Check(property, &quick.Config{MaxCount: 1000})
@@ -267,8 +277,8 @@ func TestCall_PropertyWithCustomGenerator(t *testing.T) {
 			
 			// Validate call properties
 			return c.ID != uuid.Nil &&
-				   c.FromNumber != "" &&
-				   c.ToNumber != "" &&
+				   !c.FromNumber.IsEmpty() &&
+				   !c.ToNumber.IsEmpty() &&
 				   c.BuyerID == data.BuyerID &&
 				   c.Direction == data.Direction &&
 				   c.Status == StatusPending &&

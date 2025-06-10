@@ -1,0 +1,184 @@
+run:
+  timeout: 10m
+  tests: true
+  build-tags:
+    - integration
+  skip-dirs:
+    - vendor
+    - third_party
+    - testdata
+    - examples
+    - generated
+
+output:
+  print-issued-lines: true
+  print-linter-name: true
+  uniq-by-line: true
+  path-prefix: ""
+  sort-results: true
+
+linters:
+  disable-all: true
+  enable:
+    # Bugs & Performance
+    - staticcheck
+    - gosec
+    - govet
+    - ineffassign
+    - typecheck
+    - bodyclose
+    - noctx
+    - contextcheck
+    - durationcheck
+    - errcheck
+    - errorlint
+    - exhaustive
+    - exportloopref
+    - gosimple
+    - makezero
+    - nilerr
+    - nilnil
+    - prealloc
+    - predeclared
+    - promlinter
+    - rowserrcheck
+    - sqlclosecheck
+    - tparallel
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - wastedassign
+    
+    # Code Quality & Style
+    - gocritic
+    - gocyclo
+    - gocognit
+    - funlen
+    - lll
+    - maintidx
+    - nestif
+    - godot
+    - gofmt
+    - goimports
+    - misspell
+    - revive
+    - stylecheck
+    - whitespace
+    
+    # Architecture & Design
+    - depguard
+    - dupl
+    - goconst
+    - godox
+    - gomodguard
+    - interfacebloat
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+  
+  gocognit:
+    min-complexity: 20
+  
+  funlen:
+    lines: 100
+    statements: 50
+  
+  govet:
+    check-shadowing: true
+    enable-all: true
+  
+  lll:
+    line-length: 120
+    tab-width: 1
+  
+  nestif:
+    min-complexity: 5
+  
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - dupImport
+      - ifElseChain
+      - octalLiteral
+      - whyNoLint
+  
+  revive:
+    rules:
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+      - name: empty-block
+      - name: superfluous-else
+      - name: unused-parameter
+      - name: unreachable-code
+      - name: redefines-builtin-id
+      - name: cognitive-complexity
+        arguments: [15]
+      - name: cyclomatic
+        arguments: [15]
+      - name: line-length-limit
+        arguments: [120]
+
+  depguard:
+    rules:
+      main:
+        deny:
+          - pkg: "github.com/pkg/errors"
+            desc: "Use stdlib errors package with fmt.Errorf and %w"
+          - pkg: "io/ioutil"
+            desc: "Use os or io package instead"
+        files:
+          - "!**/internal/infrastructure/**"
+        allow:
+          - $gostd
+          - github.com/google/uuid
+          - github.com/stretchr/testify
+          - go.uber.org/zap
+          - github.com/lib/pq
+          - github.com/jackc/pgx
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - dupl
+        - funlen
+        - gocognit
+        - goconst
+    
+    - path: internal/infrastructure/
+      linters:
+        - dupl
+    
+    - path: cmd/
+      linters:
+        - gocyclo
+        - funlen
+    
+    - linters:
+        - lll
+      source: "^//go:generate "
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false

@@ -2,27 +2,29 @@ package account
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/validation"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 )
 
 type Account struct {
 	ID           uuid.UUID   `json:"id"`
-	Email        string      `json:"email"`
-	Name         string      `json:"name"`
-	Type         AccountType `json:"type"`
-	Status       Status      `json:"status"`
+	Email        values.Email       `json:"email"`
+	Name         string             `json:"name"`
+	Type         AccountType        `json:"type"`
+	Status       Status             `json:"status"`
 	
 	// Business details
-	Company      *string `json:"company,omitempty"`
-	PhoneNumber  string  `json:"phone_number"`
+	Company      *string            `json:"company,omitempty"`
+	PhoneNumber  values.PhoneNumber `json:"phone_number"`
 	Address      Address `json:"address"`
 	
 	// Financial
-	Balance      float64 `json:"balance"`
-	CreditLimit  float64 `json:"credit_limit"`
+	Balance      values.Money `json:"balance"`
+	CreditLimit  values.Money `json:"credit_limit"`
 	PaymentTerms int     `json:"payment_terms"` // days
 	
 	// Compliance
@@ -31,8 +33,7 @@ type Account struct {
 	ComplianceFlags []string  `json:"compliance_flags"`
 	
 	// Quality metrics
-	QualityScore    float64 `json:"quality_score"`
-	FraudScore      float64 `json:"fraud_score"`
+	QualityMetrics  values.QualityMetrics `json:"quality_metrics"`
 	
 	// Settings
 	Settings     AccountSettings `json:"settings"`
@@ -107,17 +108,19 @@ type AccountSettings struct {
 	BlockedAreaCodes       []string `json:"blocked_area_codes"`
 	MaxConcurrentCalls     int      `json:"max_concurrent_calls"`
 	AutoBidding            bool     `json:"auto_bidding"`
-	MaxBidAmount           float64  `json:"max_bid_amount"`
+	MaxBidAmount           values.Money `json:"max_bid_amount"`
 }
 
-func NewAccount(email, name string, accountType AccountType) (*Account, error) {
-	// Validate email
-	if err := validation.ValidateEmail(email); err != nil {
+
+func NewAccount(emailStr, name string, accountType AccountType) (*Account, error) {
+	// Create email value object
+	email, err := values.NewEmail(emailStr)
+	if err != nil {
 		return nil, fmt.Errorf("invalid email: %w", err)
 	}
 	
-	// Validate name
-	if err := validation.ValidateName(name); err != nil {
+	// Validate name (moved from validation package to domain)
+	if err := validateName(name); err != nil {
 		return nil, fmt.Errorf("invalid name: %w", err)
 	}
 	
@@ -129,6 +132,22 @@ func NewAccount(email, name string, accountType AccountType) (*Account, error) {
 		return nil, ErrInvalidAccountType
 	}
 	
+	// Create money value objects
+	balance, err := values.NewMoneyFromFloat(0.0, values.USD)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create balance: %w", err)
+	}
+	
+	creditLimit, err := values.NewMoneyFromFloat(1000.0, values.USD)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create credit limit: %w", err)
+	}
+	
+	maxBidAmount, err := values.NewMoneyFromFloat(10.0, values.USD)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create max bid amount: %w", err)
+	}
+	
 	now := time.Now()
 	return &Account{
 		ID:              uuid.New(),
@@ -136,11 +155,10 @@ func NewAccount(email, name string, accountType AccountType) (*Account, error) {
 		Name:            name,
 		Type:            accountType,
 		Status:          StatusPending,
-		Balance:         0.0,
-		CreditLimit:     1000.0,
+		Balance:         balance,
+		CreditLimit:     creditLimit,
 		PaymentTerms:    30,
-		QualityScore:    5.0,
-		FraudScore:      0.0,
+		QualityMetrics:  values.NewDefaultQualityMetrics(),
 		Settings: AccountSettings{
 			Timezone:               "UTC",
 			CallNotifications:      true,
@@ -149,18 +167,30 @@ func NewAccount(email, name string, accountType AccountType) (*Account, error) {
 			AllowedCallingHours:    []int{9, 10, 11, 12, 13, 14, 15, 16, 17}, // 9 AM - 5 PM
 			MaxConcurrentCalls:     10,
 			AutoBidding:            false,
-			MaxBidAmount:           10.0,
+			MaxBidAmount:           maxBidAmount,
 		},
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}, nil
 }
 
-func (a *Account) UpdateBalance(amount float64) error {
-	newBalance := a.Balance + amount
-	if newBalance < 0 && newBalance < -a.CreditLimit {
+func (a *Account) UpdateBalance(amount values.Money) error {
+	// Ensure currencies match
+	if a.Balance.Currency() != amount.Currency() {
+		return fmt.Errorf("currency mismatch: account balance is %s but amount is %s", 
+			a.Balance.Currency(), amount.Currency())
+	}
+	
+	newBalance, err := a.Balance.Add(amount)
+	if err != nil {
+		return err
+	}
+	
+	// Check if new balance would exceed credit limit (for negative amounts)
+	if newBalance.ToFloat64() < 0 && newBalance.ToFloat64() < -a.CreditLimit.ToFloat64() {
 		return ErrInsufficientFunds
 	}
+	
 	a.Balance = newBalance
 	a.UpdatedAt = time.Now()
 	return nil
@@ -172,6 +202,64 @@ func (a *Account) IsSuspended() bool {
 
 func (a *Account) CanMakeCalls() bool {
 	return a.Status == StatusActive && a.TCPAConsent
+}
+
+// SetPhoneNumber updates the account's phone number with validation
+func (a *Account) SetPhoneNumber(phoneStr string) error {
+	phoneNumber, err := values.NewPhoneNumber(phoneStr)
+	if err != nil {
+		return fmt.Errorf("invalid phone number: %w", err)
+	}
+	
+	a.PhoneNumber = phoneNumber
+	a.UpdatedAt = time.Now()
+	return nil
+}
+
+// UpdateEmail updates the account's email with validation
+func (a *Account) UpdateEmail(emailStr string) error {
+	email, err := values.NewEmail(emailStr)
+	if err != nil {
+		return fmt.Errorf("invalid email: %w", err)
+	}
+	
+	a.Email = email
+	a.UpdatedAt = time.Now()
+	return nil
+}
+
+// HasSufficientBalance checks if account has enough balance for an amount
+func (a *Account) HasSufficientBalance(amount values.Money) bool {
+	if a.Balance.Currency() != amount.Currency() {
+		return false // Currency mismatch
+	}
+	
+	return a.Balance.ToFloat64() >= amount.ToFloat64()
+}
+
+// validateName validates person name within the account domain
+func validateName(name string) error {
+	if name == "" {
+		return fmt.Errorf("name cannot be empty")
+	}
+	
+	name = strings.TrimSpace(name)
+	
+	// Name validation - allows letters, spaces, hyphens, apostrophes
+	nameRegex := regexp.MustCompile(`^[\p{L}\s\-'\.]{2,100}$`)
+	if !nameRegex.MatchString(name) {
+		return fmt.Errorf("invalid name format")
+	}
+	
+	if len(name) < 2 {
+		return fmt.Errorf("name too short (min 2 characters)")
+	}
+	
+	if len(name) > 100 {
+		return fmt.Errorf("name too long (max 100 characters)")
+	}
+	
+	return nil
 }
 
 var (

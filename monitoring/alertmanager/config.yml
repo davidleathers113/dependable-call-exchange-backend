@@ -1,0 +1,98 @@
+global:
+  # The smarthost and SMTP sender used for mail notifications.
+  smtp_smarthost: 'localhost:25'
+  smtp_from: 'alertmanager@dce.local'
+  smtp_require_tls: false
+
+  # The root route on which each incoming alert enters.
+route:
+  # The labels by which incoming alerts are grouped together.
+  group_by: ['alertname', 'cluster', 'service']
+
+  # When a new group of alerts is created by an incoming alert, wait at
+  # least 'group_wait' to send the initial notification.
+  group_wait: 10s
+
+  # When the first notification was sent, wait 'group_interval' to send a batch
+  # of new alerts that started firing for that group.
+  group_interval: 30s
+
+  # If an alert has successfully been sent, wait 'repeat_interval' to
+  # resend them.
+  repeat_interval: 4h
+
+  # Default receiver
+  receiver: 'dce-team'
+
+  # All the above attributes are inherited by all child routes and can
+  # overwritten on each.
+  routes:
+    # Route critical alerts to pager
+    - match:
+        severity: critical
+      receiver: dce-pager
+      continue: true
+      
+    # Route platform team alerts
+    - match:
+        team: platform
+      receiver: dce-platform-team
+      
+    # Route compliance alerts
+    - match:
+        team: compliance
+      receiver: dce-compliance-team
+      
+    # Route business alerts
+    - match:
+        team: business
+      receiver: dce-business-team
+
+# Receivers
+receivers:
+  - name: 'dce-team'
+    email_configs:
+      - to: 'team@dce.local'
+        headers:
+          Subject: 'DCE Alert: {{ .GroupLabels.alertname }}'
+    # webhook_configs:
+    #   - url: 'http://localhost:5001/webhook'
+    #     send_resolved: true
+
+  - name: 'dce-pager'
+    email_configs:
+      - to: 'oncall@dce.local'
+        headers:
+          Subject: 'CRITICAL DCE Alert: {{ .GroupLabels.alertname }}'
+    # pagerduty_configs:
+    #   - service_key: '<YOUR_PAGERDUTY_SERVICE_KEY>'
+
+  - name: 'dce-platform-team'
+    email_configs:
+      - to: 'platform@dce.local'
+    # slack_configs:
+    #   - api_url: '<YOUR_SLACK_WEBHOOK_URL>'
+    #     channel: '#platform-alerts'
+
+  - name: 'dce-compliance-team'
+    email_configs:
+      - to: 'compliance@dce.local'
+    # slack_configs:
+    #   - api_url: '<YOUR_SLACK_WEBHOOK_URL>'
+    #     channel: '#compliance-alerts'
+
+  - name: 'dce-business-team'
+    email_configs:
+      - to: 'business@dce.local'
+    # slack_configs:
+    #   - api_url: '<YOUR_SLACK_WEBHOOK_URL>'
+    #     channel: '#business-alerts'
+
+# Inhibition rules allow to mute a set of alerts given that another alert is firing.
+inhibit_rules:
+  # Mute any warning-level notifications if the same alert is already critical.
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'service']

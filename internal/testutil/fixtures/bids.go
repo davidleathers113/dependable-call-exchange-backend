@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil"
 )
 
@@ -20,10 +21,10 @@ type BidBuilder struct {
 	callID     uuid.UUID
 	buyerID    uuid.UUID
 	sellerID   uuid.UUID
-	amount     float64
+	amount     values.Money
 	status     bid.Status
 	criteria   bid.BidCriteria
-	quality    bid.QualityMetrics
+	quality    values.QualityMetrics
 	auctionID  uuid.UUID
 	rank       int
 	placedAt   time.Time
@@ -47,7 +48,7 @@ func NewBidBuilder(testDB *testutil.TestDB) *BidBuilder {
 		buyerID:   buyerID,
 		sellerID:  sellerID,
 		auctionID: auctionID,
-		amount:    5.00,
+		amount:    values.MustNewMoneyFromFloat(5.00, values.USD),
 		status:    bid.StatusActive,
 		rank:      1,
 		placedAt:  now,
@@ -63,14 +64,17 @@ func NewBidBuilder(testDB *testutil.TestDB) *BidBuilder {
 				Timezone:  "America/New_York",
 			},
 			CallType:  []string{"inbound"},
-			MaxBudget: 100.00,
+			MaxBudget: values.MustNewMoneyFromFloat(100.00, values.USD),
 		},
-		quality: bid.QualityMetrics{
-			ConversionRate:   0.15,
-			AverageCallTime:  180,
-			FraudScore:       0.05,
-			HistoricalRating: 4.5,
-		},
+		quality: values.MustNewQualityMetrics(
+			4.5,  // qualityScore
+			0.05, // fraudScore
+			4.5,  // historicalRating
+			0.15, // conversionRate
+			180,  // averageCallTime
+			5.0,  // trustScore
+			5.0,  // reliabilityScore
+		),
 	}
 }
 
@@ -94,7 +98,7 @@ func (b *BidBuilder) WithBuyerID(buyerID uuid.UUID) *BidBuilder {
 
 // WithAmount sets the bid amount
 func (b *BidBuilder) WithAmount(amount float64) *BidBuilder {
-	b.amount = amount
+	b.amount = values.MustNewMoneyFromFloat(amount, values.USD)
 	return b
 }
 
@@ -117,7 +121,7 @@ func (b *BidBuilder) WithCriteria(criteria bid.BidCriteria) *BidBuilder {
 }
 
 // WithQuality sets the quality metrics
-func (b *BidBuilder) WithQuality(quality bid.QualityMetrics) *BidBuilder {
+func (b *BidBuilder) WithQuality(quality values.QualityMetrics) *BidBuilder {
 	b.quality = quality
 	return b
 }
@@ -148,12 +152,15 @@ func (b *BidBuilder) WithExpiration(duration time.Duration) *BidBuilder {
 
 // WithQualityMetrics sets the quality metrics using individual values
 func (b *BidBuilder) WithQualityMetrics(conversionRate float64, avgCallTime int, fraudScore float64, rating float64) *BidBuilder {
-	b.quality = bid.QualityMetrics{
-		ConversionRate:   conversionRate,
-		AverageCallTime:  avgCallTime,
-		FraudScore:       fraudScore,
-		HistoricalRating: rating,
-	}
+	b.quality = values.MustNewQualityMetrics(
+		rating,         // qualityScore (use historical rating as base)
+		fraudScore,     // fraudScore
+		rating,         // historicalRating
+		conversionRate, // conversionRate
+		avgCallTime,    // averageCallTime
+		5.0,           // trustScore (default)
+		5.0,           // reliabilityScore (default)
+	)
 	return b
 }
 
@@ -231,14 +238,18 @@ func (bs *BidScenarios) HighValueBid(callID uuid.UUID) *bid.Bid {
 				Days:      []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"},
 			},
 			CallType:   []string{"inbound", "outbound"},
-			MaxBudget:  500.00,
+			MaxBudget:  values.MustNewMoneyFromFloat(500.00, values.USD),
+			Keywords:   []string{"premium", "high-value", "qualified"},
 		}).
-		WithQuality(bid.QualityMetrics{
-			ConversionRate:   0.35,
-			AverageCallTime:  420,
-			FraudScore:       0.01,
-			HistoricalRating: 4.8,
-		}).
+		WithQuality(values.MustNewQualityMetrics(
+			4.8, // qualityScore (use historical rating)
+			0.01, // fraudScore
+			4.8, // historicalRating  
+			0.35, // conversionRate
+			420, // averageCallTime
+			5.0, // trustScore (default)
+			5.0, // reliabilityScore (default)
+		)).
 		Build(bs.t)
 }
 
@@ -256,16 +267,20 @@ func (bs *BidScenarios) LowValueBid(callID uuid.UUID) *bid.Bid {
 				StartHour: 9,
 				EndHour:   17,
 				Days:      []string{"Mon", "Tue", "Wed", "Thu", "Fri"},
+				Timezone:  "America/Chicago",
 			},
 			CallType:  []string{"inbound"},
-			MaxBudget: 50.00,
+			MaxBudget: values.MustNewMoneyFromFloat(50.00, values.USD),
 		}).
-		WithQuality(bid.QualityMetrics{
-			ConversionRate:   0.08,
-			AverageCallTime:  120,
-			FraudScore:       0.15,
-			HistoricalRating: 3.2,
-		}).
+		WithQuality(values.MustNewQualityMetrics(
+			3.2, // qualityScore (use historical rating)
+			0.15, // fraudScore
+			3.2, // historicalRating
+			0.08, // conversionRate
+			120, // averageCallTime
+			4.0, // trustScore (lower for low value)
+			4.0, // reliabilityScore (lower for low value)
+		)).
 		Build(bs.t)
 }
 

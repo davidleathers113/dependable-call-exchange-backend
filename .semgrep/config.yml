@@ -1,0 +1,83 @@
+# Semgrep Configuration for Dependable Call Exchange Backend
+# This configuration organizes custom rules by category
+
+# Rule Sources
+rules:
+  # Security Rules - Phone validation, TCPA compliance, PII protection
+  - .semgrep/rules/telephony-security.yml
+  
+  # Domain Patterns - Repository transactions, value objects, aggregates
+  - .semgrep/rules/domain-patterns.yml
+  
+  # Compliance Rules - GDPR, data retention, consent tracking
+  - .semgrep/rules/compliance.yml
+  
+  # Performance Rules - Query optimization, goroutine leaks, memory management
+  - .semgrep/rules/performance.yml
+
+# Rule Severity Mapping
+# ERROR: Must fix before merge
+# WARNING: Should fix, review in PR
+# INFO: Best practice suggestions
+
+# Custom Policies (future extensibility)
+policies:
+  - id: production-readiness
+    description: Rules that must pass for production deployment
+    rules:
+      - phone-number-validation
+      - tcpa-time-restriction-check
+      - pii-logging-prevention
+      - repository-transaction-handling
+      - gdpr-consent-tracking
+      - unbounded-query
+      - goroutine-leak
+
+  - id: code-review
+    description: Rules checked during code review
+    rules:
+      - money-arithmetic-safety
+      - value-object-creation
+      - call-status-transition
+      - n-plus-one-query
+      - defer-in-loop
+
+# Metrics Configuration
+metrics:
+  enabled: false  # Disabled for privacy
+
+# Output Configuration
+output:
+  # Format for human-readable output
+  format: text
+  
+  # Show full file paths
+  show_file_path: true
+  
+  # Group by rule for easier review
+  group_by_rule: true
+  
+  # Show dataflow traces for complex issues
+  dataflow_traces: true
+
+# Performance Settings
+performance:
+  # Max file size to scan (10MB)
+  max_file_size_bytes: 10485760
+  
+  # Timeout per rule (30 seconds)
+  timeout_seconds: 30
+  
+  # Number of parallel jobs
+  jobs: auto
+
+# Experimental Features
+experimental:
+  # Enable autofix suggestions
+  autofix: true
+  
+  # Enable cross-file analysis
+  interfile: true
+  
+  # Enable type inference
+  types: true

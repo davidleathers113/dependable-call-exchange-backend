@@ -29,13 +29,39 @@ type TestDB struct {
 func NewTestDB(t *testing.T) *TestDB {
 	t.Helper()
 	
-	// Check if we should use legacy approach (for CI or explicit flag)
-	if os.Getenv("USE_DOCKER_COMPOSE") == "true" {
+	// Check if we should use legacy approach (for CI, explicit flag, or no Docker)
+	if os.Getenv("USE_DOCKER_COMPOSE") == "true" || os.Getenv("USE_LOCAL_POSTGRES") == "true" {
 		return newLegacyTestDB(t)
 	}
 	
-	// Default to testcontainers
-	return newTestcontainerDB(t)
+	// Try testcontainers first
+	db, err := tryTestcontainerDB(t)
+	if err != nil {
+		t.Logf("Testcontainers failed (%v), falling back to local PostgreSQL", err)
+		// Set environment variable to use legacy for subsequent tests in this run
+		os.Setenv("USE_LOCAL_POSTGRES", "true")
+		return newLegacyTestDB(t)
+	}
+	
+	return db
+}
+
+// tryTestcontainerDB attempts to create a test database using testcontainers
+func tryTestcontainerDB(t *testing.T) (db *TestDB, err error) {
+	t.Helper()
+	
+	// Catch panics and convert to errors
+	defer func() {
+		if r := recover(); r != nil {
+			if e, ok := r.(error); ok {
+				err = e
+			} else {
+				err = fmt.Errorf("panic: %v", r)
+			}
+		}
+	}()
+	
+	return newTestcontainerDB(t), nil
 }
 
 // newTestcontainerDB creates a test database using testcontainers
@@ -105,9 +131,13 @@ func newLegacyTestDB(t *testing.T) *TestDB {
 	t.Helper()
 	
 	// Connect to postgres database to create test database
-	// Use localhost:5433 when running tests from host machine
+	// Use localhost:5432 for local PostgreSQL (default Homebrew setup)
 	host := "localhost"
-	port := "5433"
+	port := "5432"
+	// Use localhost:5433 when using docker-compose test setup
+	if os.Getenv("USE_DOCKER_COMPOSE") == "true" {
+		port = "5433"
+	}
 	// Use postgres-test:5432 when running inside Docker
 	if _, inDocker := os.LookupEnv("RUNNING_IN_DOCKER"); inDocker {
 		host = "postgres-test"
@@ -179,7 +209,10 @@ func (tdb *TestDB) ConnectionString() string {
 	
 	// Legacy path
 	host := "localhost"
-	port := "5433"
+	port := "5432"
+	if os.Getenv("USE_DOCKER_COMPOSE") == "true" {
+		port = "5433"
+	}
 	if _, inDocker := os.LookupEnv("RUNNING_IN_DOCKER"); inDocker {
 		host = "postgres-test"
 		port = "5432"
@@ -192,7 +225,10 @@ func GetTestDatabaseURL() string {
 	// This returns a URL for tests that don't need a specific test database
 	// For integration tests, use NewTestDB().ConnectionString() instead
 	host := "localhost"
-	port := "5433"
+	port := "5432"
+	if os.Getenv("USE_DOCKER_COMPOSE") == "true" {
+		port = "5433"
+	}
 	if _, inDocker := os.LookupEnv("RUNNING_IN_DOCKER"); inDocker {
 		host = "postgres-test"
 		port = "5432"
@@ -219,7 +255,7 @@ func (tdb *TestDB) InitSchema() {
 	tdb.execMulti(ctx, `
 		-- Call status enum
 		CREATE TYPE call_status AS ENUM (
-			'pending', 'routing', 'active', 'completed', 'failed', 'cancelled'
+			'pending', 'queued', 'ringing', 'in_progress', 'completed', 'failed', 'no_answer'
 		);
 		
 		-- Call type enum
@@ -264,16 +300,24 @@ func (tdb *TestDB) InitSchema() {
 		CREATE TABLE accounts (
 			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 			email VARCHAR(255) UNIQUE NOT NULL,
-			company VARCHAR(255) NOT NULL,
+			name VARCHAR(255) NOT NULL,
+			company VARCHAR(255),
 			type account_type NOT NULL,
 			status account_status NOT NULL DEFAULT 'pending',
+			phone_number VARCHAR(20),
 			balance DECIMAL(10,2) NOT NULL DEFAULT 0,
 			credit_limit DECIMAL(10,2) NOT NULL DEFAULT 0,
 			quality_score DECIMAL(3,2) NOT NULL DEFAULT 0.50,
+			payment_terms INTEGER DEFAULT 30,
+			tcpa_consent BOOLEAN NOT NULL DEFAULT true,
+			gdpr_consent BOOLEAN NOT NULL DEFAULT true,
+				compliance_flags TEXT[] DEFAULT '{}',
+			fraud_score DECIMAL(3,2) NOT NULL DEFAULT 0.00,
 			settings JSONB NOT NULL DEFAULT '{}',
 			email_verified BOOLEAN NOT NULL DEFAULT false,
 			phone_verified BOOLEAN NOT NULL DEFAULT false,
 			compliance_verified BOOLEAN NOT NULL DEFAULT false,
+				last_login_at TIMESTAMP WITH TIME ZONE,
 			last_activity_at TIMESTAMP WITH TIME ZONE,
 			created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
 			updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
@@ -288,7 +332,7 @@ func (tdb *TestDB) InitSchema() {
 			type call_type NOT NULL,
 			buyer_id UUID REFERENCES accounts(id),
 			seller_id UUID REFERENCES accounts(id),
-			started_at TIMESTAMP WITH TIME ZONE,
+			started_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
 			ended_at TIMESTAMP WITH TIME ZONE,
 			duration INTEGER,
 			cost DECIMAL(10,2),
@@ -339,6 +383,17 @@ func (tdb *TestDB) InitSchema() {
 			expires_at TIMESTAMP WITH TIME ZONE,
 			recorded_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
 			metadata JSONB NOT NULL DEFAULT '{}'
+		);
+		
+		-- Account transactions table for audit trail
+		CREATE TABLE account_transactions (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			account_id UUID NOT NULL REFERENCES accounts(id),
+			amount DECIMAL(10,2) NOT NULL,
+			balance_after DECIMAL(10,2) NOT NULL,
+			transaction_type VARCHAR(20) NOT NULL,
+			description TEXT,
+			created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 		);
 		
 		-- Create indexes
@@ -443,7 +498,7 @@ type SeedData interface {
 	// InsertQuery returns the INSERT SQL query
 	InsertQuery() string
 	// Values returns the values to insert
-	Values() []interface{}
+	Values() []any
 }
 
 // Seed inserts test data into the database

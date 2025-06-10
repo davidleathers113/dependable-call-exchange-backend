@@ -8,6 +8,7 @@ import (
 
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/errors"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 	"github.com/google/uuid"
 )
 
@@ -206,7 +207,8 @@ func (s *service) GetCallStatus(ctx context.Context, callID uuid.UUID) (*CallSta
 					c.Duration = &providerStatus.Duration
 				}
 				if providerStatus.Price != nil {
-					c.Cost = providerStatus.Price
+					cost := values.MustNewMoneyFromFloat(*providerStatus.Price, "USD")
+					c.Cost = &cost
 				}
 				_ = s.callRepo.Update(ctx, c)
 			}
@@ -219,7 +221,7 @@ func (s *service) GetCallStatus(ctx context.Context, callID uuid.UUID) (*CallSta
 		Duration:  c.Duration,
 		StartTime: c.StartTime,
 		EndTime:   c.EndTime,
-		Cost:      c.Cost,
+		Cost:      func() *float64 { if c.Cost != nil { v := c.Cost.ToFloat64(); return &v }; return nil }(),
 	}, nil
 }
 

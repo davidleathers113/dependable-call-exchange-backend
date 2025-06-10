@@ -44,6 +44,11 @@ make fmt                 # Format code
 make vet                 # Run go vet
 make security            # Run gosec and govulncheck
 make ci                  # Run full CI pipeline
+
+# COMPILATION ERROR DEBUGGING (CRITICAL)
+# Go compiler stops at 10 errors by default - use these to see ALL errors:
+go build -gcflags="-e" ./...                    # Show all compilation errors across project
+go test -run=xxx ./... 2>&1 | grep -E "(cannot use|undefined|unknown field)"  # Find test compilation errors
 ```
 
 ### Database Operations
@@ -174,10 +179,49 @@ The system is designed for:
 4. Ensure migrations are backward compatible
 5. Update API documentation for endpoint changes
 
+## Debugging & Troubleshooting
+
+### Finding All Compilation Errors
+**CRITICAL**: Go's compiler stops after 10 errors by default. For comprehensive error detection:
+
+```bash
+# Show ALL compilation errors (not just first 10)
+go build -gcflags="-e" ./...
+
+# Find test compilation errors without running tests  
+go test -run=xxx ./... 2>&1 | grep -E "(cannot use|undefined|unknown field)"
+
+# Alternative: Use go-compiles tool for comprehensive checking
+# Checks both source AND test files across all packages
+```
+
+### Common Value Object Conversion Patterns
+When updating code to use value objects, watch for these patterns:
+
+```go
+// OLD: Primitive obsession
+Amount: 10.50
+QualityScore: 85.5
+
+// NEW: Value objects  
+Amount: values.MustNewMoneyFromFloat(10.50, "USD")
+QualityMetrics: values.QualityMetrics{QualityScore: 85.5}
+```
+
+### Test Database Functions
+```go
+// Current pattern in codebase
+testDB := testutil.NewTestDB(t)        // Primary function
+testDB := testutil.CreateTestDB(t)     // Alternative for some tests
+```
+
 ## Memories
 
 - Check context7 mcp server for Go's documentation often so that you can meet the standard of strict adherence to official Go docs.
 - Remember to use the fixture builders internal/testutil/fixtures/ wherever we have manual data setup so that all of our tests can be cleaner and more robust. Also, use sub-tests where appropriate and always seek to reduce boilerplate code when there's an established best practice to follow that would naturally reduce boilerplate code.
+- Use clearer naming conventions that distinguish between routing directions like "buyers" and "sellers"
+- Never use sed commands to modify my files
+- **ALWAYS use `go build -gcflags="-e" ./...` to find ALL compilation errors before starting fixes**
 
 ## Anchor Comments
 

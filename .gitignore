@@ -117,6 +117,7 @@ air_tmp/
 govulncheck.*
 vuln-report.json
 gosec-report.sarif
+nancy-report.json
 
 # Temporary files
 tmp/

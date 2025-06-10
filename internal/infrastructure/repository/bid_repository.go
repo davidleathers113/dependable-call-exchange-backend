@@ -10,17 +10,27 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/service/bidding"
 )
 
 // bidRepository implements BidRepository using PostgreSQL
 type bidRepository struct {
-	db *sql.DB
+	db interface {
+		ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+		QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+		QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+	}
 }
 
 // NewBidRepository creates a new bid repository
 func NewBidRepository(db *sql.DB) bidding.BidRepository {
 	return &bidRepository{db: db}
+}
+
+// NewBidRepositoryWithTx creates a new bid repository with a transaction
+func NewBidRepositoryWithTx(tx *sql.Tx) bidding.BidRepository {
+	return &bidRepository{db: tx}
 }
 
 // Create stores a new bid
@@ -32,7 +42,7 @@ func (r *bidRepository) Create(ctx context.Context, b *bid.Bid) error {
 	if b.BuyerID == uuid.Nil {
 		return errors.New("buyer_id cannot be nil")
 	}
-	if b.Amount <= 0 {
+	if b.Amount.IsZero() || b.Amount.IsNegative() {
 		return errors.New("amount must be positive")
 	}
 
@@ -72,7 +82,7 @@ func (r *bidRepository) Create(ctx context.Context, b *bid.Bid) error {
 	}
 
 	_, err = r.db.ExecContext(ctx, query,
-		b.ID, b.CallID, b.BuyerID, sellerID, b.Amount, b.Status.String(),
+		b.ID, b.CallID, b.BuyerID, sellerID, b.Amount.ToFloat64(), b.Status.String(),
 		auctionID, b.Rank, criteriaJSON, qualityJSON,
 		b.PlacedAt, b.ExpiresAt, b.AcceptedAt, b.CreatedAt, b.UpdatedAt,
 	)
@@ -100,9 +110,10 @@ func (r *bidRepository) GetByID(ctx context.Context, id uuid.UUID) (*bid.Bid, er
 	var criteriaJSON, qualityJSON []byte
 	var sellerID, auctionID sql.NullString
 	var acceptedAt sql.NullTime
+	var amountFloat float64
 
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&b.ID, &b.CallID, &b.BuyerID, &sellerID, &b.Amount, &statusStr,
+		&b.ID, &b.CallID, &b.BuyerID, &sellerID, &amountFloat, &statusStr,
 		&auctionID, &b.Rank, &criteriaJSON, &qualityJSON,
 		&b.PlacedAt, &b.ExpiresAt, &acceptedAt, &b.CreatedAt, &b.UpdatedAt,
 	)
@@ -113,6 +124,9 @@ func (r *bidRepository) GetByID(ctx context.Context, id uuid.UUID) (*bid.Bid, er
 		}
 		return nil, fmt.Errorf("failed to get bid: %w", err)
 	}
+
+	// Convert amount to Money value object
+	b.Amount = values.MustNewMoneyFromFloat(amountFloat, values.USD)
 
 	// Convert database values
 	b.Status = parseBidStatus(statusStr)
@@ -171,7 +185,7 @@ func (r *bidRepository) Update(ctx context.Context, b *bid.Bid) error {
 	`
 
 	result, err := r.db.ExecContext(ctx, query,
-		b.ID, b.Amount, b.Status.String(), b.Rank,
+		b.ID, b.Amount.ToFloat64(), b.Status.String(), b.Rank,
 		criteriaJSON, qualityJSON,
 		b.ExpiresAt, b.AcceptedAt, b.UpdatedAt,
 	)
@@ -327,9 +341,10 @@ func scanBid(rows *sql.Rows) (*bid.Bid, error) {
 	var criteriaJSON, qualityJSON []byte
 	var sellerID, auctionID sql.NullString
 	var acceptedAt sql.NullTime
+	var amountFloat float64
 
 	err := rows.Scan(
-		&b.ID, &b.CallID, &b.BuyerID, &sellerID, &b.Amount, &statusStr,
+		&b.ID, &b.CallID, &b.BuyerID, &sellerID, &amountFloat, &statusStr,
 		&auctionID, &b.Rank, &criteriaJSON, &qualityJSON,
 		&b.PlacedAt, &b.ExpiresAt, &acceptedAt, &b.CreatedAt, &b.UpdatedAt,
 	)
@@ -337,6 +352,9 @@ func scanBid(rows *sql.Rows) (*bid.Bid, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Convert amount to Money value object
+	b.Amount = values.MustNewMoneyFromFloat(amountFloat, values.USD)
 
 	// Convert database values
 	b.Status = parseBidStatus(statusStr)
@@ -392,4 +410,73 @@ func parseBidStatus(s string) bid.Status {
 // GetBidByID is an alias for GetByID to satisfy callrouting.BidRepository interface
 func (r *bidRepository) GetBidByID(ctx context.Context, id uuid.UUID) (*bid.Bid, error) {
 	return r.GetByID(ctx, id)
+}
+
+// GetActiveBuyerBids returns all active bids for a specific buyer
+func (r *bidRepository) GetActiveBuyerBids(ctx context.Context, buyerID uuid.UUID) ([]*bid.Bid, error) {
+	query := `
+		SELECT 
+			id, call_id, buyer_id, seller_id, amount,
+			status, auction_id, rank, criteria, quality_metrics,
+			placed_at, expires_at, accepted_at, created_at, updated_at
+		FROM bids
+		WHERE buyer_id = $1 AND status = 'active'
+		ORDER BY placed_at DESC
+	`
+	
+	rows, err := r.db.QueryContext(ctx, query, buyerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query active buyer bids: %w", err)
+	}
+	defer rows.Close()
+	
+	var bids []*bid.Bid
+	for rows.Next() {
+		b, err := scanBid(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan bid: %w", err)
+		}
+		bids = append(bids, b)
+	}
+	
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate rows: %w", err)
+	}
+	
+	return bids, nil
+}
+
+// GetWonBidsByBuyer returns won bids for a specific buyer
+func (r *bidRepository) GetWonBidsByBuyer(ctx context.Context, buyerID uuid.UUID, limit int) ([]*bid.Bid, error) {
+	query := `
+		SELECT 
+			id, call_id, buyer_id, seller_id, amount,
+			status, auction_id, rank, criteria, quality_metrics,
+			placed_at, expires_at, accepted_at, created_at, updated_at
+		FROM bids
+		WHERE buyer_id = $1 AND status = 'won'
+		ORDER BY accepted_at DESC
+		LIMIT $2
+	`
+	
+	rows, err := r.db.QueryContext(ctx, query, buyerID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query won bids: %w", err)
+	}
+	defer rows.Close()
+	
+	var bids []*bid.Bid
+	for rows.Next() {
+		b, err := scanBid(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan bid: %w", err)
+		}
+		bids = append(bids, b)
+	}
+	
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate rows: %w", err)
+	}
+	
+	return bids, nil
 }

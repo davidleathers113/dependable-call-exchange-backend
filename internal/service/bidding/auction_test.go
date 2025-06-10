@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil/mocks"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -34,14 +35,14 @@ func TestAuctionEngine_RunAuction(t *testing.T) {
 						ID:      uuid.New(),
 						CallID:  callID,
 						BuyerID: uuid.New(),
-						Amount:  5.0,
+						Amount:  values.MustNewMoneyFromFloat(5.0, "USD"),
 						Status:  bid.StatusActive,
 					},
 					{
 						ID:      uuid.New(),
 						CallID:  callID,
 						BuyerID: uuid.New(),
-						Amount:  6.0,
+						Amount:  values.MustNewMoneyFromFloat(6.0, "USD"),
 						Status:  bid.StatusActive,
 					},
 				}
@@ -135,14 +136,14 @@ func TestAuctionEngine_GetAuctionStatus(t *testing.T) {
 				ID:      uuid.New(),
 				CallID:  callID,
 				BuyerID: uuid.New(),
-				Amount:  10.0,
+				Amount:  values.MustNewMoneyFromFloat(10.0, "USD"),
 				Status:  bid.StatusActive,
 			},
 			{
 				ID:      uuid.New(),
 				CallID:  callID,
 				BuyerID: uuid.New(),
-				Amount:  8.0,
+				Amount:  values.MustNewMoneyFromFloat(8.0, "USD"),
 				Status:  bid.StatusActive,
 			},
 		}
@@ -208,7 +209,7 @@ func TestAuctionEngine_FinalizeAuction(t *testing.T) {
 			ID:      uuid.New(),
 			CallID:  callID,
 			BuyerID: winnerID,
-			Amount:  15.0,
+			Amount:  values.MustNewMoneyFromFloat(15.0, "USD"),
 			Status:  bid.StatusActive,
 		}
 		
@@ -216,7 +217,7 @@ func TestAuctionEngine_FinalizeAuction(t *testing.T) {
 			ID:      uuid.New(),
 			CallID:  callID,
 			BuyerID: loserID,
-			Amount:  10.0,
+			Amount:  values.MustNewMoneyFromFloat(10.0, "USD"),
 			Status:  bid.StatusActive,
 		}
 		
@@ -341,7 +342,7 @@ func TestAuctionEngine_ConcurrentAuctions(t *testing.T) {
 				ID:      uuid.New(),
 				CallID:  callIDs[i],
 				BuyerID: uuid.New(),
-				Amount:  float64(i) + 1.0,
+				Amount:  values.MustNewMoneyFromFloat(float64(i) + 1.0, "USD"),
 				Status:  bid.StatusActive,
 			},
 		}, nil).Maybe()
@@ -432,7 +433,7 @@ func TestAuctionEngine_HandleNewBid(t *testing.T) {
 			ID:      uuid.New(),
 			CallID:  callID,
 			BuyerID: uuid.New(),
-			Amount:  10.0,
+			Amount:  values.MustNewMoneyFromFloat(10.0, "USD"),
 			Status:  bid.StatusActive,
 		}
 		
@@ -479,7 +480,7 @@ func TestAuctionEngine_HandleNewBid(t *testing.T) {
 			ID:      uuid.New(),
 			CallID:  callID,
 			BuyerID: uuid.New(),
-			Amount:  10.0,
+			Amount:  values.MustNewMoneyFromFloat(10.0, "USD"),
 			Status:  bid.StatusActive,
 		}
 		
@@ -521,7 +522,7 @@ func BenchmarkAuctionEngine_ProcessBids(b *testing.B) {
 			ID:      uuid.New(),
 			CallID:  callID,
 			BuyerID: uuid.New(),
-			Amount:  float64(i) + 1.0,
+			Amount:  values.MustNewMoneyFromFloat(float64(i) + 1.0, "USD"),
 			Status:  bid.StatusActive,
 		}
 	}

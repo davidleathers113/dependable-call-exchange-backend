@@ -19,6 +19,9 @@ type CallRepository interface {
 	// Update updates an existing call
 	Update(ctx context.Context, call *call.Call) error
 	
+	// UpdateWithStatusCheck updates a call only if it has the expected status
+	UpdateWithStatusCheck(ctx context.Context, c *call.Call, expectedStatus call.Status) error
+	
 	// Delete removes a call from the database
 	Delete(ctx context.Context, id uuid.UUID) error
 	
@@ -27,6 +30,15 @@ type CallRepository interface {
 	
 	// CountByStatus returns the count of calls grouped by status
 	CountByStatus(ctx context.Context) (map[call.Status]int, error)
+	
+	// GetActiveCallsForSeller returns active calls owned by a seller
+	GetActiveCallsForSeller(ctx context.Context, sellerID uuid.UUID) ([]*call.Call, error)
+	
+	// GetActiveCallsForBuyer returns active calls assigned to a buyer
+	GetActiveCallsForBuyer(ctx context.Context, buyerID uuid.UUID) ([]*call.Call, error)
+	
+	// GetPendingSellerCalls returns pending calls from sellers awaiting routing
+	GetPendingSellerCalls(ctx context.Context, limit int) ([]*call.Call, error)
 }
 
 // CallFilter defines filtering options for listing calls

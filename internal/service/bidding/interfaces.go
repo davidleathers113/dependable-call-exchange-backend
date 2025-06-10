@@ -7,6 +7,7 @@ import (
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 	"github.com/google/uuid"
 )
 
@@ -54,6 +55,8 @@ type BidRepository interface {
 	GetByBuyer(ctx context.Context, buyerID uuid.UUID) ([]*bid.Bid, error)
 	// GetExpiredBids returns bids past expiration
 	GetExpiredBids(ctx context.Context, before time.Time) ([]*bid.Bid, error)
+	// GetBidByID is an alias for GetByID (compatibility)
+	GetBidByID(ctx context.Context, id uuid.UUID) (*bid.Bid, error)
 }
 
 // CallRepository defines the interface for call storage
@@ -62,6 +65,8 @@ type CallRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*call.Call, error)
 	// Update modifies a call
 	Update(ctx context.Context, call *call.Call) error
+	// UpdateWithStatusCheck updates a call only if it has the expected status
+	UpdateWithStatusCheck(ctx context.Context, c *call.Call, expectedStatus call.Status) error
 }
 
 // AccountRepository defines the interface for account storage
@@ -72,6 +77,8 @@ type AccountRepository interface {
 	UpdateBalance(ctx context.Context, id uuid.UUID, amount float64) error
 	// GetBalance returns current balance
 	GetBalance(ctx context.Context, id uuid.UUID) (float64, error)
+	// GetBuyerQualityMetrics retrieves quality metrics for a buyer account
+	GetBuyerQualityMetrics(ctx context.Context, buyerID uuid.UUID) (*values.QualityMetrics, error)
 }
 
 // FraudChecker defines the interface for fraud detection

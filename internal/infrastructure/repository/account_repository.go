@@ -6,20 +6,34 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/service/bidding"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/service/seller_distribution"
 )
 
 // accountRepository implements AccountRepository using PostgreSQL
 type accountRepository struct {
-	db *sql.DB
+	db    interface {
+		ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+		QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+		QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+	}
+	dbConn *sql.DB // Keep reference to original DB for transaction operations
 }
 
 // NewAccountRepository creates a new account repository
 func NewAccountRepository(db *sql.DB) bidding.AccountRepository {
-	return &accountRepository{db: db}
+	return &accountRepository{db: db, dbConn: db}
+}
+
+// NewAccountRepositoryWithTx creates a new account repository with a transaction
+func NewAccountRepositoryWithTx(tx *sql.Tx) bidding.AccountRepository {
+	return &accountRepository{db: tx, dbConn: nil}
 }
 
 // GetByID retrieves an account by ID
@@ -37,18 +51,21 @@ func (r *accountRepository) GetByID(ctx context.Context, id uuid.UUID) (*account
 
 	var a account.Account
 	var typeStr, statusStr string
-	var settingsJSON, complianceFlagsJSON []byte
+	var settingsJSON []byte
+	var complianceFlags pq.StringArray
 	var company sql.NullString
 	var lastLoginAt sql.NullTime
+	var emailStr, phoneStr string
+	var balanceFloat, creditLimitFloat float64
 
 	// We'll need to handle the address separately since it's a composite type
 	addressJSON := []byte("{}")
 
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&a.ID, &a.Email, &a.Name, &company, &typeStr, &statusStr, &a.PhoneNumber,
-		&a.Balance, &a.CreditLimit, &a.PaymentTerms,
-		&a.TCPAConsent, &a.GDPRConsent, &complianceFlagsJSON,
-		&a.QualityScore, &a.FraudScore, &settingsJSON,
+		&a.ID, &emailStr, &a.Name, &company, &typeStr, &statusStr, &phoneStr,
+		&balanceFloat, &creditLimitFloat, &a.PaymentTerms,
+		&a.TCPAConsent, &a.GDPRConsent, &complianceFlags,
+		&a.QualityMetrics.QualityScore, &a.QualityMetrics.FraudScore, &settingsJSON,
 		&lastLoginAt, &a.CreatedAt, &a.UpdatedAt,
 	)
 
@@ -58,6 +75,24 @@ func (r *accountRepository) GetByID(ctx context.Context, id uuid.UUID) (*account
 		}
 		return nil, fmt.Errorf("failed to get account: %w", err)
 	}
+
+	// Convert database values to value objects
+	email, err := values.NewEmail(emailStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid email from database: %w", err)
+	}
+	a.Email = email
+
+	phone, err := values.NewPhoneNumber(phoneStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid phone number from database: %w", err)
+	}
+	a.PhoneNumber = phone
+
+	// Convert balance and credit limit to Money value objects
+	// Assuming USD currency - in production, currency should be stored
+	a.Balance = values.MustNewMoneyFromFloat(balanceFloat, "USD")
+	a.CreditLimit = values.MustNewMoneyFromFloat(creditLimitFloat, "USD")
 
 	// Convert database values
 	a.Type = parseAccountType(typeStr)
@@ -76,10 +111,8 @@ func (r *accountRepository) GetByID(ctx context.Context, id uuid.UUID) (*account
 		return nil, fmt.Errorf("failed to unmarshal settings: %w", err)
 	}
 
-	if err := json.Unmarshal(complianceFlagsJSON, &a.ComplianceFlags); err != nil {
-		// Default to empty array if unmarshal fails
-		a.ComplianceFlags = []string{}
-	}
+	// Convert PostgreSQL array to string slice
+	a.ComplianceFlags = []string(complianceFlags)
 
 	// For now, set a default address - in a real implementation, this would be stored properly
 	if err := json.Unmarshal(addressJSON, &a.Address); err != nil {
@@ -94,18 +127,36 @@ func (r *accountRepository) UpdateBalance(ctx context.Context, id uuid.UUID, amo
 	// This operation needs to be atomic to prevent race conditions
 	// Using a transaction with SELECT FOR UPDATE ensures consistency
 	
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{
+	// If we're already in a transaction (WithTx), use it directly
+	if r.dbConn == nil {
+		return r.updateBalanceInTx(ctx, r.db, id, amount)
+	}
+	
+	// Otherwise, create a new transaction
+	tx, err := r.dbConn.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
+	
+	if err := r.updateBalanceInTx(ctx, tx, id, amount); err != nil {
+		return err
+	}
+	
+	return tx.Commit()
+}
 
+func (r *accountRepository) updateBalanceInTx(ctx context.Context, tx interface {
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+}, id uuid.UUID, amount float64) error {
 	// Lock the account row for update
 	var currentBalance float64
 	query := `SELECT balance FROM accounts WHERE id = $1 FOR UPDATE`
-	err = tx.QueryRowContext(ctx, query, id).Scan(&currentBalance)
+	err := tx.QueryRowContext(ctx, query, id).Scan(&currentBalance)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("account not found: %w", err)
@@ -176,11 +227,6 @@ func (r *accountRepository) UpdateBalance(ctx context.Context, id uuid.UUID, amo
 		// In production, this would be logged to monitoring
 	}
 
-	// Commit the transaction
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
 	return nil
 }
 
@@ -233,7 +279,7 @@ func (r *accountRepository) UpdateQualityScore(ctx context.Context, id uuid.UUID
 // Additional method for creating accounts (useful for testing)
 func (r *accountRepository) Create(ctx context.Context, a *account.Account) error {
 	// Validate required fields
-	if a.Email == "" {
+	if a.Email.IsEmpty() {
 		return errors.New("email is required")
 	}
 	if a.Name == "" {
@@ -246,10 +292,8 @@ func (r *accountRepository) Create(ctx context.Context, a *account.Account) erro
 		return fmt.Errorf("failed to marshal settings: %w", err)
 	}
 
-	complianceFlagsJSON, err := json.Marshal(a.ComplianceFlags)
-	if err != nil {
-		return fmt.Errorf("failed to marshal compliance flags: %w", err)
-	}
+	// Convert ComplianceFlags to PostgreSQL array format
+	complianceFlags := pq.Array(a.ComplianceFlags)
 
 	// For now, we'll store address as JSON in settings
 	// In production, this might be a separate table or structured differently
@@ -277,10 +321,10 @@ func (r *accountRepository) Create(ctx context.Context, a *account.Account) erro
 	}
 
 	_, err = r.db.ExecContext(ctx, query,
-		a.ID, a.Email, a.Name, company, a.Type.String(), a.Status.String(), a.PhoneNumber,
-		a.Balance, a.CreditLimit, a.PaymentTerms,
-		a.TCPAConsent, a.GDPRConsent, complianceFlagsJSON,
-		a.QualityScore, a.FraudScore, settingsJSON,
+		a.ID, a.Email.String(), a.Name, company, a.Type.String(), a.Status.String(), a.PhoneNumber.String(),
+		a.Balance.ToFloat64(), a.CreditLimit.ToFloat64(), a.PaymentTerms,
+		a.TCPAConsent, a.GDPRConsent, complianceFlags,
+		a.QualityMetrics.QualityScore, a.QualityMetrics.FraudScore, settingsJSON,
 		a.LastLoginAt, a.CreatedAt, a.UpdatedAt,
 	)
 
@@ -319,4 +363,253 @@ func parseAccountStatus(s string) account.Status {
 	default:
 		return account.StatusPending
 	}
+}
+
+// GetBuyerQualityMetrics retrieves quality metrics for a buyer account
+func (r *accountRepository) GetBuyerQualityMetrics(ctx context.Context, buyerID uuid.UUID) (*values.QualityMetrics, error) {
+	query := `
+		SELECT 
+			quality_score, fraud_score
+		FROM accounts
+		WHERE id = $1 AND type = 'buyer'
+	`
+	
+	var qualityScore, fraudScore float64
+	err := r.db.QueryRowContext(ctx, query, buyerID).Scan(&qualityScore, &fraudScore)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("buyer not found: %w", err)
+		}
+		return nil, fmt.Errorf("failed to get buyer quality metrics: %w", err)
+	}
+	
+	return &values.QualityMetrics{
+		QualityScore: qualityScore,
+		FraudScore:   fraudScore,
+	}, nil
+}
+
+// GetActiveBuyers returns all active buyer accounts
+func (r *accountRepository) GetActiveBuyers(ctx context.Context, limit int) ([]*account.Account, error) {
+	query := `
+		SELECT 
+			id, email, name, company, type, status, phone_number,
+			balance, credit_limit, payment_terms,
+			tcpa_consent, gdpr_consent, compliance_flags,
+			quality_score, fraud_score, settings,
+			last_login_at, created_at, updated_at
+		FROM accounts
+		WHERE type = 'buyer' AND status = 'active'
+		ORDER BY quality_score DESC
+		LIMIT $1
+	`
+	
+	rows, err := r.db.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query active buyers: %w", err)
+	}
+	defer rows.Close()
+	
+	var accounts []*account.Account
+	for rows.Next() {
+		a, err := r.scanAccount(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan account: %w", err)
+		}
+		accounts = append(accounts, a)
+	}
+	
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate rows: %w", err)
+	}
+	
+	return accounts, nil
+}
+
+// GetActiveSellers returns all active seller accounts
+func (r *accountRepository) GetActiveSellers(ctx context.Context, limit int) ([]*account.Account, error) {
+	query := `
+		SELECT 
+			id, email, name, company, type, status, phone_number,
+			balance, credit_limit, payment_terms,
+			tcpa_consent, gdpr_consent, compliance_flags,
+			quality_score, fraud_score, settings,
+			last_login_at, created_at, updated_at
+		FROM accounts
+		WHERE type = 'seller' AND status = 'active'
+		ORDER BY quality_score DESC
+		LIMIT $1
+	`
+	
+	rows, err := r.db.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query active sellers: %w", err)
+	}
+	defer rows.Close()
+	
+	var accounts []*account.Account
+	for rows.Next() {
+		a, err := r.scanAccount(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan account: %w", err)
+		}
+		accounts = append(accounts, a)
+	}
+	
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate rows: %w", err)
+	}
+	
+	return accounts, nil
+}
+
+// scanAccount is a helper to scan account rows
+func (r *accountRepository) scanAccount(rows *sql.Rows) (*account.Account, error) {
+	var a account.Account
+	var typeStr, statusStr string
+	var settingsJSON []byte
+	var complianceFlags pq.StringArray
+	var company sql.NullString
+	var lastLoginAt sql.NullTime
+	
+	err := rows.Scan(
+		&a.ID, &a.Email, &a.Name, &company, &typeStr, &statusStr, &a.PhoneNumber,
+		&a.Balance, &a.CreditLimit, &a.PaymentTerms,
+		&a.TCPAConsent, &a.GDPRConsent, &complianceFlags,
+		&a.QualityMetrics.QualityScore, &a.QualityMetrics.FraudScore, &settingsJSON,
+		&lastLoginAt, &a.CreatedAt, &a.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Convert database values
+	a.Type = parseAccountType(typeStr)
+	a.Status = parseAccountStatus(statusStr)
+	
+	if company.Valid {
+		a.Company = &company.String
+	}
+	
+	if lastLoginAt.Valid {
+		a.LastLoginAt = &lastLoginAt.Time
+	}
+	
+	// Unmarshal JSON fields
+	if err := json.Unmarshal(settingsJSON, &a.Settings); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal settings: %w", err)
+	}
+	
+	// Convert PostgreSQL array to string slice
+	a.ComplianceFlags = []string(complianceFlags)
+	
+	// Set default address for now
+	a.Address = account.Address{}
+	
+	return &a, nil
+}
+
+// GetAvailableSellers returns sellers available for call assignment based on criteria
+func (r *accountRepository) GetAvailableSellers(ctx context.Context, criteria *seller_distribution.SellerCriteria) ([]*account.Account, error) {
+	query := `
+		SELECT 
+			id, email, name, company, type, status, phone_number,
+			balance, credit_limit, payment_terms,
+			tcpa_consent, gdpr_consent, compliance_flags,
+			quality_score, fraud_score, settings,
+			last_login_at, created_at, updated_at
+		FROM accounts
+		WHERE type = 'seller' AND status = 'active'
+	`
+
+	args := []interface{}{}
+	argIndex := 1
+
+	// Apply criteria filters
+	if criteria != nil {
+		if criteria.MinQuality > 0 {
+			query += fmt.Sprintf(" AND quality_score >= $%d", argIndex)
+			args = append(args, criteria.MinQuality)
+			argIndex++
+		}
+
+		if criteria.AvailableNow {
+			query += " AND last_login_at >= NOW() - INTERVAL '1 hour'"
+		}
+
+		// Add geography filter if specified
+		if criteria.Geography != nil && len(criteria.Geography.States) > 0 {
+			// This would require a more complex query with address/location data
+			// For now, we'll skip this filter as the schema doesn't include location columns
+		}
+
+		// Add skills filter if specified
+		if len(criteria.Skills) > 0 {
+			// This would require querying against settings JSONB for skills
+			// For now, we'll skip this complex filter
+		}
+	}
+
+	query += " ORDER BY quality_score DESC"
+
+	// Apply capacity limit if specified
+	if criteria != nil && criteria.MaxCapacity > 0 {
+		query += fmt.Sprintf(" LIMIT $%d", argIndex)
+		args = append(args, criteria.MaxCapacity)
+	} else {
+		query += " LIMIT 50" // Default limit
+	}
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query available sellers: %w", err)
+	}
+	defer rows.Close()
+
+	var accounts []*account.Account
+	for rows.Next() {
+		a, err := r.scanAccount(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan account: %w", err)
+		}
+		accounts = append(accounts, a)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate rows: %w", err)
+	}
+
+	return accounts, nil
+}
+
+// GetSellerCapacity returns current capacity information for a seller
+func (r *accountRepository) GetSellerCapacity(ctx context.Context, sellerID uuid.UUID) (*seller_distribution.SellerCapacity, error) {
+	// For now, we'll simulate capacity data since the database schema doesn't include
+	// a dedicated capacity table. In production, this would likely be:
+	// 1. A separate table tracking real-time capacity
+	// 2. Cached data from a real-time system
+	// 3. Calculated from active calls
+
+	// First verify the seller exists
+	var exists bool
+	err := r.db.QueryRowContext(ctx, 
+		"SELECT EXISTS(SELECT 1 FROM accounts WHERE id = $1 AND type = 'seller' AND status = 'active')",
+		sellerID).Scan(&exists)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check seller existence: %w", err)
+	}
+
+	if !exists {
+		return nil, fmt.Errorf("seller not found or not active")
+	}
+
+	// For demonstration, return simulated capacity data
+	// In production, this would query actual capacity tables
+	return &seller_distribution.SellerCapacity{
+		SellerID:           sellerID,
+		MaxConcurrentCalls: 5,  // Default capacity
+		CurrentCalls:       0,  // Would be calculated from active calls
+		AvailableSlots:     5,  // MaxConcurrentCalls - CurrentCalls
+		LastUpdated:        time.Now(),
+	}, nil
 }

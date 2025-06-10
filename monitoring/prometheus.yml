@@ -1,0 +1,93 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'dce-monitor'
+    environment: 'development'
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - "alerts.yml"
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  # DCE Backend Application
+  - job_name: 'dce-backend'
+    static_configs:
+      - targets: ['host.docker.internal:8080', 'dce-backend:8080']
+        labels:
+          service: 'api'
+          component: 'backend'
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    scrape_timeout: 5s
+
+  # DCE gRPC Service (if running separately)
+  - job_name: 'dce-grpc'
+    static_configs:
+      - targets: ['host.docker.internal:9000', 'dce-grpc:9000']
+        labels:
+          service: 'grpc'
+          component: 'backend'
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  # PostgreSQL Exporter (if configured)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'database'
+          component: 'postgres'
+    scrape_interval: 15s
+
+  # Redis Exporter (if configured)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          service: 'cache'
+          component: 'redis'
+    scrape_interval: 15s
+
+  # Node Exporter for host metrics
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: 'infrastructure'
+          component: 'host'
+    scrape_interval: 15s
+
+  # Kafka Exporter (if configured)
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+        labels:
+          service: 'messaging'
+          component: 'kafka'
+    scrape_interval: 30s
+
+  # Grafana (self-monitoring)
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+        labels:
+          service: 'monitoring'
+          component: 'grafana'
+    metrics_path: '/metrics'
+    scrape_interval: 30s

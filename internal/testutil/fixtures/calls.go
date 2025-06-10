@@ -8,14 +8,15 @@ import (
 	"github.com/stretchr/testify/require"
 	
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 )
 
 // CallBuilder builds test Call entities
 type CallBuilder struct {
 	t         *testing.T
 	id        uuid.UUID
-	from      string
-	to        string
+	from      values.PhoneNumber
+	to        values.PhoneNumber
 	status    call.Status
 	direction call.Direction
 	buyerID   uuid.UUID
@@ -32,11 +33,16 @@ func NewCallBuilder(t *testing.T) *CallBuilder {
 	buyerID, err := uuid.NewRandom()
 	require.NoError(t, err)
 	
+	fromPhone, err := values.NewPhoneNumber("+15551234567")
+	require.NoError(t, err)
+	toPhone, err := values.NewPhoneNumber("+15559876543")
+	require.NoError(t, err)
+	
 	return &CallBuilder{
 		t:         t,
 		id:        id,
-		from:      "+15551234567",
-		to:        "+15559876543",
+		from:      fromPhone,
+		to:        toPhone,
 		status:    call.StatusPending,
 		direction: call.DirectionInbound,
 		buyerID:   buyerID,
@@ -52,8 +58,13 @@ func (b *CallBuilder) WithID(id uuid.UUID) *CallBuilder {
 
 // WithPhoneNumbers sets from and to numbers
 func (b *CallBuilder) WithPhoneNumbers(from, to string) *CallBuilder {
-	b.from = from
-	b.to = to
+	fromPhone, err := values.NewPhoneNumber(from)
+	require.NoError(b.t, err)
+	toPhone, err := values.NewPhoneNumber(to)
+	require.NoError(b.t, err)
+	
+	b.from = fromPhone
+	b.to = toPhone
 	return b
 }
 
@@ -78,6 +89,12 @@ func (b *CallBuilder) WithBuyerID(buyerID uuid.UUID) *CallBuilder {
 // WithSellerID sets the seller ID
 func (b *CallBuilder) WithSellerID(sellerID uuid.UUID) *CallBuilder {
 	b.sellerID = &sellerID
+	return b
+}
+
+// WithoutBuyer explicitly sets the call to have no buyer (marketplace call awaiting routing)
+func (b *CallBuilder) WithoutBuyer() *CallBuilder {
+	b.buyerID = uuid.Nil
 	return b
 }
 
@@ -112,7 +129,8 @@ func (b *CallBuilder) Build() *call.Call {
 	case call.StatusCompleted:
 		endTime := now.Add(5 * time.Minute)
 		duration := int(endTime.Sub(now).Seconds())
-		cost := float64(duration) * 0.01 // $0.01 per second
+		costAmount := float64(duration) * 0.01 // $0.01 per second
+		cost, _ := values.NewMoneyFromFloat(costAmount, "USD")
 		
 		c.EndTime = &endTime
 		c.Duration = &duration

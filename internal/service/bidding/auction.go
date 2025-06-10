@@ -117,9 +117,9 @@ func (e *auctionEngine) GetAuctionStatus(ctx context.Context, callID uuid.UUID) 
 	var topBid float64
 	if len(bids) > 0 {
 		sort.Slice(bids, func(i, j int) bool {
-			return bids[i].Amount > bids[j].Amount
+			return bids[i].Amount.Compare(bids[j].Amount) > 0
 		})
-		topBid = bids[0].Amount
+		topBid = bids[0].Amount.ToFloat64()
 	}
 	
 	auction.mu.RLock()
@@ -226,7 +226,7 @@ func (e *auctionEngine) finalizeAuction(ctx context.Context, auction *activeAuct
 	
 	// Sort bids by amount (highest first)
 	sort.Slice(bids, func(i, j int) bool {
-		return bids[i].Amount > bids[j].Amount
+		return bids[i].Amount.Compare(bids[j].Amount) > 0
 	})
 	
 	endTime := time.Now()

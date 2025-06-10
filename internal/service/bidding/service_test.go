@@ -8,6 +8,7 @@ import (
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil/mocks"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -41,7 +42,9 @@ func TestService_PlaceBid(t *testing.T) {
 				buyer := &account.Account{
 					ID:           buyerID,
 					Status:       account.StatusActive,
-					QualityScore: 85.5,
+					QualityMetrics: values.QualityMetrics{
+						QualityScore: 85.5,
+					},
 				}
 				
 				cr.On("GetByID", ctx, callID).Return(testCall, nil)
@@ -67,8 +70,8 @@ func TestService_PlaceBid(t *testing.T) {
 			validate: func(t *testing.T, b *bid.Bid) {
 				assert.NotNil(t, b)
 				assert.Equal(t, bid.StatusActive, b.Status)
-				assert.Equal(t, 5.50, b.Amount)
-				assert.Equal(t, 85.5, b.Quality.HistoricalRating)
+				assert.Equal(t, values.MustNewMoneyFromFloat(5.50, values.USD), b.Amount)
+				assert.Equal(t, 10.0, b.Quality.HistoricalRating) // OverallScore is capped at 10.0 due to high QualityScore
 			},
 		},
 		{
@@ -82,7 +85,9 @@ func TestService_PlaceBid(t *testing.T) {
 				buyer := &account.Account{
 					ID:           buyerID,
 					Status:       account.StatusActive,
-					QualityScore: 90.0,
+					QualityMetrics: values.QualityMetrics{
+						QualityScore: 90.0,
+					},
 				}
 				
 				cr.On("GetByID", ctx, callID).Return(testCall, nil)
@@ -110,7 +115,7 @@ func TestService_PlaceBid(t *testing.T) {
 			expectedError: false,
 			validate: func(t *testing.T, b *bid.Bid) {
 				assert.NotNil(t, b)
-				assert.Equal(t, 7.25, b.Amount)
+				assert.Equal(t, values.MustNewMoneyFromFloat(7.25, values.USD), b.Amount)
 				// TODO: Criteria conversion from map[string]interface{} to bid.BidCriteria not yet implemented
 				// assert.Contains(t, b.Criteria.Geography.Countries, "US")
 			},
@@ -225,7 +230,9 @@ func TestService_PlaceBid(t *testing.T) {
 				buyer := &account.Account{
 					ID:           buyerID,
 					Status:       account.StatusActive,
-					QualityScore: 40.0,
+					QualityMetrics: values.QualityMetrics{
+						QualityScore: 40.0,
+					},
 				}
 				
 				cr.On("GetByID", ctx, callID).Return(testCall, nil)
@@ -333,13 +340,14 @@ func TestService_UpdateBid(t *testing.T) {
 			setupMocks: func(br *mocks.BidRepository, bidID uuid.UUID) {
 				existingBid := &bid.Bid{
 					ID:     bidID,
-					Amount: 5.0,
+					Amount: values.MustNewMoneyFromFloat(5.0, "USD"),
 					Status: bid.StatusActive,
 				}
 				
 				br.On("GetByID", ctx, bidID).Return(existingBid, nil)
 				br.On("Update", ctx, mock.MatchedBy(func(b *bid.Bid) bool {
-					return b.ID == bidID && b.Amount == 7.5
+					expectedAmount := values.MustNewMoneyFromFloat(7.5, "USD")
+					return b.ID == bidID && b.Amount.Compare(expectedAmount) == 0
 				})).Return(nil)
 			},
 			bidID: uuid.New(),
@@ -348,7 +356,7 @@ func TestService_UpdateBid(t *testing.T) {
 			},
 			expectedError: false,
 			validate: func(t *testing.T, b *bid.Bid) {
-				assert.Equal(t, 7.5, b.Amount)
+				assert.Equal(t, values.MustNewMoneyFromFloat(7.5, values.USD), b.Amount)
 			},
 		},
 		{
@@ -534,7 +542,9 @@ func TestService_ConcurrentBidding(t *testing.T) {
 		buyers[i] = &account.Account{
 			ID:           uuid.New(),
 			Status:       account.StatusActive,
-			QualityScore: 70.0 + float64(i),
+			QualityMetrics: values.QualityMetrics{
+				QualityScore: 70.0 + float64(i),
+			},
 		}
 		
 		// Setup expectations for each buyer

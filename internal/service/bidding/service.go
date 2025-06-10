@@ -10,6 +10,7 @@ import (
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/errors"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 	"github.com/google/uuid"
 )
 
@@ -120,11 +121,11 @@ func (s *service) PlaceBid(ctx context.Context, req *PlaceBidRequest) (*bid.Bid,
 		ID:           uuid.New(),
 		CallID:       req.CallID,
 		BuyerID:      req.BuyerID,
-		Amount:       req.Amount,
+		Amount:       values.MustNewMoneyFromFloat(req.Amount, "USD"),
 		Status:       bid.StatusPending,
-		Quality: bid.QualityMetrics{
-			HistoricalRating: buyer.QualityScore,
-			FraudScore:       buyer.FraudScore,
+		Quality: values.QualityMetrics{
+			HistoricalRating: buyer.QualityMetrics.OverallScore(),
+			FraudScore:       buyer.QualityMetrics.FraudScore,
 		},
 		PlacedAt:     time.Now(),
 		ExpiresAt:    time.Now().Add(duration),
@@ -170,7 +171,7 @@ func (s *service) PlaceBid(ctx context.Context, req *PlaceBidRequest) (*bid.Bid,
 	// Record metrics
 	if s.metrics != nil {
 		s.metrics.RecordBidPlaced(ctx, newBid)
-		s.metrics.RecordBidAmount(ctx, newBid.Amount)
+		s.metrics.RecordBidAmount(ctx, newBid.Amount.ToFloat64())
 	}
 	
 	return newBid, nil
@@ -194,7 +195,7 @@ func (s *service) UpdateBid(ctx context.Context, bidID uuid.UUID, updates *BidUp
 		if *updates.Amount < s.minBidAmount || *updates.Amount > s.maxBidAmount {
 			return nil, errors.NewValidationError("INVALID_BID_AMOUNT", fmt.Sprintf("bid amount must be between %.2f and %.2f", s.minBidAmount, s.maxBidAmount))
 		}
-		existingBid.Amount = *updates.Amount
+		existingBid.Amount, _ = values.NewMoneyFromFloat(*updates.Amount, "USD")
 	}
 	
 	if updates.Criteria != nil {

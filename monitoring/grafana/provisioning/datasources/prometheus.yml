@@ -1,0 +1,30 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    orgId: 1
+    url: http://prometheus:9090
+    isDefault: true
+    version: 1
+    editable: true
+    jsonData:
+      httpMethod: POST
+      manageAlerts: true
+      prometheusType: Prometheus
+      prometheusVersion: 2.48.0
+      timeInterval: 15s
+      # Query timeout
+      timeout: 30
+      # Scrape interval
+      scrapeInterval: 15s
+      # Default editor
+      defaultEditor: code
+      # Exemplar configuration for trace correlation
+      exemplarTraceIdDestinations:
+        - datasourceUid: jaeger
+          name: trace_id
+    # Enable alert state history
+    alerting:
+      enabled: true

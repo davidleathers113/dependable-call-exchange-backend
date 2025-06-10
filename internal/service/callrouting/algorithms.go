@@ -223,7 +223,7 @@ func (r *CostBasedRouter) Route(ctx context.Context, c *call.Call, bids []*bid.B
 		quality := (b.Quality.ConversionRate + 
 			(1.0 - b.Quality.FraudScore) + 
 			b.Quality.HistoricalRating/5.0) / 3.0
-		price := normalizePriceScore(b.Amount, minPrice, maxPrice)
+		price := normalizePriceScore(b.Amount.ToFloat64(), minPrice, maxPrice)
 		capacity := calculateCapacityScore(b)
 		
 		totalScore := r.qualityWeight*quality + 
@@ -289,15 +289,16 @@ func findPriceRange(bids []*bid.Bid) (float64, float64) {
 		return 0, 0
 	}
 	
-	min := bids[0].Amount
-	max := bids[0].Amount
+	min := bids[0].Amount.ToFloat64()
+	max := bids[0].Amount.ToFloat64()
 	
 	for _, b := range bids[1:] {
-		if b.Amount < min {
-			min = b.Amount
+		amount := b.Amount.ToFloat64()
+		if amount < min {
+			min = amount
 		}
-		if b.Amount > max {
-			max = b.Amount
+		if amount > max {
+			max = amount
 		}
 	}
 	

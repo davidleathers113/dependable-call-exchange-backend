@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,6 +14,8 @@ import (
 	"time"
 
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/financial"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil"
 	"github.com/google/uuid"
@@ -504,7 +507,7 @@ func TestFinancial_Reconciliation(t *testing.T) {
 
 // Helper functions for financial testing
 
-func createTestAccountWithBalance(t *testing.T, ctx context.Context, db *testutil.TestDB, name string, accType account.Type, balance float64) *account.Account {
+func createTestAccountWithBalance(t *testing.T, ctx context.Context, db *testutil.TestDB, name string, accType account.AccountType, balance float64) *account.Account {
 	acc := &account.Account{
 		ID:        uuid.New(),
 		Name:      name,

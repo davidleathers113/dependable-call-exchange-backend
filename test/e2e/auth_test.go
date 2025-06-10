@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/infrastructure/auth"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil"
 	"github.com/google/uuid"
@@ -23,7 +25,6 @@ import (
 // TestAuth_EndToEnd tests authentication and authorization flows
 func TestAuth_EndToEnd(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
-	ctx := testutil.TestContext(t)
 	
 	server := setupTestServer(t, testDB, false)
 	defer server.Close()

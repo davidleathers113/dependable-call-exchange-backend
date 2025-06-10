@@ -44,15 +44,15 @@ func TestCallExchangeFlow_CompleteLifecycle(t *testing.T) {
 	
 	// Initialize services
 	cfg := &config.Config{
-		Server: config.ServerConfig{Port: "8080"},
+		Server: config.ServerConfig{Port: 8080},
 		Security: config.SecurityConfig{
 			JWTSecret: "test-secret",
 			TokenExpiry: 24 * time.Hour,
 		},
 	}
 	
-	fraudSvc := fraud.NewService(accountRepo, callRepo)
-	telephonySvc := telephony.NewService(cfg)
+	fraudSvc := fraud.NewService(nil, nil, nil, nil, nil, nil)
+	telephonySvc := telephony.NewService(callRepo, nil, nil, nil)
 	routingRules := &callrouting.RoutingRules{
 		Algorithm: "cost-based",
 		QualityWeight: 0.4,
@@ -60,7 +60,7 @@ func TestCallExchangeFlow_CompleteLifecycle(t *testing.T) {
 		CapacityWeight: 0.2,
 	}
 	routingSvc := callrouting.NewService(callRepo, bidRepo, accountRepo, fraudSvc, routingRules)
-	biddingSvc := bidding.NewService(bidRepo, accountRepo, financialRepo)
+	biddingSvc := bidding.NewService(bidRepo, callRepo, accountRepo, fraudSvc, nil, nil)
 	
 	// Initialize API server
 	router := mux.NewRouter()
@@ -151,7 +151,8 @@ func TestCallExchangeFlow_CompleteLifecycle(t *testing.T) {
 // TestCallExchangeFlow_WithCompliance tests call flow with compliance checks
 func TestCallExchangeFlow_WithCompliance(t *testing.T) {
 	// Setup similar to above...
-	testDB := testutil.NewTestDB(t)	ctx := testutil.TestContext(t)
+	testDB := testutil.NewTestDB(t)
+	ctx := testutil.TestContext(t)
 	
 	// Initialize repositories and services
 	callRepo := repository.NewCallRepository(testDB.DB())
@@ -368,7 +369,7 @@ func TestCallExchangeFlow_RealTimeBidding(t *testing.T) {
 
 // Helper functions
 
-func createTestAccount(t *testing.T, ctx context.Context, repo repository.AccountRepository, name string, accType account.Type) *account.Account {
+func createTestAccount(t *testing.T, ctx context.Context, repo interface{}, name string, accType account.AccountType) *account.Account {
 	acc := &account.Account{
 		ID:        uuid.New(),
 		Name:      name,
@@ -521,7 +522,7 @@ func setupTestServer(t *testing.T, testDB *testutil.TestDB, complianceEnabled bo
 	
 	// Initialize services with configuration
 	cfg := &config.Config{
-		Server: config.ServerConfig{Port: "8080"},
+		Server: config.ServerConfig{Port: 8080},
 		Security: config.SecurityConfig{
 			JWTSecret: "test-secret",
 			TokenExpiry: 24 * time.Hour,
@@ -532,8 +533,25 @@ func setupTestServer(t *testing.T, testDB *testutil.TestDB, complianceEnabled bo
 		},
 	}
 	
-	fraudSvc := fraud.NewService(accountRepo, callRepo)
-	telephonySvc := telephony.NewService(cfg)
+	// Create mocks for services that need external dependencies
+	// For fraud service, we can pass nil for dependencies we don't need in tests
+	fraudSvc := fraud.NewService(
+		nil, // repository
+		nil, // mlEngine
+		nil, // ruleEngine
+		nil, // velocityChecker
+		nil, // blacklistChecker
+		nil, // initialRules
+	)
+	
+	// For telephony service, create minimal mocks
+	telephonySvc := telephony.NewService(
+		callRepo, 
+		nil, // provider
+		nil, // eventPublisher
+		nil, // metrics
+	)
+	
 	routingRules := &callrouting.RoutingRules{
 		Algorithm: "cost-based",
 		QualityWeight: 0.4,
@@ -541,7 +559,16 @@ func setupTestServer(t *testing.T, testDB *testutil.TestDB, complianceEnabled bo
 		CapacityWeight: 0.2,
 	}
 	routingSvc := callrouting.NewService(callRepo, bidRepo, accountRepo, fraudSvc, routingRules)
-	biddingSvc := bidding.NewService(bidRepo, accountRepo, financialRepo)
+	
+	// For bidding service, we need all dependencies
+	biddingSvc := bidding.NewService(
+		bidRepo,
+		callRepo,
+		accountRepo,
+		fraudSvc,    // fraud checker
+		nil,         // notifier
+		nil,         // metrics
+	)
 	
 	// Initialize API router
 	router := mux.NewRouter()

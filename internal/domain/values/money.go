@@ -68,6 +68,15 @@ func MustNewMoney(amount decimal.Decimal, currency string) Money {
 	return m
 }
 
+// MustNewMoneyFromFloat creates Money from float and panics on error (for constants/tests)
+func MustNewMoneyFromFloat(amount float64, currency string) Money {
+	m, err := NewMoneyFromFloat(amount, currency)
+	if err != nil {
+		panic(err)
+	}
+	return m
+}
+
 // Zero returns a zero Money value in the given currency
 func Zero(currency string) Money {
 	return MustNewMoney(decimal.Zero, currency)

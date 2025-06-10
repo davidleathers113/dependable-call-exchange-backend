@@ -5,16 +5,18 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/validation"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 )
 
+// Bid represents a buyer's offer to purchase a call from a seller
+// IMPORTANT: Only buyers place bids on seller calls in the marketplace
 type Bid struct {
 	ID         uuid.UUID `json:"id"`
-	CallID     uuid.UUID `json:"call_id"`
-	BuyerID    uuid.UUID `json:"buyer_id"`
-	SellerID   uuid.UUID `json:"seller_id"`
-	Amount     float64   `json:"amount"`
-	Status     Status    `json:"status"`
+	CallID     uuid.UUID `json:"call_id"`      // The seller's call being bid on
+	BuyerID    uuid.UUID `json:"buyer_id"`     // The buyer placing this bid
+	SellerID   uuid.UUID `json:"seller_id"`    // The seller who owns the call (redundant with Call.SellerID)
+	Amount     values.Money `json:"amount"`     // Amount buyer is willing to pay per call
+	Status     Status    `json:"status"`        // Active, Won, Lost, Expired
 	
 	// Auction details
 	AuctionID  uuid.UUID `json:"auction_id"`
@@ -24,7 +26,7 @@ type Bid struct {
 	Criteria   BidCriteria `json:"criteria"`
 	
 	// Quality metrics
-	Quality    QualityMetrics `json:"quality"`
+	Quality    values.QualityMetrics `json:"quality"`
 	
 	// Timestamps
 	PlacedAt   time.Time  `json:"placed_at"`
@@ -73,7 +75,7 @@ type BidCriteria struct {
 	CallType    []string       `json:"call_type"`
 	Keywords    []string       `json:"keywords"`
 	ExcludeList []string       `json:"exclude_list"`
-	MaxBudget   float64        `json:"max_budget"`
+	MaxBudget   values.Money   `json:"max_budget"`
 }
 
 type GeoCriteria struct {
@@ -91,12 +93,6 @@ type TimeWindow struct {
 	Timezone  string   `json:"timezone"`
 }
 
-type QualityMetrics struct {
-	ConversionRate   float64 `json:"conversion_rate"`
-	AverageCallTime  int     `json:"average_call_time"`
-	FraudScore       float64 `json:"fraud_score"`
-	HistoricalRating float64 `json:"historical_rating"`
-}
 
 type Auction struct {
 	ID          uuid.UUID `json:"id"`
@@ -108,8 +104,8 @@ type Auction struct {
 	Bids        []Bid     `json:"bids"`
 	
 	// Auction parameters
-	ReservePrice float64 `json:"reserve_price"`
-	BidIncrement float64 `json:"bid_increment"`
+	ReservePrice values.Money `json:"reserve_price"`
+	BidIncrement values.Money `json:"bid_increment"`
 	MaxDuration  int     `json:"max_duration"`
 	
 	CreatedAt   time.Time `json:"created_at"`
@@ -143,7 +139,7 @@ func (s AuctionStatus) String() string {
 	}
 }
 
-func NewBid(callID, buyerID, sellerID uuid.UUID, amount float64, criteria BidCriteria) (*Bid, error) {
+func NewBid(callID, buyerID, sellerID uuid.UUID, amount values.Money, criteria BidCriteria) (*Bid, error) {
 	// Validate UUIDs
 	if callID == uuid.Nil {
 		return nil, fmt.Errorf("call ID cannot be nil")
@@ -156,14 +152,14 @@ func NewBid(callID, buyerID, sellerID uuid.UUID, amount float64, criteria BidCri
 	}
 	
 	// Validate amount
-	if err := validation.ValidateAmount(amount, "bid amount"); err != nil {
-		return nil, err
+	if amount.IsZero() {
+		return nil, fmt.Errorf("bid amount cannot be zero")
 	}
 	
 	// Minimum bid amount
-	const minBidAmount = 0.01
-	if amount < minBidAmount {
-		return nil, fmt.Errorf("bid amount must be at least $%.2f", minBidAmount)
+	minBidAmount, _ := values.NewMoneyFromFloat(0.01, amount.Currency())
+	if amount.Compare(minBidAmount) < 0 {
+		return nil, fmt.Errorf("bid amount must be at least %s", minBidAmount.String())
 	}
 	
 	// Validate criteria
@@ -180,6 +176,7 @@ func NewBid(callID, buyerID, sellerID uuid.UUID, amount float64, criteria BidCri
 		Amount:    amount,
 		Status:    StatusPending,
 		Criteria:  criteria,
+		Quality:   values.NewDefaultQualityMetrics(),
 		PlacedAt:  now,
 		ExpiresAt: now.Add(5 * time.Minute), // 5-minute expiry
 		CreatedAt: now,
@@ -197,9 +194,9 @@ func validateBidCriteria(criteria BidCriteria) error {
 	}
 	
 	// Validate max budget if set
-	if criteria.MaxBudget > 0 {
-		if err := validation.ValidateAmount(criteria.MaxBudget, "max budget"); err != nil {
-			return err
+	if !criteria.MaxBudget.IsZero() {
+		if criteria.MaxBudget.IsNegative() {
+			return fmt.Errorf("max budget cannot be negative")
 		}
 	}
 	
@@ -223,15 +220,21 @@ func (b *Bid) Reject() {
 	b.UpdatedAt = time.Now()
 }
 
-func NewAuction(callID uuid.UUID, reservePrice float64) (*Auction, error) {
+func NewAuction(callID uuid.UUID, reservePrice values.Money) (*Auction, error) {
 	// Validate call ID
 	if callID == uuid.Nil {
 		return nil, fmt.Errorf("call ID cannot be nil")
 	}
 	
 	// Validate reserve price
-	if err := validation.ValidateAmount(reservePrice, "reserve price"); err != nil {
-		return nil, err
+	if reservePrice.IsNegative() {
+		return nil, fmt.Errorf("reserve price cannot be negative")
+	}
+	
+	// Create bid increment
+	bidIncrement, err := values.NewMoneyFromFloat(0.01, reservePrice.Currency())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bid increment: %w", err)
 	}
 	
 	now := time.Now()
@@ -242,7 +245,7 @@ func NewAuction(callID uuid.UUID, reservePrice float64) (*Auction, error) {
 		StartTime:    now,
 		EndTime:      now.Add(30 * time.Second), // 30-second auction window
 		ReservePrice: reservePrice,
-		BidIncrement: 0.01,
+		BidIncrement: bidIncrement,
 		MaxDuration:  30,
 		CreatedAt:    now,
 		UpdatedAt:    now,

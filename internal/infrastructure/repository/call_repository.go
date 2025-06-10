@@ -3,13 +3,13 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 )
 
 // callRepository implements CallRepository using PostgreSQL
@@ -34,13 +34,11 @@ func NewCallRepositoryWithTx(tx *sql.Tx) CallRepository {
 // Create inserts a new call into the database
 func (r *callRepository) Create(ctx context.Context, c *call.Call) error {
 	// Validate required fields
-	if c.FromNumber == "" || c.ToNumber == "" {
+	if c.FromNumber.IsEmpty() || c.ToNumber.IsEmpty() {
 		return errors.New("from_number cannot be empty")
 	}
 	
-	if c.BuyerID == uuid.Nil {
-		return errors.New("buyer_id cannot be nil")
-	}
+	// Note: BuyerID can be nil for marketplace calls awaiting routing
 
 	// Convert call type based on direction
 	callType := "inbound"
@@ -63,23 +61,27 @@ func (r *callRepository) Create(ctx context.Context, c *call.Call) error {
 		)
 	`
 
-	metadata := map[string]interface{}{
-		"call_sid":   c.CallSID,
-		"session_id": c.SessionID,
-		"user_agent": c.UserAgent,
-		"ip_address": c.IPAddress,
-		"location":   c.Location,
-	}
-
-	metadataJSON, err := json.Marshal(metadata)
+	metadataJSON, err := SerializeCallMetadata(c)
 	if err != nil {
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
+	// Handle nil buyer ID for marketplace calls
+	var buyerID interface{} = c.BuyerID
+	if c.BuyerID == uuid.Nil {
+		buyerID = nil
+	}
+
+	// Handle cost conversion
+	var cost interface{}
+	if c.Cost != nil {
+		cost = c.Cost.ToFloat64()
+	}
+
 	_, err = r.db.ExecContext(ctx, query,
-		c.ID, c.FromNumber, c.ToNumber, statusStr, callType,
-		c.BuyerID, c.SellerID, c.StartTime, c.EndTime,
-		c.Duration, c.Cost, metadataJSON, c.CreatedAt, c.UpdatedAt,
+		c.ID, c.FromNumber.String(), c.ToNumber.String(), statusStr, callType,
+		buyerID, c.SellerID, c.StartTime, c.EndTime,
+		c.Duration, cost, metadataJSON, c.CreatedAt, c.UpdatedAt,
 	)
 
 	if err != nil {
@@ -106,14 +108,16 @@ func (r *callRepository) GetByID(ctx context.Context, id uuid.UUID) (*call.Call,
 	var c call.Call
 	var statusStr, callType string
 	var metadata []byte
+	var buyerIDStr sql.NullString
 	var sellerID sql.NullString
 	var endTime sql.NullTime
 	var duration sql.NullInt32
 	var cost sql.NullFloat64
+	var fromNumberStr, toNumberStr string
 
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&c.ID, &c.FromNumber, &c.ToNumber, &statusStr, &callType,
-		&c.BuyerID, &sellerID, &c.StartTime, &endTime,
+		&c.ID, &fromNumberStr, &toNumberStr, &statusStr, &callType,
+		&buyerIDStr, &sellerID, &c.StartTime, &endTime,
 		&duration, &cost, &metadata, &c.CreatedAt, &c.UpdatedAt,
 	)
 
@@ -121,9 +125,30 @@ func (r *callRepository) GetByID(ctx context.Context, id uuid.UUID) (*call.Call,
 		return nil, err
 	}
 
+	// Convert phone numbers to value objects
+	fromPhone, err := values.NewPhoneNumber(fromNumberStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid from_number from database: %w", err)
+	}
+	c.FromNumber = fromPhone
+
+	toPhone, err := values.NewPhoneNumber(toNumberStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid to_number from database: %w", err)
+	}
+	c.ToNumber = toPhone
+
 	// Convert database values
 	c.Status = mapEnumToStatus(statusStr)
 	c.Direction = mapTypeToDirection(callType)
+
+	// Handle nullable buyer ID (marketplace calls may not have a buyer yet)
+	if buyerIDStr.Valid {
+		id, _ := uuid.Parse(buyerIDStr.String)
+		c.BuyerID = id
+	} else {
+		c.BuyerID = uuid.Nil
+	}
 
 	if sellerID.Valid {
 		id, _ := uuid.Parse(sellerID.String)
@@ -140,49 +165,77 @@ func (r *callRepository) GetByID(ctx context.Context, id uuid.UUID) (*call.Call,
 	}
 
 	if cost.Valid {
-		c.Cost = &cost.Float64
+		money, _ := values.NewMoneyFromFloat(cost.Float64, "USD")
+		c.Cost = &money
 	}
 
 	// Parse metadata
-	var meta map[string]interface{}
-	if err := json.Unmarshal(metadata, &meta); err == nil {
-		if v, ok := meta["call_sid"].(string); ok {
-			c.CallSID = v
-		}
-		if v, ok := meta["session_id"].(string); ok {
-			c.SessionID = &v
-		}
-		if v, ok := meta["user_agent"].(string); ok {
-			c.UserAgent = &v
-		}
-		if v, ok := meta["ip_address"].(string); ok {
-			c.IPAddress = &v
-		}
-		if v, ok := meta["location"].(map[string]interface{}); ok {
-			loc := &call.Location{}
-			if country, ok := v["country"].(string); ok {
-				loc.Country = country
-			}
-			if state, ok := v["state"].(string); ok {
-				loc.State = state
-			}
-			if city, ok := v["city"].(string); ok {
-				loc.City = city
-			}
-			if lat, ok := v["latitude"].(float64); ok {
-				loc.Latitude = lat
-			}
-			if lon, ok := v["longitude"].(float64); ok {
-				loc.Longitude = lon
-			}
-			if tz, ok := v["timezone"].(string); ok {
-				loc.Timezone = tz
-			}
-			c.Location = loc
-		}
+	parsedMetadata, err := ParseCallMetadata(metadata)
+	if err == nil {
+		parsedMetadata.ApplyToCall(&c)
 	}
 
 	return &c, nil
+}
+
+// UpdateWithStatusCheck updates a call only if it has the expected status
+// This is used for concurrent-safe status transitions
+func (r *callRepository) UpdateWithStatusCheck(ctx context.Context, c *call.Call, expectedStatus call.Status) error {
+	// Map status to database enum
+	statusStr := mapStatusToEnum(c.Status)
+	expectedStatusStr := mapStatusToEnum(expectedStatus)
+
+	// Update metadata
+	metadataJSON, err := SerializeCallMetadata(c)
+	if err != nil {
+		return fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	// Handle nil buyer ID for marketplace calls
+	var buyerID interface{} = c.BuyerID
+	if c.BuyerID == uuid.Nil {
+		buyerID = nil
+	}
+
+	// Handle cost conversion
+	var cost interface{}
+	if c.Cost != nil {
+		cost = c.Cost.ToFloat64()
+	}
+
+	query := `
+		UPDATE calls
+		SET 
+			status = $2,
+			buyer_id = $3,
+			ended_at = $4,
+			duration = $5,
+			cost = $6,
+			metadata = $7,
+			updated_at = $8
+		WHERE id = $1 AND status = $9
+	`
+
+	result, err := r.db.ExecContext(ctx, query,
+		c.ID, statusStr, buyerID, c.EndTime, c.Duration, cost,
+		metadataJSON, c.UpdatedAt, expectedStatusStr,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to update call: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		// The call status has changed, indicating another process updated it
+		return fmt.Errorf("call status has changed, expected %s", expectedStatus)
+	}
+
+	return nil
 }
 
 // Update updates an existing call
@@ -191,33 +244,38 @@ func (r *callRepository) Update(ctx context.Context, c *call.Call) error {
 	statusStr := mapStatusToEnum(c.Status)
 
 	// Update metadata
-	metadata := map[string]interface{}{
-		"call_sid":   c.CallSID,
-		"session_id": c.SessionID,
-		"user_agent": c.UserAgent,
-		"ip_address": c.IPAddress,
-		"location":   c.Location,
-	}
-
-	metadataJSON, err := json.Marshal(metadata)
+	metadataJSON, err := SerializeCallMetadata(c)
 	if err != nil {
 		return fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	// Handle nil buyer ID for marketplace calls
+	var buyerID interface{} = c.BuyerID
+	if c.BuyerID == uuid.Nil {
+		buyerID = nil
+	}
+
+	// Handle cost conversion
+	var cost interface{}
+	if c.Cost != nil {
+		cost = c.Cost.ToFloat64()
 	}
 
 	query := `
 		UPDATE calls
 		SET 
 			status = $2,
-			ended_at = $3,
-			duration = $4,
-			cost = $5,
-			metadata = $6,
-			updated_at = $7
+			buyer_id = $3,
+			ended_at = $4,
+			duration = $5,
+			cost = $6,
+			metadata = $7,
+			updated_at = $8
 		WHERE id = $1
 	`
 
 	result, err := r.db.ExecContext(ctx, query,
-		c.ID, statusStr, c.EndTime, c.Duration, c.Cost,
+		c.ID, statusStr, buyerID, c.EndTime, c.Duration, cost,
 		metadataJSON, c.UpdatedAt,
 	)
 
@@ -377,6 +435,7 @@ func scanCall(rows *sql.Rows) (*call.Call, error) {
 	var c call.Call
 	var statusStr, callType string
 	var metadata []byte
+	var buyerIDStr sql.NullString
 	var sellerID sql.NullString
 	var endTime sql.NullTime
 	var duration sql.NullInt32
@@ -384,7 +443,7 @@ func scanCall(rows *sql.Rows) (*call.Call, error) {
 
 	err := rows.Scan(
 		&c.ID, &c.FromNumber, &c.ToNumber, &statusStr, &callType,
-		&c.BuyerID, &sellerID, &c.StartTime, &endTime,
+		&buyerIDStr, &sellerID, &c.StartTime, &endTime,
 		&duration, &cost, &metadata, &c.CreatedAt, &c.UpdatedAt,
 	)
 
@@ -395,6 +454,14 @@ func scanCall(rows *sql.Rows) (*call.Call, error) {
 	// Convert database values
 	c.Status = mapEnumToStatus(statusStr)
 	c.Direction = mapTypeToDirection(callType)
+
+	// Handle nullable buyer ID (marketplace calls may not have a buyer yet)
+	if buyerIDStr.Valid {
+		id, _ := uuid.Parse(buyerIDStr.String)
+		c.BuyerID = id
+	} else {
+		c.BuyerID = uuid.Nil
+	}
 
 	if sellerID.Valid {
 		id, _ := uuid.Parse(sellerID.String)
@@ -411,46 +478,14 @@ func scanCall(rows *sql.Rows) (*call.Call, error) {
 	}
 
 	if cost.Valid {
-		c.Cost = &cost.Float64
+		money, _ := values.NewMoneyFromFloat(cost.Float64, "USD")
+		c.Cost = &money
 	}
 
 	// Parse metadata
-	var meta map[string]interface{}
-	if err := json.Unmarshal(metadata, &meta); err == nil {
-		if v, ok := meta["call_sid"].(string); ok {
-			c.CallSID = v
-		}
-		if v, ok := meta["session_id"].(string); ok {
-			c.SessionID = &v
-		}
-		if v, ok := meta["user_agent"].(string); ok {
-			c.UserAgent = &v
-		}
-		if v, ok := meta["ip_address"].(string); ok {
-			c.IPAddress = &v
-		}
-		if v, ok := meta["location"].(map[string]interface{}); ok {
-			loc := &call.Location{}
-			if country, ok := v["country"].(string); ok {
-				loc.Country = country
-			}
-			if state, ok := v["state"].(string); ok {
-				loc.State = state
-			}
-			if city, ok := v["city"].(string); ok {
-				loc.City = city
-			}
-			if lat, ok := v["latitude"].(float64); ok {
-				loc.Latitude = lat
-			}
-			if lon, ok := v["longitude"].(float64); ok {
-				loc.Longitude = lon
-			}
-			if tz, ok := v["timezone"].(string); ok {
-				loc.Timezone = tz
-			}
-			c.Location = loc
-		}
+	parsedMetadata, err := ParseCallMetadata(metadata)
+	if err == nil {
+		parsedMetadata.ApplyToCall(&c)
 	}
 
 	return &c, nil
@@ -463,21 +498,21 @@ func mapStatusToEnum(status call.Status) string {
 	case call.StatusPending:
 		return "pending"
 	case call.StatusQueued:
-		return "routing" // Map to closest database enum
+		return "queued"
 	case call.StatusRinging:
-		return "routing"
+		return "ringing"
 	case call.StatusInProgress:
-		return "active"
+		return "in_progress"
 	case call.StatusCompleted:
 		return "completed"
 	case call.StatusFailed:
 		return "failed"
 	case call.StatusCanceled:
-		return "cancelled"
+		return "failed" // No cancelled in DB, map to failed
 	case call.StatusNoAnswer:
-		return "failed"
+		return "no_answer"
 	case call.StatusBusy:
-		return "failed"
+		return "no_answer" // Busy maps to no_answer
 	default:
 		return "pending"
 	}
@@ -487,16 +522,18 @@ func mapEnumToStatus(enum string) call.Status {
 	switch enum {
 	case "pending":
 		return call.StatusPending
-	case "routing":
+	case "queued":
 		return call.StatusQueued
-	case "active":
+	case "ringing":
+		return call.StatusRinging
+	case "in_progress":
 		return call.StatusInProgress
 	case "completed":
 		return call.StatusCompleted
 	case "failed":
 		return call.StatusFailed
-	case "cancelled":
-		return call.StatusCanceled
+	case "no_answer":
+		return call.StatusNoAnswer
 	default:
 		return call.StatusPending
 	}
@@ -567,4 +604,102 @@ func sanitizeOrderBy(orderBy string) string {
 	
 	// Return sanitized ORDER BY clause
 	return column + " " + strings.ToUpper(direction)
+}
+
+// GetActiveCallsForSeller returns active calls owned by a seller
+func (r *callRepository) GetActiveCallsForSeller(ctx context.Context, sellerID uuid.UUID) ([]*call.Call, error) {
+	filter := CallFilter{
+		SellerID: &sellerID,
+		Status:   &[]call.Status{call.StatusPending, call.StatusQueued, call.StatusRinging, call.StatusInProgress}[0],
+		OrderBy:  "created_at DESC",
+		Limit:    100,
+	}
+	
+	// Use the existing List method with seller filter
+	return r.List(ctx, filter)
+}
+
+// GetActiveCallsForBuyer returns active calls assigned to a buyer
+func (r *callRepository) GetActiveCallsForBuyer(ctx context.Context, buyerID uuid.UUID) ([]*call.Call, error) {
+	filter := CallFilter{
+		BuyerID: &buyerID,
+		Status:  &[]call.Status{call.StatusQueued, call.StatusRinging, call.StatusInProgress}[0],
+		OrderBy: "created_at DESC",
+		Limit:   100,
+	}
+	
+	// Use the existing List method with buyer filter
+	return r.List(ctx, filter)
+}
+
+// GetPendingSellerCalls returns pending calls from sellers awaiting routing
+func (r *callRepository) GetPendingSellerCalls(ctx context.Context, limit int) ([]*call.Call, error) {
+	query := `
+		SELECT 
+			id, from_number, to_number, status, type,
+			buyer_id, seller_id, started_at, ended_at,
+			duration, cost, metadata, created_at, updated_at
+		FROM calls 
+		WHERE status = 'pending' 
+		AND seller_id IS NOT NULL
+		ORDER BY created_at ASC
+		LIMIT $1
+	`
+	
+	rows, err := r.db.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query pending seller calls: %w", err)
+	}
+	defer rows.Close()
+	
+	var calls []*call.Call
+	for rows.Next() {
+		c, err := scanCall(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan call: %w", err)
+		}
+		calls = append(calls, c)
+	}
+	
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate rows: %w", err)
+	}
+	
+	return calls, nil
+}
+
+// GetIncomingCalls returns calls awaiting seller assignment (for seller distribution)
+func (r *callRepository) GetIncomingCalls(ctx context.Context, limit int) ([]*call.Call, error) {
+	query := `
+		SELECT 
+			id, from_number, to_number, status, type,
+			buyer_id, seller_id, started_at, ended_at,
+			duration, cost, metadata, created_at, updated_at
+		FROM calls 
+		WHERE status = 'pending' 
+		AND seller_id IS NULL
+		ORDER BY created_at ASC
+		LIMIT $1
+	`
+	
+	rows, err := r.db.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query incoming calls: %w", err)
+	}
+	defer rows.Close()
+	
+	var calls []*call.Call
+	for rows.Next() {
+		c, err := scanCall(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan call: %w", err)
+		}
+		calls = append(calls, c)
+	}
+	
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate rows: %w", err)
+	}
+	
+	return calls, nil
 }

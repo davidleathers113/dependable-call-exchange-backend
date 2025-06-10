@@ -1,0 +1,72 @@
+# Semgrep ignore file
+
+# Vendor and dependencies
+vendor/
+go.sum
+
+# Generated files
+*.pb.go
+*_gen.go
+*_generated.go
+mock_*.go
+bindata.go
+
+# Test files (optional - remove if you want to scan tests)
+# *_test.go
+# testdata/
+
+# Documentation
+*.md
+docs/
+
+# Build artifacts
+bin/
+dist/
+build/
+
+# IDE and tools
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Migrations (they contain raw SQL)
+migrations/*.sql
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+
+# Scripts
+scripts/
+
+# Config files (often contain non-Go code)
+*.yaml
+*.yml
+*.json
+*.toml
+*.ini
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Binary
+main
+migrate
+worker
+cli

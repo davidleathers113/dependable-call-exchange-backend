@@ -5,24 +5,31 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/validation"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 )
 
 type Call struct {
 	ID          uuid.UUID `json:"id"`
-	FromNumber  string    `json:"from_number"`
-	ToNumber    string    `json:"to_number"`
+	FromNumber  values.PhoneNumber `json:"from_number"`
+	ToNumber    values.PhoneNumber `json:"to_number"`
 	Status      Status    `json:"status"`
 	Direction   Direction `json:"direction"`
 	StartTime   time.Time `json:"start_time"`
 	EndTime     *time.Time `json:"end_time,omitempty"`
 	Duration    *int      `json:"duration,omitempty"`
-	Cost        *float64  `json:"cost,omitempty"`
+	Cost        *values.Money `json:"cost,omitempty"`
 	
-	// Call routing
-	RouteID     *uuid.UUID `json:"route_id,omitempty"`
-	BuyerID     uuid.UUID  `json:"buyer_id"`
-	SellerID    *uuid.UUID `json:"seller_id,omitempty"`
+	// Call routing and ownership
+	// IMPORTANT: Understanding buyer/seller relationships:
+	// - For marketplace calls (seller → buyer):
+	//   - SellerID: The seller who owns/generated this call
+	//   - BuyerID: Initially empty, set when a buyer wins the bid
+	// - For direct calls:
+	//   - BuyerID: The account making the call
+	//   - SellerID: May be null for non-marketplace calls
+	RouteID     *uuid.UUID `json:"route_id,omitempty"`      // ID of the routing decision
+	BuyerID     uuid.UUID  `json:"buyer_id"`                // Buyer who won bid OR originating account
+	SellerID    *uuid.UUID `json:"seller_id,omitempty"`     // Seller who owns this call (marketplace only)
 	
 	// Telephony details
 	CallSID     string     `json:"call_sid"`
@@ -103,20 +110,19 @@ type Location struct {
 	Timezone  string  `json:"timezone"`
 }
 
-func NewCall(fromNumber, toNumber string, buyerID uuid.UUID, direction Direction) (*Call, error) {
-	// Validate phone numbers
-	if err := validation.ValidatePhoneNumber(fromNumber); err != nil {
+func NewCall(fromNumberStr, toNumberStr string, buyerID uuid.UUID, direction Direction) (*Call, error) {
+	// Create phone number value objects
+	fromNumber, err := values.NewPhoneNumber(fromNumberStr)
+	if err != nil {
 		return nil, fmt.Errorf("invalid from number: %w", err)
 	}
 	
-	if err := validation.ValidatePhoneNumber(toNumber); err != nil {
+	toNumber, err := values.NewPhoneNumber(toNumberStr)
+	if err != nil {
 		return nil, fmt.Errorf("invalid to number: %w", err)
 	}
 	
-	// Validate buyer ID
-	if buyerID == uuid.Nil {
-		return nil, fmt.Errorf("buyer ID cannot be nil")
-	}
+	// Note: buyerID can be nil for marketplace calls awaiting routing
 	
 	// Validate direction
 	switch direction {
@@ -145,15 +151,10 @@ func (c *Call) UpdateStatus(status Status) {
 	c.UpdatedAt = clock.Now()
 }
 
-func (c *Call) Complete(duration int, cost float64) error {
-	// Validate duration
-	if err := validation.ValidateDuration(duration); err != nil {
+func (c *Call) Complete(duration int, cost values.Money) error {
+	// Validate duration (moved from validation package to domain)
+	if err := validateDuration(duration); err != nil {
 		return fmt.Errorf("invalid duration: %w", err)
-	}
-	
-	// Validate cost
-	if err := validation.ValidateAmount(cost, "cost"); err != nil {
-		return fmt.Errorf("invalid cost: %w", err)
 	}
 	
 	now := clock.Now()
@@ -168,4 +169,53 @@ func (c *Call) Complete(duration int, cost float64) error {
 func (c *Call) Fail() {
 	c.Status = StatusFailed
 	c.UpdatedAt = clock.Now()
+}
+
+// NewMarketplaceCall creates a new call from a seller for the marketplace
+// These calls do not have a buyer initially - buyers will bid on them
+func NewMarketplaceCall(fromNumber, toNumber string, sellerID uuid.UUID, direction Direction) (*Call, error) {
+	// Create call without buyer
+	c, err := NewCall(fromNumber, toNumber, uuid.Nil, direction)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Validate seller ID
+	if sellerID == uuid.Nil {
+		return nil, fmt.Errorf("seller ID cannot be nil for marketplace call")
+	}
+	
+	// Set the seller who owns this call
+	c.SellerID = &sellerID
+	
+	return c, nil
+}
+
+// AssignToBuyer assigns a marketplace call to a buyer after winning bid
+func (c *Call) AssignToBuyer(buyerID uuid.UUID) error {
+	if buyerID == uuid.Nil {
+		return fmt.Errorf("buyer ID cannot be nil")
+	}
+	
+	if c.BuyerID != uuid.Nil {
+		return fmt.Errorf("call already assigned to buyer")
+	}
+	
+	c.BuyerID = buyerID
+	c.UpdatedAt = clock.Now()
+	return nil
+}
+
+// validateDuration validates call duration within the call domain
+func validateDuration(duration int) error {
+	if duration < 0 {
+		return fmt.Errorf("duration cannot be negative")
+	}
+	
+	// Max call duration of 24 hours (86400 seconds)
+	if duration > 86400 {
+		return fmt.Errorf("duration too long (max 24 hours)")
+	}
+	
+	return nil
 }

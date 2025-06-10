@@ -6,6 +6,7 @@ import (
 
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil/mocks"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -48,9 +49,9 @@ func TestService_RouteCall(t *testing.T) {
 						ID:           uuid.New(),
 						CallID:       callID,
 						BuyerID:      uuid.New(),
-						Amount:       5.0,
+						Amount:       values.MustNewMoneyFromFloat(5.0, "USD"),
 						Status:       bid.StatusActive,
-						Quality: bid.QualityMetrics{
+						Quality: values.QualityMetrics{
 							ConversionRate:   0.15,
 							AverageCallTime:  180,
 							FraudScore:       0.05,
@@ -61,9 +62,9 @@ func TestService_RouteCall(t *testing.T) {
 						ID:           uuid.New(),
 						CallID:       callID,
 						BuyerID:      uuid.New(),
-						Amount:       4.5,
+						Amount:       values.MustNewMoneyFromFloat(4.5, "USD"),
 						Status:       bid.StatusActive,
-						Quality: bid.QualityMetrics{
+						Quality: values.QualityMetrics{
 							ConversionRate:   0.20,
 							AverageCallTime:  160,
 							FraudScore:       0.02,
@@ -107,12 +108,12 @@ func TestService_RouteCall(t *testing.T) {
 						ID:           uuid.New(),
 						CallID:       callID,
 						BuyerID:      uuid.New(),
-						Amount:       5.0,
+						Amount:       values.MustNewMoneyFromFloat(5.0, "USD"),
 						Status:       bid.StatusActive,
 						Criteria: bid.BidCriteria{
 							CallType: []string{"outbound"}, // Won't match
 						},
-						Quality: bid.QualityMetrics{
+						Quality: values.QualityMetrics{
 							ConversionRate:   0.10,
 							AverageCallTime:  200,
 							FraudScore:       0.10,
@@ -123,12 +124,12 @@ func TestService_RouteCall(t *testing.T) {
 						ID:           uuid.New(),
 						CallID:       callID,
 						BuyerID:      uuid.New(),
-						Amount:       4.5,
+						Amount:       values.MustNewMoneyFromFloat(4.5, "USD"),
 						Status:       bid.StatusActive,
 						Criteria: bid.BidCriteria{
 							CallType: []string{"inbound"}, // Will match
 						},
-						Quality: bid.QualityMetrics{
+						Quality: values.QualityMetrics{
 							ConversionRate:   0.20,
 							AverageCallTime:  180,
 							FraudScore:       0.02,
@@ -169,9 +170,9 @@ func TestService_RouteCall(t *testing.T) {
 						ID:           uuid.New(),
 						CallID:       callID,
 						BuyerID:      uuid.New(),
-						Amount:       5.0,
+						Amount:       values.MustNewMoneyFromFloat(5.0, "USD"),
 						Status:       bid.StatusActive,
-						Quality: bid.QualityMetrics{
+						Quality: values.QualityMetrics{
 							ConversionRate:   0.10,
 							AverageCallTime:  200,
 							FraudScore:       0.15,
@@ -182,9 +183,9 @@ func TestService_RouteCall(t *testing.T) {
 						ID:           uuid.New(),
 						CallID:       callID,
 						BuyerID:      uuid.New(),
-						Amount:       3.0,
+						Amount:       values.MustNewMoneyFromFloat(3.0, "USD"),
 						Status:       bid.StatusActive,
-						Quality: bid.QualityMetrics{
+						Quality: values.QualityMetrics{
 							ConversionRate:   0.25,
 							AverageCallTime:  180,
 							FraudScore:       0.02,
@@ -379,9 +380,9 @@ func TestService_ConcurrentRouting(t *testing.T) {
 				ID:           uuid.New(),
 				CallID:       callID,
 				BuyerID:      uuid.New(),
-				Amount:       5.0,
+				Amount:       values.MustNewMoneyFromFloat(5.0, "USD"),
 				Status:       bid.StatusActive,
-				Quality: bid.QualityMetrics{
+				Quality: values.QualityMetrics{
 					ConversionRate:   0.15,
 					AverageCallTime:  180,
 					FraudScore:       0.05,
@@ -457,9 +458,9 @@ func BenchmarkService_RouteCall(b *testing.B) {
 			ID:           uuid.New(),
 			CallID:       callID,
 			BuyerID:      uuid.New(),
-			Amount:       float64(i) + 1.0,
+			Amount:       values.MustNewMoneyFromFloat(float64(i) + 1.0, "USD"),
 			Status:       bid.StatusActive,
-			Quality: bid.QualityMetrics{
+			Quality: values.QualityMetrics{
 				ConversionRate:   float64(i%20) / 100.0,
 				AverageCallTime:  150 + i%100,
 				FraudScore:       float64(i%10) / 100.0,

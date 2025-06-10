@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 	
+	"github.com/google/uuid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
@@ -46,35 +47,35 @@ func CreateCompleteTestSet(t *testing.T, db *testutil.TestDB) *TestDataSet {
 	t.Helper()
 	
 	// Create accounts first (no dependencies)
-	buyerAccount := NewAccountBuilder(t).
+	buyerAccount := NewAccountBuilder(db).
 		WithType(account.TypeBuyer).
 		WithEmail(GenerateEmail(t, "buyer")).
 		WithName("Test Buyer").
 		WithCompany("Buyer Corp").
-		Build()
+		Build(t)
 	
-	sellerAccount := NewAccountBuilder(t).
+	sellerAccount := NewAccountBuilder(db).
 		WithType(account.TypeSeller).
 		WithEmail(GenerateEmail(t, "seller")).
 		WithName("Test Seller").
 		WithCompany("Seller Inc").
-		Build()
+		Build(t)
 		
-	sellerAccount1 := NewAccountBuilder(t).
+	sellerAccount1 := NewAccountBuilder(db).
 		WithType(account.TypeSeller).
 		WithEmail(GenerateEmail(t, "seller1")).
 		WithName("Test Seller 1").
 		WithCompany("Seller 1 Inc").
 		WithQualityScore(0.90).
-		Build()
+		Build(t)
 		
-	sellerAccount2 := NewAccountBuilder(t).
+	sellerAccount2 := NewAccountBuilder(db).
 		WithType(account.TypeSeller).
 		WithEmail(GenerateEmail(t, "seller2")).
 		WithName("Test Seller 2").
 		WithCompany("Seller 2 Inc").
 		WithQualityScore(0.95).
-		Build()
+		Build(t)
 	
 	// Insert accounts into database
 	insertAccount(t, db, buyerAccount)
@@ -82,27 +83,32 @@ func CreateCompleteTestSet(t *testing.T, db *testutil.TestDB) *TestDataSet {
 	insertAccount(t, db, sellerAccount1)
 	insertAccount(t, db, sellerAccount2)
 	
-	// Create calls that reference the accounts
+	// Create calls from sellers (marketplace calls awaiting buyer assignment)
+	// IMPORTANT: For marketplace calls:
+	// - SellerID is set (the seller who generated/owns the call)
+	// - BuyerID will be set later when a buyer wins the bid
 	inboundCall := NewCallBuilder(t).
 		WithDirection(call.DirectionInbound).
-		WithBuyerID(buyerAccount.ID).
 		WithSellerID(sellerAccount.ID).
+		WithoutBuyer(). // Explicitly indicate no buyer yet
 		Build()
 	
 	outboundCall := NewCallBuilder(t).
 		WithDirection(call.DirectionOutbound).
-		WithBuyerID(buyerAccount.ID).
 		WithSellerID(sellerAccount.ID).
+		WithoutBuyer(). // Explicitly indicate no buyer yet
 		Build()
 	
 	// Insert calls into database
 	insertCall(t, db, inboundCall)
 	insertCall(t, db, outboundCall)
 	
-	// Create bids that reference calls and buyers
+	// Create bids from buyers on seller calls
+	// IMPORTANT: Only buyers place bids on seller calls
 	activeBid := NewBidBuilder(db).
 		WithCallID(inboundCall.ID).
 		WithBuyerID(buyerAccount.ID).
+		WithSellerID(sellerAccount.ID). // The seller who owns the call
 		WithAmount(25.50).
 		Build(t)
 	
@@ -125,23 +131,32 @@ func CreateMinimalTestSet(t *testing.T, db *testutil.TestDB) *TestDataSet {
 	t.Helper()
 	
 	// Create buyer account
-	buyerAccount := NewAccountBuilder(t).
+	buyerAccount := NewAccountBuilder(db).
 		WithType(account.TypeBuyer).
 		WithEmail(GenerateEmail(t, "buyer")).
-		Build()
+		Build(t)
 	
 	insertAccount(t, db, buyerAccount)
 	
-	// Create call with buyer
+	// Create seller's call awaiting buyer
+	sellerAccount := NewAccountBuilder(db).
+		WithType(account.TypeSeller).
+		WithEmail(GenerateEmail(t, "seller")).
+		Build(t)
+	
+	insertAccount(t, db, sellerAccount)
+	
 	call := NewCallBuilder(t).
-		WithBuyerID(buyerAccount.ID).
+		WithSellerID(sellerAccount.ID).
+		WithoutBuyer().
 		Build()
 	
 	insertCall(t, db, call)
 	
 	return &TestDataSet{
-		BuyerAccount: buyerAccount,
-		InboundCall:  call,
+		BuyerAccount:  buyerAccount,
+		SellerAccount: sellerAccount,
+		InboundCall:   call,
 	}
 }
 
@@ -157,10 +172,11 @@ func insertAccount(t *testing.T, db *testutil.TestDB, acc *account.Account) {
 	}
 	
 	_, err = db.DB().Exec(`
-		INSERT INTO accounts (id, email, company, type, status, balance, credit_limit, quality_score, settings)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	`, acc.ID, acc.Email, acc.Company, acc.Type.String(), acc.Status.String(),
-		acc.Balance, acc.CreditLimit, acc.QualityScore, settingsJSON)
+		INSERT INTO accounts (id, email, name, company, type, status, phone_number, balance, credit_limit, payment_terms, tcpa_consent, gdpr_consent, quality_score, fraud_score, settings, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+	`, acc.ID, acc.Email.String(), acc.Name, acc.Company, acc.Type.String(), acc.Status.String(),
+		acc.PhoneNumber.String(), acc.Balance.ToFloat64(), acc.CreditLimit.ToFloat64(), acc.PaymentTerms, acc.TCPAConsent, acc.GDPRConsent,
+		acc.QualityMetrics.QualityScore, acc.QualityMetrics.FraudScore, settingsJSON, acc.CreatedAt, acc.UpdatedAt)
 	
 	if err != nil {
 		t.Fatalf("failed to insert test account: %v", err)
@@ -170,11 +186,17 @@ func insertAccount(t *testing.T, db *testutil.TestDB, acc *account.Account) {
 func insertCall(t *testing.T, db *testutil.TestDB, c *call.Call) {
 	t.Helper()
 	
+	// Handle nil buyer ID for marketplace calls
+	var buyerID interface{} = c.BuyerID
+	if c.BuyerID == uuid.Nil {
+		buyerID = nil
+	}
+	
 	_, err := db.DB().Exec(`
 		INSERT INTO calls (id, from_number, to_number, status, type, buyer_id, seller_id, started_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`, c.ID, c.FromNumber, c.ToNumber, c.Status.String(), c.Direction.String(),
-		c.BuyerID, c.SellerID, c.StartTime)
+		buyerID, c.SellerID, c.StartTime)
 	
 	if err != nil {
 		t.Fatalf("failed to insert test call: %v", err)
@@ -190,11 +212,17 @@ func insertBid(t *testing.T, db *testutil.TestDB, b *bid.Bid) {
 		t.Fatalf("failed to marshal bid criteria: %v", err)
 	}
 	
+	// Convert quality metrics to JSON
+	qualityJSON, err := json.Marshal(b.Quality)
+	if err != nil {
+		t.Fatalf("failed to marshal bid quality metrics: %v", err)
+	}
+	
 	_, err = db.DB().Exec(`
-		INSERT INTO bids (id, call_id, buyer_id, amount, status, criteria, placed_at, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	`, b.ID, b.CallID, b.BuyerID, b.Amount, b.Status.String(),
-		criteriaJSON, b.PlacedAt, b.ExpiresAt)
+		INSERT INTO bids (id, call_id, buyer_id, seller_id, amount, status, criteria, quality_metrics, placed_at, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	`, b.ID, b.CallID, b.BuyerID, b.SellerID, b.Amount.ToFloat64(), b.Status.String(),
+		criteriaJSON, qualityJSON, b.PlacedAt, b.ExpiresAt)
 	
 	if err != nil {
 		t.Fatalf("failed to insert test bid: %v", err)
