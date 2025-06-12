@@ -30,9 +30,9 @@ func NewCallRoutingTracedService(service callrouting.Service, tracer telemetry.T
 func (s *CallRoutingTracedService) RouteCall(ctx context.Context, callID uuid.UUID) (*callrouting.RoutingDecision, error) {
 	// Start span for call routing
 	ctx, span := s.tracer.StartSpanWithAttributes(ctx, "callrouting.RouteCall", map[string]interface{}{
-		"call.id":    callID.String(),
-		"span.kind":  "internal",
-		"component":  "callrouting",
+		"call.id":   callID.String(),
+		"span.kind": "internal",
+		"component": "callrouting",
 	})
 	defer span.End()
 
@@ -41,7 +41,7 @@ func (s *CallRoutingTracedService) RouteCall(ctx context.Context, callID uuid.UU
 
 	// Execute the routing
 	decision, err := s.service.RouteCall(ctx, callID)
-	
+
 	// Calculate latency in microseconds
 	latencyUS := float64(time.Since(startTime).Microseconds())
 
@@ -52,7 +52,7 @@ func (s *CallRoutingTracedService) RouteCall(ctx context.Context, callID uuid.UU
 			"error.type": getErrorType(err),
 			"call.id":    callID.String(),
 		})
-		
+
 		// Record metrics
 		s.metrics.RecordCallRouting(ctx, latencyUS, "unknown", false)
 		return nil, err
@@ -105,9 +105,9 @@ func (s *CallRoutingTracedService) GetActiveRoutes(ctx context.Context) ([]*call
 // UpdateRoutingRules instruments routing rules updates
 func (s *CallRoutingTracedService) UpdateRoutingRules(ctx context.Context, rules *callrouting.RoutingRules) error {
 	ctx, span := s.tracer.StartSpanWithAttributes(ctx, "callrouting.UpdateRoutingRules", map[string]interface{}{
-		"rules.algorithm":         rules.Algorithm,
+		"rules.algorithm":          rules.Algorithm,
 		"rules.priority_threshold": rules.PriorityThreshold,
-		"span.kind":              "internal",
+		"span.kind":                "internal",
 	})
 	defer span.End()
 
@@ -148,4 +148,3 @@ func getErrorType(err error) string {
 		return "unknown"
 	}
 }
-

@@ -8,17 +8,17 @@ import (
 
 // PaymentMethod represents a stored payment method
 type PaymentMethod struct {
-	ID             uuid.UUID
-	AccountID      uuid.UUID
-	Type           PaymentMethodType
-	Last4          string
-	ExpiryMonth    int
-	ExpiryYear     int
-	Brand          string
-	IsDefault      bool
-	Status         PaymentMethodStatus
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID          uuid.UUID
+	AccountID   uuid.UUID
+	Type        PaymentMethodType
+	Last4       string
+	ExpiryMonth int
+	ExpiryYear  int
+	Brand       string
+	IsDefault   bool
+	Status      PaymentMethodStatus
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // PaymentMethodType represents the type of payment method
@@ -80,11 +80,11 @@ type LineItem struct {
 type LineItemType string
 
 const (
-	LineItemTypeCall      LineItemType = "call"
-	LineItemTypeCredit    LineItemType = "credit"
-	LineItemTypeDebit     LineItemType = "debit"
+	LineItemTypeCall       LineItemType = "call"
+	LineItemTypeCredit     LineItemType = "credit"
+	LineItemTypeDebit      LineItemType = "debit"
 	LineItemTypeAdjustment LineItemType = "adjustment"
-	LineItemTypeManual    LineItemType = "manual"
+	LineItemTypeManual     LineItemType = "manual"
 )
 
 // Payment represents a payment transaction
@@ -107,11 +107,11 @@ type Payment struct {
 type PaymentStatus string
 
 const (
-	PaymentStatusPending   PaymentStatus = "pending"
+	PaymentStatusPending    PaymentStatus = "pending"
 	PaymentStatusProcessing PaymentStatus = "processing"
-	PaymentStatusCompleted PaymentStatus = "completed"
-	PaymentStatusFailed    PaymentStatus = "failed"
-	PaymentStatusRefunded  PaymentStatus = "refunded"
+	PaymentStatusCompleted  PaymentStatus = "completed"
+	PaymentStatusFailed     PaymentStatus = "failed"
+	PaymentStatusRefunded   PaymentStatus = "refunded"
 )
 
 // ReconciliationReport represents a financial reconciliation report

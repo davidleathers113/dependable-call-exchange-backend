@@ -43,28 +43,28 @@ func (s *rateLimitService) Configure(limitType string, count int, window time.Du
 	if limitType == "" {
 		return errors.NewValidationError("INVALID_LIMIT_TYPE", "limit type cannot be empty")
 	}
-	
+
 	if count <= 0 {
 		return errors.NewValidationError("INVALID_COUNT", "count must be positive")
 	}
-	
+
 	if window <= 0 {
 		return errors.NewValidationError("INVALID_WINDOW", "window must be positive")
 	}
-	
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	s.configs[limitType] = &rateLimitConfig{
 		count:  count,
 		window: window,
 	}
-	
+
 	// Initialize the limits map for this type if not exists
 	if _, exists := s.limits[limitType]; !exists {
 		s.limits[limitType] = make(map[uuid.UUID]*rateLimitEntry)
 	}
-	
+
 	return nil
 }
 
@@ -76,14 +76,14 @@ func (s *rateLimitService) CheckRateLimit(ctx context.Context, entityID uuid.UUI
 		s.mu.RUnlock()
 		return errors.NewInternalError(fmt.Sprintf("rate limit type %s not configured", limitType))
 	}
-	
+
 	limitsForType, exists := s.limits[limitType]
 	if !exists {
 		s.mu.RUnlock()
 		return errors.NewInternalError(fmt.Sprintf("rate limit type %s not initialized", limitType))
 	}
 	s.mu.RUnlock()
-	
+
 	// Get or create entry for entity
 	s.mu.Lock()
 	entry, exists := limitsForType[entityID]
@@ -95,25 +95,25 @@ func (s *rateLimitService) CheckRateLimit(ctx context.Context, entityID uuid.UUI
 		limitsForType[entityID] = entry
 	}
 	s.mu.Unlock()
-	
+
 	// Check rate limit
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
-	
+
 	now := time.Now()
-	
+
 	// Reset window if expired
 	if now.Sub(entry.windowStart) > config.window {
 		entry.count = 0
 		entry.windowStart = now
 	}
-	
+
 	// Check if within limit
 	if entry.count >= config.count {
 		return errors.NewRateLimitError(
 			fmt.Sprintf("rate limit exceeded: %d requests in %v", config.count, config.window))
 	}
-	
+
 	return nil
 }
 
@@ -125,14 +125,14 @@ func (s *rateLimitService) RecordAction(ctx context.Context, entityID uuid.UUID,
 		s.mu.RUnlock()
 		return errors.NewInternalError(fmt.Sprintf("rate limit type %s not configured", limitType))
 	}
-	
+
 	limitsForType, exists := s.limits[limitType]
 	if !exists {
 		s.mu.RUnlock()
 		return errors.NewInternalError(fmt.Sprintf("rate limit type %s not initialized", limitType))
 	}
 	s.mu.RUnlock()
-	
+
 	// Get or create entry for entity
 	s.mu.Lock()
 	entry, exists := limitsForType[entityID]
@@ -144,13 +144,13 @@ func (s *rateLimitService) RecordAction(ctx context.Context, entityID uuid.UUID,
 		limitsForType[entityID] = entry
 	}
 	s.mu.Unlock()
-	
+
 	// Record action
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
-	
+
 	now := time.Now()
-	
+
 	// Reset window if expired
 	if now.Sub(entry.windowStart) > config.window {
 		entry.count = 1
@@ -158,7 +158,7 @@ func (s *rateLimitService) RecordAction(ctx context.Context, entityID uuid.UUID,
 	} else {
 		entry.count++
 	}
-	
+
 	return nil
 }
 
@@ -170,30 +170,30 @@ func (s *rateLimitService) GetCurrentCount(ctx context.Context, entityID uuid.UU
 		s.mu.RUnlock()
 		return 0, errors.NewInternalError(fmt.Sprintf("rate limit type %s not configured", limitType))
 	}
-	
+
 	limitsForType, exists := s.limits[limitType]
 	if !exists {
 		s.mu.RUnlock()
 		return 0, errors.NewInternalError(fmt.Sprintf("rate limit type %s not initialized", limitType))
 	}
-	
+
 	entry, exists := limitsForType[entityID]
 	s.mu.RUnlock()
-	
+
 	if !exists {
 		return 0, nil
 	}
-	
+
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
-	
+
 	now := time.Now()
-	
+
 	// Check if window expired
 	if now.Sub(entry.windowStart) > config.window {
 		return 0, nil
 	}
-	
+
 	return entry.count, nil
 }
 
@@ -206,11 +206,11 @@ func (s *rateLimitService) ResetLimit(ctx context.Context, entityID uuid.UUID, l
 		return errors.NewInternalError(fmt.Sprintf("rate limit type %s not initialized", limitType))
 	}
 	s.mu.RUnlock()
-	
+
 	s.mu.Lock()
 	delete(limitsForType, entityID)
 	s.mu.Unlock()
-	
+
 	return nil
 }
 
@@ -218,15 +218,15 @@ func (s *rateLimitService) ResetLimit(ctx context.Context, entityID uuid.UUID, l
 func (s *rateLimitService) CleanupExpired() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	now := time.Now()
-	
+
 	for limitType, config := range s.configs {
 		limitsForType := s.limits[limitType]
-		
+
 		// Collect entities to remove
 		var toRemove []uuid.UUID
-		
+
 		for entityID, entry := range limitsForType {
 			entry.mu.Lock()
 			if now.Sub(entry.windowStart) > config.window {
@@ -234,7 +234,7 @@ func (s *rateLimitService) CleanupExpired() {
 			}
 			entry.mu.Unlock()
 		}
-		
+
 		// Remove expired entries
 		for _, entityID := range toRemove {
 			delete(limitsForType, entityID)

@@ -3,10 +3,10 @@ package fixtures
 import (
 	"testing"
 	"time"
-	
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	
+
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 )
@@ -32,12 +32,12 @@ func NewCallBuilder(t *testing.T) *CallBuilder {
 	require.NoError(t, err)
 	buyerID, err := uuid.NewRandom()
 	require.NoError(t, err)
-	
+
 	fromPhone, err := values.NewPhoneNumber("+15551234567")
 	require.NoError(t, err)
 	toPhone, err := values.NewPhoneNumber("+15559876543")
 	require.NoError(t, err)
-	
+
 	return &CallBuilder{
 		t:         t,
 		id:        id,
@@ -62,7 +62,7 @@ func (b *CallBuilder) WithPhoneNumbers(from, to string) *CallBuilder {
 	require.NoError(b.t, err)
 	toPhone, err := values.NewPhoneNumber(to)
 	require.NoError(b.t, err)
-	
+
 	b.from = fromPhone
 	b.to = toPhone
 	return b
@@ -121,7 +121,7 @@ func (b *CallBuilder) Build() *call.Call {
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
-	
+
 	// Set additional fields based on status
 	switch b.status {
 	case call.StatusInProgress:
@@ -131,12 +131,12 @@ func (b *CallBuilder) Build() *call.Call {
 		duration := int(endTime.Sub(now).Seconds())
 		costAmount := float64(duration) * 0.01 // $0.01 per second
 		cost, _ := values.NewMoneyFromFloat(costAmount, "USD")
-		
+
 		c.EndTime = &endTime
 		c.Duration = &duration
 		c.Cost = &cost
 	}
-	
+
 	return c
 }
 

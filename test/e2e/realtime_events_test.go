@@ -3,45 +3,45 @@
 package e2e
 
 import (
-	"context"
-	"encoding/json"
-	"net/http/httptest"
-	"net/url"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
-	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil"
+	"github.com/davidleathers/dependable-call-exchange-backend/test/e2e/infrastructure"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestRealTimeEvents_WebSocket tests real-time event streaming via WebSocket
 func TestRealTimeEvents_WebSocket(t *testing.T) {
-	testDB := testutil.NewTestDB(t)
-	ctx := testutil.TestContext(t)
-	
-	server := setupTestServer(t, testDB, false)
-	defer server.Close()
-	
-	// Convert HTTP server URL to WebSocket URL
-	wsURL := "ws" + server.URL[4:] + "/ws"
+	env := infrastructure.NewTestEnvironment(t)
+	apiClient := infrastructure.NewAPIClient(t, env.APIURL)
 	
 	t.Run("Real-time Bidding Updates", func(t *testing.T) {
+		env.ResetDatabase()
+		
 		// Create test accounts
-		buyer := createTestAccount(t, ctx, testDB, "buyer", account.TypeBuyer)
-		seller1 := createTestAccount(t, ctx, testDB, "seller1", account.TypeSeller)
-		seller2 := createTestAccount(t, ctx, testDB, "seller2", account.TypeSeller)
+		buyer := createAccountInDB(t, env, "buyer", account.TypeBuyer, 1000.00)
+		seller1 := createAccountInDB(t, env, "seller1", account.TypeSeller, 0.00)
+		seller2 := createAccountInDB(t, env, "seller2", account.TypeSeller, 0.00)
+		
+		// Authenticate accounts
+		buyerAuth := authenticateAccount(t, apiClient, buyer.Email.String())
+		seller1Auth := authenticateAccount(t, apiClient, seller1.Email.String())
+		seller2Auth := authenticateAccount(t, apiClient, seller2.Email.String())
 		
 		// Connect WebSocket clients for both sellers
-		ws1 := connectWebSocket(t, wsURL+"/bidding", seller1.ID)
+		ws1 := infrastructure.NewWebSocketClient(t, env.WSURL+"/ws/bidding")
+		err := ws1.Connect(seller1.ID.String())
+		require.NoError(t, err)
 		defer ws1.Close()
 		
-		ws2 := connectWebSocket(t, wsURL+"/bidding", seller2.ID)
+		ws2 := infrastructure.NewWebSocketClient(t, env.WSURL+"/ws/bidding")
+		err = ws2.Connect(seller2.ID.String())
+		require.NoError(t, err)
 		defer ws2.Close()
 		
 		// Subscribe to auction events
@@ -49,67 +49,83 @@ func TestRealTimeEvents_WebSocket(t *testing.T) {
 		subscribeToAuction(t, ws2, "all")
 		
 		// Create incoming call and start auction
-		incomingCall := simulateIncomingCall(t, server, buyer.ID, "+14155551234", "+18005551234")
-		auction := startAuction(t, server, incomingCall.ID)
+		apiClient.SetToken(buyerAuth.Token)
+		incomingCall := simulateIncomingCall(t, apiClient, "+14155551234", "+18005551234")
+		auction := startAuction(t, apiClient, incomingCall.ID)
 		
 		// Both sellers should receive auction started event
 		event1 := readWebSocketEvent(t, ws1)
 		assert.Equal(t, "auction.started", event1.Type)
-		assert.Equal(t, auction.ID, event1.Data["auction_id"])
+		assert.Equal(t, auction.ID.String(), event1.Data["auction_id"])
 		
 		event2 := readWebSocketEvent(t, ws2)
 		assert.Equal(t, "auction.started", event2.Type)
-		assert.Equal(t, auction.ID, event2.Data["auction_id"])
+		assert.Equal(t, auction.ID.String(), event2.Data["auction_id"])
 		
 		// Seller 1 places bid
-		bid1 := placeBid(t, server, auction.ID, seller1.ID, 5.50)
+		apiClient.SetToken(seller1Auth.Token)
+		bid1 := placeBid(t, apiClient, auction.ID, 5.50)
 		
 		// Both sellers should receive bid placed event
 		bidEvent1 := readWebSocketEvent(t, ws1)
 		assert.Equal(t, "bid.placed", bidEvent1.Type)
-		assert.Equal(t, bid1.ID, bidEvent1.Data["bid_id"])
+		assert.Equal(t, bid1.ID.String(), bidEvent1.Data["bid_id"])
 		
 		bidEvent2 := readWebSocketEvent(t, ws2)
 		assert.Equal(t, "bid.placed", bidEvent2.Type)
 		
 		// Seller 2 places higher bid
-		bid2 := placeBid(t, server, auction.ID, seller2.ID, 6.25)
+		apiClient.SetToken(seller2Auth.Token)
+		bid2 := placeBid(t, apiClient, auction.ID, 6.25)
 		
-		// Both should receive outbid notification
+		// Seller 1 should receive outbid notification
 		outbidEvent := readWebSocketEvent(t, ws1)
 		assert.Equal(t, "bid.outbid", outbidEvent.Type)
-		assert.Equal(t, bid1.ID, outbidEvent.Data["previous_bid_id"])
-		assert.Equal(t, bid2.ID, outbidEvent.Data["new_bid_id"])
+		assert.Equal(t, bid1.ID.String(), outbidEvent.Data["previous_bid_id"])
+		assert.Equal(t, bid2.ID.String(), outbidEvent.Data["new_bid_id"])
 		
 		// Complete auction
-		result := completeAuction(t, server, auction.ID)
+		apiClient.SetToken(buyerAuth.Token)
+		result := completeAuction(t, apiClient, auction.ID)
 		
 		// Winner should receive won event
 		wonEvent := readWebSocketEvent(t, ws2)
 		assert.Equal(t, "auction.won", wonEvent.Type)
-		assert.Equal(t, result.ID, wonEvent.Data["auction_id"])
-		assert.Equal(t, bid2.ID, wonEvent.Data["winning_bid_id"])
+		assert.Equal(t, result.ID.String(), wonEvent.Data["auction_id"])
+		assert.Equal(t, bid2.ID.String(), wonEvent.Data["winning_bid_id"])
 		
 		// Loser should receive lost event
 		lostEvent := readWebSocketEvent(t, ws1)
 		assert.Equal(t, "auction.lost", lostEvent.Type)
-		assert.Equal(t, result.ID, lostEvent.Data["auction_id"])
+		assert.Equal(t, result.ID.String(), lostEvent.Data["auction_id"])
 	})
 	
 	t.Run("Call State Updates", func(t *testing.T) {
-		buyer := createTestAccount(t, ctx, testDB, "buyer", account.TypeBuyer)
-		seller := createTestAccount(t, ctx, testDB, "seller", account.TypeSeller)
+		env.ResetDatabase()
+		
+		buyer := createAccountInDB(t, env, "buyer", account.TypeBuyer, 1000.00)
+		seller := createAccountInDB(t, env, "seller", account.TypeSeller, 0.00)
+		
+		buyerAuth := authenticateAccount(t, apiClient, buyer.Email.String())
+		sellerAuth := authenticateAccount(t, apiClient, seller.Email.String())
 		
 		// Connect WebSocket for call events
-		wsCall := connectWebSocket(t, wsURL+"/calls", seller.ID)
+		wsCall := infrastructure.NewWebSocketClient(t, env.WSURL+"/ws/calls")
+		err := wsCall.Connect(seller.ID.String())
+		require.NoError(t, err)
 		defer wsCall.Close()
 		
 		// Create and route call
-		incomingCall := simulateIncomingCall(t, server, buyer.ID, "+14155551234", "+18005551234")
-		auction := startAuction(t, server, incomingCall.ID)
-		placeBid(t, server, auction.ID, seller.ID, 5.00)
-		completeAuction(t, server, auction.ID)
-		routedCall := routeCall(t, server, incomingCall.ID)
+		apiClient.SetToken(buyerAuth.Token)
+		incomingCall := simulateIncomingCall(t, apiClient, "+14155551234", "+18005551234")
+		auction := startAuction(t, apiClient, incomingCall.ID)
+		
+		apiClient.SetToken(sellerAuth.Token)
+		placeBid(t, apiClient, auction.ID, 5.00)
+		
+		apiClient.SetToken(buyerAuth.Token)
+		completeAuction(t, apiClient, auction.ID)
+		routedCall := routeCall(t, apiClient, incomingCall.ID)
 		
 		// Subscribe to call updates
 		subscribeToCall(t, wsCall, routedCall.ID)
@@ -121,28 +137,30 @@ func TestRealTimeEvents_WebSocket(t *testing.T) {
 		}
 		
 		for _, status := range statuses {
-			updateCallStatus(t, server, routedCall.ID, status)
+			updateCallStatus(t, apiClient, routedCall.ID, status)
 			
 			event := readWebSocketEvent(t, wsCall)
 			assert.Equal(t, "call.status_changed", event.Type)
-			assert.Equal(t, routedCall.ID, event.Data["call_id"])
+			assert.Equal(t, routedCall.ID.String(), event.Data["call_id"])
 			assert.Equal(t, status.String(), event.Data["status"])
 		}
 		
 		// Complete call
-		completedCall := completeCall(t, server, routedCall.ID, 180)
+		completedCall := completeCall(t, apiClient, routedCall.ID, 180)
 		
 		// Verify completion event
 		completeEvent := readWebSocketEvent(t, wsCall)
 		assert.Equal(t, "call.completed", completeEvent.Type)
-		assert.Equal(t, completedCall.ID, completeEvent.Data["call_id"])
-		assert.Equal(t, 180, int(completeEvent.Data["duration"].(float64)))
+		assert.Equal(t, completedCall.ID.String(), completeEvent.Data["call_id"])
+		assert.Equal(t, float64(180), completeEvent.Data["duration"])
 	})
 	
 	t.Run("Multiple Concurrent Connections", func(t *testing.T) {
+		env.ResetDatabase()
+		
 		// Test that system handles many concurrent WebSocket connections
 		numClients := 50
-		clients := make([]*websocket.Conn, numClients)
+		clients := make([]*infrastructure.WebSocketClient, numClients)
 		
 		// Connect all clients
 		var wg sync.WaitGroup
@@ -152,7 +170,9 @@ func TestRealTimeEvents_WebSocket(t *testing.T) {
 				defer wg.Done()
 				
 				sellerID := uuid.New()
-				ws := connectWebSocket(t, wsURL+"/bidding", sellerID)
+				ws := infrastructure.NewWebSocketClient(t, env.WSURL+"/ws/bidding")
+				err := ws.Connect(sellerID.String())
+				require.NoError(t, err)
 				clients[idx] = ws
 				
 				// Subscribe to events
@@ -171,14 +191,17 @@ func TestRealTimeEvents_WebSocket(t *testing.T) {
 		}()
 		
 		// Create event that should broadcast to all
-		buyer := createTestAccount(t, ctx, testDB, "buyer", account.TypeBuyer)
-		incomingCall := simulateIncomingCall(t, server, buyer.ID, "+14155551234", "+18005551234")
-		auction := startAuction(t, server, incomingCall.ID)
+		buyer := createAccountInDB(t, env, "buyer", account.TypeBuyer, 1000.00)
+		buyerAuth := authenticateAccount(t, apiClient, buyer.Email.String())
+		
+		apiClient.SetToken(buyerAuth.Token)
+		incomingCall := simulateIncomingCall(t, apiClient, "+14155551234", "+18005551234")
+		_ = startAuction(t, apiClient, incomingCall.ID)
 		
 		// Verify all clients receive the event
 		received := make(chan bool, numClients)
 		for i, ws := range clients {
-			go func(idx int, conn *websocket.Conn) {
+			go func(idx int, conn *infrastructure.WebSocketClient) {
 				event := readWebSocketEvent(t, conn)
 				if event.Type == "auction.started" {
 					received <- true
@@ -202,17 +225,14 @@ func TestRealTimeEvents_WebSocket(t *testing.T) {
 	})
 }
 
-// TestRealTimeEvents_Heartbeat tests WebSocket heartbeat and reconnection
 func TestRealTimeEvents_Heartbeat(t *testing.T) {
-	testDB := testutil.NewTestDB(t)
-	server := setupTestServer(t, testDB, false)
-	defer server.Close()
-	
-	wsURL := "ws" + server.URL[4:] + "/ws"
+	env := infrastructure.NewTestEnvironment(t)
 	
 	t.Run("Heartbeat Keeps Connection Alive", func(t *testing.T) {
 		sellerID := uuid.New()
-		ws := connectWebSocket(t, wsURL+"/bidding", sellerID)
+		ws := infrastructure.NewWebSocketClient(t, env.WSURL+"/ws/bidding")
+		err := ws.Connect(sellerID.String())
+		require.NoError(t, err)
 		defer ws.Close()
 		
 		// Send periodic pings
@@ -220,14 +240,14 @@ func TestRealTimeEvents_Heartbeat(t *testing.T) {
 		defer ticker.Stop()
 		
 		pongReceived := make(chan bool)
-		ws.SetPongHandler(func(string) error {
+		ws.Conn.SetPongHandler(func(string) error {
 			pongReceived <- true
 			return nil
 		})
 		
 		// Send ping and expect pong
 		for i := 0; i < 3; i++ {
-			err := ws.WriteMessage(websocket.PingMessage, []byte{})
+			err := ws.Conn.WriteMessage(websocket.PingMessage, []byte{})
 			require.NoError(t, err)
 			
 			select {
@@ -241,17 +261,19 @@ func TestRealTimeEvents_Heartbeat(t *testing.T) {
 	
 	t.Run("Connection Timeout Without Heartbeat", func(t *testing.T) {
 		sellerID := uuid.New()
-		ws := connectWebSocket(t, wsURL+"/bidding", sellerID)
+		ws := infrastructure.NewWebSocketClient(t, env.WSURL+"/ws/bidding")
+		err := ws.Connect(sellerID.String())
+		require.NoError(t, err)
 		defer ws.Close()
 		
 		// Don't send any heartbeats
 		// Connection should timeout after configured period
 		
 		// Try to read, should eventually get close message
-		ws.SetReadDeadline(time.Now().Add(30 * time.Second))
+		ws.Conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 		
 		for {
-			_, _, err := ws.ReadMessage()
+			_, _, err := ws.Conn.ReadMessage()
 			if err != nil {
 				// Verify it's a close error
 				closeErr, ok := err.(*websocket.CloseError)
@@ -264,41 +286,25 @@ func TestRealTimeEvents_Heartbeat(t *testing.T) {
 }
 
 // Helper functions for WebSocket testing
-
-func connectWebSocket(t *testing.T, wsURL string, clientID uuid.UUID) *websocket.Conn {
-	u, err := url.Parse(wsURL)
-	require.NoError(t, err)
-	
-	// Add auth token or client ID to query params
-	q := u.Query()
-	q.Set("client_id", clientID.String())
-	u.RawQuery = q.Encode()
-	
-	ws, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	require.NoError(t, err)
-	
-	return ws
-}
-
-func subscribeToAuction(t *testing.T, ws *websocket.Conn, filter string) {
+func subscribeToAuction(t *testing.T, ws *infrastructure.WebSocketClient, filter string) {
 	msg := map[string]interface{}{
 		"action": "subscribe",
 		"type":   "auction",
 		"filter": filter,
 	}
 	
-	err := ws.WriteJSON(msg)
+	err := ws.Send(msg)
 	require.NoError(t, err)
 }
 
-func subscribeToCall(t *testing.T, ws *websocket.Conn, callID uuid.UUID) {
+func subscribeToCall(t *testing.T, ws *infrastructure.WebSocketClient, callID uuid.UUID) {
 	msg := map[string]interface{}{
 		"action":  "subscribe",
 		"type":    "call",
-		"call_id": callID,
+		"call_id": callID.String(),
 	}
 	
-	err := ws.WriteJSON(msg)
+	err := ws.Send(msg)
 	require.NoError(t, err)
 }
 
@@ -308,13 +314,13 @@ type WebSocketEvent struct {
 	Data      map[string]interface{} `json:"data"`
 }
 
-func readWebSocketEvent(t *testing.T, ws *websocket.Conn) WebSocketEvent {
+func readWebSocketEvent(t *testing.T, ws *infrastructure.WebSocketClient) WebSocketEvent {
 	var event WebSocketEvent
 	
 	// Set read deadline to avoid hanging forever
-	ws.SetReadDeadline(time.Now().Add(5 * time.Second))
+	ws.Conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	
-	err := ws.ReadJSON(&event)
+	err := ws.Receive(&event)
 	require.NoError(t, err)
 	
 	return event

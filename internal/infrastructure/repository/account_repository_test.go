@@ -62,7 +62,7 @@ func TestAccountRepository_GetByID(t *testing.T) {
 	t.Run("get_non_existent_account", func(t *testing.T) {
 		nonExistentID := uuid.New()
 		retrieved, err := repo.GetByID(ctx, nonExistentID)
-		
+
 		assert.Error(t, err)
 		assert.Nil(t, retrieved)
 		assert.Contains(t, err.Error(), "account not found")
@@ -80,14 +80,14 @@ func TestAccountRepository_GetByID(t *testing.T) {
 
 		retrieved, err := repo.GetByID(ctx, testAccount.ID)
 		require.NoError(t, err)
-		
+
 		assert.Nil(t, retrieved.Company)
 		assert.Nil(t, retrieved.LastLoginAt)
 	})
 
 	t.Run("get_various_account_types", func(t *testing.T) {
 		scenarios := fixtures.NewAccountScenarios(t, testDB)
-		
+
 		testCases := []struct {
 			name    string
 			account *account.Account
@@ -106,7 +106,7 @@ func TestAccountRepository_GetByID(t *testing.T) {
 
 				retrieved, err := repo.GetByID(ctx, tc.account.ID)
 				require.NoError(t, err)
-				
+
 				assert.Equal(t, tc.account.Type, retrieved.Type)
 				assert.Equal(t, tc.account.Status, retrieved.Status)
 				assert.Equal(t, tc.account.Balance, retrieved.Balance)
@@ -125,7 +125,7 @@ func TestAccountRepository_UpdateBalance(t *testing.T) {
 			WithEmail(fixtures.GenerateEmail(t, "increasebalance")).
 			WithBalance(100.00).
 			Build(t)
-		
+
 		err := createAccountInDB(t, testDB, testAccount)
 		require.NoError(t, err)
 
@@ -144,7 +144,7 @@ func TestAccountRepository_UpdateBalance(t *testing.T) {
 			WithEmail(fixtures.GenerateEmail(t, "decreasebalance")).
 			WithBalance(100.00).
 			Build(t)
-		
+
 		err := createAccountInDB(t, testDB, testAccount)
 		require.NoError(t, err)
 
@@ -164,7 +164,7 @@ func TestAccountRepository_UpdateBalance(t *testing.T) {
 			WithBalance(0.00).
 			WithCreditLimit(100.00).
 			Build(t)
-		
+
 		err := createAccountInDB(t, testDB, testAccount)
 		require.NoError(t, err)
 
@@ -185,7 +185,7 @@ func TestAccountRepository_UpdateBalance(t *testing.T) {
 			WithBalance(0.00).
 			WithCreditLimit(100.00).
 			Build(t)
-		
+
 		err := createAccountInDB(t, testDB, testAccount)
 		require.NoError(t, err)
 
@@ -201,7 +201,7 @@ func TestAccountRepository_UpdateBalance(t *testing.T) {
 	t.Run("update_non_existent_account", func(t *testing.T) {
 		nonExistentID := uuid.New()
 		err := repo.UpdateBalance(ctx, nonExistentID, 100.00)
-		
+
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "account not found")
 	})
@@ -211,14 +211,14 @@ func TestAccountRepository_UpdateBalance(t *testing.T) {
 			WithEmail(fixtures.GenerateEmail(t, "concurrent")).
 			WithBalance(1000.00).
 			Build(t)
-		
+
 		err := createAccountInDB(t, testDB, testAccount)
 		require.NoError(t, err)
 
 		// Perform concurrent updates
 		numGoroutines := 10
 		updateAmount := 10.00
-		
+
 		var wg sync.WaitGroup
 		successCount := int32(0)
 		serializationErrors := int32(0)
@@ -231,7 +231,7 @@ func TestAccountRepository_UpdateBalance(t *testing.T) {
 				if err != nil {
 					// PostgreSQL serialization errors are expected in concurrent scenarios
 					if strings.Contains(err.Error(), "could not serialize access") ||
-					   strings.Contains(err.Error(), "deadlock detected") {
+						strings.Contains(err.Error(), "deadlock detected") {
 						atomic.AddInt32(&serializationErrors, 1)
 					} else {
 						// Unexpected error
@@ -247,7 +247,7 @@ func TestAccountRepository_UpdateBalance(t *testing.T) {
 
 		// At least some updates should succeed
 		assert.Greater(t, int(successCount), 0, "At least some concurrent updates should succeed")
-		
+
 		// Verify final balance matches successful updates
 		finalBalance, err := repo.GetBalance(ctx, testAccount.ID)
 		require.NoError(t, err)
@@ -261,7 +261,7 @@ func TestAccountRepository_UpdateBalance(t *testing.T) {
 			WithBalance(100.00).
 			WithCreditLimit(50.00).
 			Build(t)
-		
+
 		err := createAccountInDB(t, testDB, testAccount)
 		require.NoError(t, err)
 
@@ -296,7 +296,7 @@ func TestAccountRepository_UpdateBalance(t *testing.T) {
 		// Only one should succeed
 		assert.Equal(t, 1, successes, "Exactly one transaction should succeed")
 		assert.Len(t, errors, 1, "One transaction should fail")
-		
+
 		// Verify final balance
 		finalBalance, err := repo.GetBalance(ctx, testAccount.ID)
 		require.NoError(t, err)
@@ -314,7 +314,7 @@ func TestAccountRepository_GetBalance(t *testing.T) {
 			WithEmail(fixtures.GenerateEmail(t, "positivebalance")).
 			WithBalance(250.50).
 			Build(t)
-		
+
 		err := createAccountInDB(t, testDB, testAccount)
 		require.NoError(t, err)
 
@@ -328,7 +328,7 @@ func TestAccountRepository_GetBalance(t *testing.T) {
 			WithEmail(fixtures.GenerateEmail(t, "zerobalance")).
 			WithBalance(0.00).
 			Build(t)
-		
+
 		err := createAccountInDB(t, testDB, testAccount)
 		require.NoError(t, err)
 
@@ -342,7 +342,7 @@ func TestAccountRepository_GetBalance(t *testing.T) {
 			WithEmail(fixtures.GenerateEmail(t, "negativebalance")).
 			WithBalance(-50.00).
 			Build(t)
-		
+
 		err := createAccountInDB(t, testDB, testAccount)
 		require.NoError(t, err)
 
@@ -354,7 +354,7 @@ func TestAccountRepository_GetBalance(t *testing.T) {
 	t.Run("get_balance_non_existent_account", func(t *testing.T) {
 		nonExistentID := uuid.New()
 		balance, err := repo.GetBalance(ctx, nonExistentID)
-		
+
 		assert.Error(t, err)
 		assert.Equal(t, 0.0, balance)
 		assert.Contains(t, err.Error(), "account not found")
@@ -389,7 +389,7 @@ func TestAccountRepository_PropertyBased(t *testing.T) {
 				WithBalance(1000.00).
 				WithCreditLimit(10000.00). // High limit to avoid hitting it
 				Build(t)
-			
+
 			err := createAccountInDB(t, testDB, testAccount)
 			if err != nil {
 				return false
@@ -403,7 +403,7 @@ func TestAccountRepository_PropertyBased(t *testing.T) {
 					continue
 				}
 				totalChange += amount
-				
+
 				err := repo.UpdateBalance(ctx, testAccount.ID, amount)
 				if err != nil {
 					return false
@@ -438,7 +438,7 @@ func TestAccountRepository_DatabaseConstraints(t *testing.T) {
 			WithEmail(fixtures.GenerateEmail(t, "audittrail")).
 			WithBalance(100.00).
 			Build(t)
-		
+
 		err := createAccountInDB(t, testDB, testAccount)
 		require.NoError(t, err)
 
@@ -451,7 +451,7 @@ func TestAccountRepository_DatabaseConstraints(t *testing.T) {
 		err = testDB.DB().QueryRowContext(ctx,
 			`SELECT COUNT(*) FROM account_transactions WHERE account_id = $1`,
 			testAccount.ID).Scan(&count)
-		
+
 		// If table doesn't exist, that's okay for this test
 		if err == nil {
 			assert.Greater(t, count, 0, "Should have audit trail entries")
@@ -463,15 +463,15 @@ func TestAccountRepository_DatabaseConstraints(t *testing.T) {
 
 func createAccountInDB(t *testing.T, testDB *testutil.TestDB, acc *account.Account) error {
 	t.Helper()
-	
+
 	// Direct SQL insert
 	settingsJSON, err := json.Marshal(acc.Settings)
 	if err != nil {
 		return err
 	}
-	
+
 	// Don't need to marshal ComplianceFlags - use pq.Array for PostgreSQL TEXT[] columns
-	
+
 	_, err = testDB.DB().Exec(`
 		INSERT INTO accounts (
 			id, email, name, company, type, status, phone_number,
@@ -491,7 +491,7 @@ func createAccountInDB(t *testing.T, testDB *testutil.TestDB, acc *account.Accou
 		acc.TCPAConsent, acc.GDPRConsent, pq.Array(acc.ComplianceFlags),
 		acc.QualityMetrics.QualityScore, acc.QualityMetrics.FraudScore, settingsJSON,
 		acc.CreatedAt, acc.UpdatedAt)
-	
+
 	return err
 }
 

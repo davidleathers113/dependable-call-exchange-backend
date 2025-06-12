@@ -3,11 +3,11 @@ package repository
 import (
 	"context"
 
-	"github.com/google/uuid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/service/bidding"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/service/callrouting"
+	"github.com/google/uuid"
 )
 
 // CallRoutingBidRepository adapts bidding.BidRepository to callrouting.BidRepository

@@ -3,11 +3,11 @@ package bid_test
 import (
 	"testing"
 	"time"
-	
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	
+
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil"
@@ -16,13 +16,13 @@ import (
 
 func TestNewBid(t *testing.T) {
 	tests := []struct {
-		name      string
-		callID    uuid.UUID
-		buyerID   uuid.UUID
-		sellerID  uuid.UUID
-		amount    values.Money
-		criteria  bid.BidCriteria
-		validate  func(t *testing.T, b *bid.Bid)
+		name     string
+		callID   uuid.UUID
+		buyerID  uuid.UUID
+		sellerID uuid.UUID
+		amount   values.Money
+		criteria bid.BidCriteria
+		validate func(t *testing.T, b *bid.Bid)
 	}{
 		{
 			name:     "creates bid with valid data",
@@ -72,7 +72,7 @@ func TestNewBid(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			b, err := bid.NewBid(tt.callID, tt.buyerID, tt.sellerID, tt.amount, tt.criteria)
@@ -85,7 +85,7 @@ func TestNewBid(t *testing.T) {
 
 func TestBid_Accept(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
-	
+
 	tests := []struct {
 		name     string
 		setup    func(*testutil.TestDB, *testing.T) *bid.Bid
@@ -131,15 +131,15 @@ func TestBid_Accept(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			b := tt.setup(testDB, t)
 			oldUpdatedAt := b.UpdatedAt
-			
+
 			time.Sleep(10 * time.Millisecond)
 			b.Accept()
-			
+
 			tt.validate(t, b, oldUpdatedAt)
 		})
 	}
@@ -147,7 +147,7 @@ func TestBid_Accept(t *testing.T) {
 
 func TestBid_Reject(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
-	
+
 	tests := []struct {
 		name     string
 		setup    func(*testutil.TestDB, *testing.T) *bid.Bid
@@ -177,15 +177,15 @@ func TestBid_Reject(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			b := tt.setup(testDB, t)
 			oldUpdatedAt := b.UpdatedAt
-			
+
 			time.Sleep(10 * time.Millisecond)
 			b.Reject()
-			
+
 			tt.validate(t, b)
 			assert.True(t, b.UpdatedAt.After(oldUpdatedAt))
 		})
@@ -206,7 +206,7 @@ func TestStatus_String(t *testing.T) {
 		{bid.StatusCanceled, "canceled"},
 		{bid.Status(999), "unknown"},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.status.String())
@@ -216,36 +216,36 @@ func TestStatus_String(t *testing.T) {
 
 func TestBid_Expiration(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
-	
+
 	t.Run("default expiration is 5 minutes", func(t *testing.T) {
 		b, err := bid.NewBid(uuid.New(), uuid.New(), uuid.New(), values.MustNewMoneyFromFloat(10.00, "USD"), bid.BidCriteria{})
 		require.NoError(t, err)
-		
+
 		expectedExpiry := b.PlacedAt.Add(5 * time.Minute)
 		assert.WithinDuration(t, expectedExpiry, b.ExpiresAt, time.Second)
 	})
-	
+
 	t.Run("custom expiration time", func(t *testing.T) {
 		b := fixtures.NewBidBuilder(testDB).
 			WithExpiration(10 * time.Minute).
 			Build(t)
-		
+
 		expectedExpiry := b.PlacedAt.Add(10 * time.Minute)
 		assert.Equal(t, expectedExpiry, b.ExpiresAt)
 	})
-	
+
 	t.Run("expired bid detection", func(t *testing.T) {
 		b := fixtures.NewBidBuilder(testDB).
 			WithExpiration(-1 * time.Minute). // Already expired
 			Build(t)
-		
+
 		assert.True(t, time.Now().After(b.ExpiresAt))
 	})
 }
 
 func TestBid_QualityMetrics(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
-	
+
 	t.Run("high quality bid", func(t *testing.T) {
 		b := fixtures.NewBidBuilder(testDB).
 			WithQuality(values.QualityMetrics{
@@ -255,13 +255,13 @@ func TestBid_QualityMetrics(t *testing.T) {
 				HistoricalRating: 4.9,
 			}).
 			Build(t)
-		
+
 		assert.Equal(t, 0.30, b.Quality.ConversionRate)
 		assert.Equal(t, 300, b.Quality.AverageCallTime)
 		assert.Equal(t, 0.01, b.Quality.FraudScore)
 		assert.Equal(t, 4.9, b.Quality.HistoricalRating)
 	})
-	
+
 	t.Run("quality affects ranking", func(t *testing.T) {
 		highQuality := fixtures.NewBidBuilder(testDB).
 			WithAmount(10.00).
@@ -271,7 +271,7 @@ func TestBid_QualityMetrics(t *testing.T) {
 				HistoricalRating: 4.8,
 			}).
 			Build(t)
-		
+
 		lowQuality := fixtures.NewBidBuilder(testDB).
 			WithAmount(12.00). // Higher bid amount
 			WithQuality(values.QualityMetrics{
@@ -280,7 +280,7 @@ func TestBid_QualityMetrics(t *testing.T) {
 				HistoricalRating: 2.5,
 			}).
 			Build(t)
-		
+
 		// In a real auction, high quality might win despite lower amount
 		assert.Greater(t, highQuality.Quality.ConversionRate, lowQuality.Quality.ConversionRate)
 		assert.Less(t, highQuality.Quality.FraudScore, lowQuality.Quality.FraudScore)
@@ -289,7 +289,7 @@ func TestBid_QualityMetrics(t *testing.T) {
 
 func TestBid_GeographicTargeting(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
-	
+
 	t.Run("country level targeting", func(t *testing.T) {
 		b := fixtures.NewBidBuilder(testDB).
 			WithCriteria(bid.BidCriteria{
@@ -298,11 +298,11 @@ func TestBid_GeographicTargeting(t *testing.T) {
 				},
 			}).
 			Build(t)
-		
+
 		assert.Equal(t, 3, len(b.Criteria.Geography.Countries))
 		assert.Contains(t, b.Criteria.Geography.Countries, "US")
 	})
-	
+
 	t.Run("state level targeting", func(t *testing.T) {
 		b := fixtures.NewBidBuilder(testDB).
 			WithCriteria(bid.BidCriteria{
@@ -311,10 +311,10 @@ func TestBid_GeographicTargeting(t *testing.T) {
 				},
 			}).
 			Build(t)
-		
+
 		assert.Equal(t, 4, len(b.Criteria.Geography.States))
 	})
-	
+
 	t.Run("city level targeting with radius", func(t *testing.T) {
 		radius := 50.0
 		b := fixtures.NewBidBuilder(testDB).
@@ -325,7 +325,7 @@ func TestBid_GeographicTargeting(t *testing.T) {
 				},
 			}).
 			Build(t)
-		
+
 		assert.Equal(t, 2, len(b.Criteria.Geography.Cities))
 		assert.NotNil(t, b.Criteria.Geography.Radius)
 		assert.Equal(t, 50.0, *b.Criteria.Geography.Radius)
@@ -334,7 +334,7 @@ func TestBid_GeographicTargeting(t *testing.T) {
 
 func TestBid_TimeWindowTargeting(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
-	
+
 	t.Run("business hours targeting", func(t *testing.T) {
 		b := fixtures.NewBidBuilder(testDB).
 			WithCriteria(bid.BidCriteria{
@@ -346,14 +346,14 @@ func TestBid_TimeWindowTargeting(t *testing.T) {
 				},
 			}).
 			Build(t)
-		
+
 		assert.Equal(t, 9, b.Criteria.TimeWindow.StartHour)
 		assert.Equal(t, 17, b.Criteria.TimeWindow.EndHour)
 		assert.Equal(t, 5, len(b.Criteria.TimeWindow.Days))
 		assert.NotContains(t, b.Criteria.TimeWindow.Days, "Sat")
 		assert.NotContains(t, b.Criteria.TimeWindow.Days, "Sun")
 	})
-	
+
 	t.Run("24/7 targeting", func(t *testing.T) {
 		b := fixtures.NewBidBuilder(testDB).
 			WithCriteria(bid.BidCriteria{
@@ -365,7 +365,7 @@ func TestBid_TimeWindowTargeting(t *testing.T) {
 				},
 			}).
 			Build(t)
-		
+
 		assert.Equal(t, 0, b.Criteria.TimeWindow.StartHour)
 		assert.Equal(t, 23, b.Criteria.TimeWindow.EndHour)
 		assert.Equal(t, 7, len(b.Criteria.TimeWindow.Days))
@@ -376,7 +376,7 @@ func TestBid_Scenarios(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
 	scenarios := fixtures.NewBidScenarios(t, testDB)
 	callID := uuid.New()
-	
+
 	t.Run("high value bid", func(t *testing.T) {
 		b := scenarios.HighValueBid(callID)
 		expectedAmount := values.MustNewMoneyFromFloat(25.00, values.USD)
@@ -384,7 +384,7 @@ func TestBid_Scenarios(t *testing.T) {
 		assert.Greater(t, b.Quality.ConversionRate, 0.20)
 		assert.Contains(t, b.Criteria.Keywords, "premium")
 	})
-	
+
 	t.Run("low value bid", func(t *testing.T) {
 		b := scenarios.LowValueBid(callID)
 		expectedAmount := values.MustNewMoneyFromFloat(2.50, values.USD)
@@ -392,29 +392,29 @@ func TestBid_Scenarios(t *testing.T) {
 		assert.Less(t, b.Quality.ConversionRate, 0.10)
 		assert.Equal(t, "America/Chicago", b.Criteria.TimeWindow.Timezone)
 	})
-	
+
 	t.Run("expired bid", func(t *testing.T) {
 		b := scenarios.ExpiredBid(callID)
 		assert.Equal(t, bid.StatusExpired, b.Status)
 		assert.True(t, time.Now().After(b.ExpiresAt))
 	})
-	
+
 	t.Run("winning bid", func(t *testing.T) {
 		b := scenarios.WinningBid(callID)
 		assert.Equal(t, bid.StatusWon, b.Status)
 		assert.NotNil(t, b.AcceptedAt)
 	})
-	
+
 	t.Run("competing bids", func(t *testing.T) {
 		bids := scenarios.CompetingBids(callID, 5)
 		assert.Len(t, bids, 5)
-		
+
 		// Verify amounts increase
 		for i := 1; i < len(bids); i++ {
 			assert.Equal(t, 1, bids[i].Amount.Compare(bids[i-1].Amount),
 				"Bid %d amount should be greater than bid %d", i, i-1)
 		}
-		
+
 		// All bids should be for the same call
 		for _, b := range bids {
 			assert.Equal(t, callID, b.CallID)
@@ -456,7 +456,7 @@ func TestNewAuction(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a, err := bid.NewAuction(tt.callID, values.MustNewMoneyFromFloat(tt.reservePrice, "USD"))
@@ -479,7 +479,7 @@ func TestAuctionStatus_String(t *testing.T) {
 		{bid.AuctionStatusExpired, "expired"},
 		{bid.AuctionStatus(999), "unknown"},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.status.String())
@@ -489,51 +489,51 @@ func TestAuctionStatus_String(t *testing.T) {
 
 func TestBid_EdgeCases(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
-	
+
 	t.Run("zero amount bid", func(t *testing.T) {
 		b := fixtures.NewBidBuilder(testDB).
 			WithAmount(0.00).
 			Build(t)
-		
+
 		expectedAmount := values.MustNewMoneyFromFloat(0.00, values.USD)
 		assert.Equal(t, expectedAmount, b.Amount)
 	})
-	
+
 	t.Run("very high amount bid", func(t *testing.T) {
 		b := fixtures.NewBidBuilder(testDB).
 			WithAmount(999999.99).
 			Build(t)
-		
+
 		expectedAmount := values.MustNewMoneyFromFloat(999999.99, values.USD)
 		assert.Equal(t, expectedAmount, b.Amount)
 	})
-	
+
 	t.Run("accepting already won bid", func(t *testing.T) {
 		b := fixtures.NewBidBuilder(testDB).
 			WithStatus(bid.StatusWon).
 			Build(t)
-		
+
 		firstAcceptedAt := time.Now()
 		b.AcceptedAt = &firstAcceptedAt
-		
+
 		time.Sleep(10 * time.Millisecond)
 		b.Accept()
-		
+
 		// Should update the accepted time
 		assert.NotEqual(t, firstAcceptedAt, *b.AcceptedAt)
 		assert.True(t, b.AcceptedAt.After(firstAcceptedAt))
 	})
-	
+
 	t.Run("rejecting already lost bid", func(t *testing.T) {
 		b := fixtures.NewBidBuilder(testDB).
 			WithStatus(bid.StatusLost).
 			Build(t)
-		
+
 		oldUpdatedAt := b.UpdatedAt
-		
+
 		time.Sleep(10 * time.Millisecond)
 		b.Reject()
-		
+
 		assert.Equal(t, bid.StatusLost, b.Status)
 		assert.True(t, b.UpdatedAt.After(oldUpdatedAt))
 	})
@@ -541,34 +541,34 @@ func TestBid_EdgeCases(t *testing.T) {
 
 func TestBid_ConcurrentModifications(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
-	
+
 	t.Run("concurrent accept and reject", func(t *testing.T) {
 		b := fixtures.NewBidBuilder(testDB).
 			WithStatus(bid.StatusActive).
 			Build(t)
-		
+
 		done := make(chan bool, 2)
-		
+
 		go func() {
 			b.Accept()
 			done <- true
 		}()
-		
+
 		go func() {
 			b.Reject()
 			done <- true
 		}()
-		
+
 		<-done
 		<-done
-		
+
 		// One status should have won
 		assert.Contains(t, []bid.Status{bid.StatusWon, bid.StatusLost}, b.Status)
 	})
 }
 
 func TestBid_Performance(t *testing.T) {
-	
+
 	t.Run("bid creation performance", func(t *testing.T) {
 		criteria := bid.BidCriteria{
 			CallType: []string{"inbound"},
@@ -577,17 +577,17 @@ func TestBid_Performance(t *testing.T) {
 				States:    []string{"CA", "TX", "NY"},
 			},
 		}
-		
+
 		start := time.Now()
 		count := 10000
-		
+
 		for i := 0; i < count; i++ {
 			_, _ = bid.NewBid(uuid.New(), uuid.New(), uuid.New(), values.MustNewMoneyFromFloat(10.00, "USD"), criteria)
 		}
-		
+
 		elapsed := time.Since(start)
 		perBid := elapsed / time.Duration(count)
-		
+
 		assert.Less(t, perBid, 20*time.Microsecond,
 			"Bid creation took %v per bid, expected < 20µs", perBid)
 	})

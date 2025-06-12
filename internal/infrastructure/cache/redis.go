@@ -146,7 +146,7 @@ func (r *redisCache) Expire(ctx context.Context, key string, ttl time.Duration) 
 			zap.Error(err))
 		return fmt.Errorf("redis expire failed: %w", err)
 	}
-	
+
 	// Redis Expire returns false if key doesn't exist
 	if !result {
 		return ErrCacheKeyNotFound{Key: key}

@@ -28,8 +28,10 @@ type Service interface {
 
 // MLEngine defines the machine learning engine interface
 type MLEngine interface {
-	// Predict runs fraud prediction on features
-	Predict(ctx context.Context, features map[string]interface{}) (*Prediction, error)
+	// Predict runs fraud prediction on typed features
+	Predict(ctx context.Context, features MLFeatures) (*Prediction, error)
+	// PredictLegacy runs fraud prediction on legacy features (backwards compatibility)
+	PredictLegacy(ctx context.Context, features map[string]interface{}) (*Prediction, error)
 	// Train updates the model with new data
 	Train(ctx context.Context, samples []*TrainingSample) error
 	// GetModelMetrics returns current model performance
@@ -38,8 +40,10 @@ type MLEngine interface {
 
 // RuleEngine defines the rule-based fraud detection interface
 type RuleEngine interface {
-	// Evaluate runs rules against data
-	Evaluate(ctx context.Context, data map[string]interface{}) (*RuleResult, error)
+	// Evaluate runs rules against typed features
+	Evaluate(ctx context.Context, features MLFeatures) (*RuleResult, error)
+	// EvaluateLegacy runs rules against legacy data (backwards compatibility)
+	EvaluateLegacy(ctx context.Context, data map[string]interface{}) (*RuleResult, error)
 	// AddRule adds a new fraud detection rule
 	AddRule(rule *Rule) error
 	// RemoveRule removes a fraud detection rule
@@ -82,41 +86,47 @@ type BlacklistChecker interface {
 
 // FraudCheckResult represents the outcome of a fraud check
 type FraudCheckResult struct {
-	ID           uuid.UUID
-	EntityID     uuid.UUID
-	EntityType   string // "call", "bid", "account"
-	Timestamp    time.Time
-	Approved     bool
-	RiskScore    float64 // 0.0 - 1.0
-	Confidence   float64 // 0.0 - 1.0
-	Reasons      []string
-	Flags        []FraudFlag
-	RequiresMFA  bool
+	ID             uuid.UUID
+	EntityID       uuid.UUID
+	EntityType     string // "call", "bid", "account"
+	Timestamp      time.Time
+	Approved       bool
+	RiskScore      float64 // 0.0 - 1.0
+	Confidence     float64 // 0.0 - 1.0
+	Reasons        []string
+	Flags          []FraudFlag
+	RequiresMFA    bool
 	RequiresReview bool
-	Metadata     map[string]interface{}
+	Metadata       FraudMetadata
+	// Legacy field for backwards compatibility
+	MetadataLegacy map[string]interface{} `json:"metadata_legacy,omitempty"`
 }
 
 // FraudFlag represents a specific fraud indicator
 type FraudFlag struct {
-	Type        string  // "velocity", "pattern", "blacklist", "ml_anomaly"
-	Severity    string  // "low", "medium", "high", "critical"
+	Type        string        // "velocity", "pattern", "blacklist", "ml_anomaly"
+	Severity    FraudSeverity // "low", "medium", "high", "critical"
 	Description string
 	Score       float64
-	Evidence    map[string]interface{}
+	Evidence    []FraudEvidence
+	// Legacy field for backwards compatibility
+	EvidenceLegacy map[string]interface{} `json:"evidence_legacy,omitempty"`
 }
 
 // FraudReport represents a confirmed fraud report
 type FraudReport struct {
-	ID           uuid.UUID
-	EntityID     uuid.UUID
-	EntityType   string
-	ReportedAt   time.Time
-	ReportedBy   uuid.UUID
-	FraudType    string
-	Description  string
-	Evidence     map[string]interface{}
-	ActionTaken  string
-	Status       string // "pending", "confirmed", "false_positive"
+	ID          uuid.UUID
+	EntityID    uuid.UUID
+	EntityType  string
+	ReportedAt  time.Time
+	ReportedBy  uuid.UUID
+	FraudType   string
+	Description string
+	Evidence    []FraudEvidence
+	ActionTaken string
+	Status      string // "pending", "confirmed", "false_positive"
+	// Legacy field for backwards compatibility
+	EvidenceLegacy map[string]interface{} `json:"evidence_legacy,omitempty"`
 }
 
 // FraudRules represents configurable fraud detection rules
@@ -148,19 +158,21 @@ type Prediction struct {
 
 // TrainingSample represents data for model training
 type TrainingSample struct {
-	Features  map[string]interface{}
+	Features  MLFeatures
 	Label     bool // true = fraud, false = legitimate
 	Weight    float64
 	Timestamp time.Time
+	// Legacy field for backwards compatibility
+	FeaturesLegacy map[string]interface{} `json:"features_legacy,omitempty"`
 }
 
 // ModelMetrics represents ML model performance metrics
 type ModelMetrics struct {
-	Accuracy   float64
-	Precision  float64
-	Recall     float64
-	F1Score    float64
-	AUC        float64
+	Accuracy    float64
+	Precision   float64
+	Recall      float64
+	F1Score     float64
+	AUC         float64
 	LastTrained time.Time
 	SampleCount int
 }
@@ -179,9 +191,11 @@ type Rule struct {
 // Condition represents a rule condition
 type Condition struct {
 	Field    string
-	Operator string // "eq", "gt", "lt", "contains", "regex"
-	Value    interface{}
-	Logic    string // "AND", "OR"
+	Operator ComparisonOperator // "eq", "gt", "lt", "contains", "regex"
+	Value    RuleConditionValue
+	Logic    LogicalOperator // "AND", "OR"
+	// Legacy field for backwards compatibility
+	ValueLegacy interface{} `json:"value_legacy,omitempty"`
 }
 
 // RuleResult represents rule evaluation outcome
@@ -200,7 +214,9 @@ type RiskProfile struct {
 	HistoricalScores []RiskScoreEntry
 	FraudCount       int
 	LastCheckTime    time.Time
-	Attributes       map[string]interface{}
+	Attributes       RiskAttributes
+	// Legacy field for backwards compatibility
+	AttributesLegacy map[string]interface{} `json:"attributes_legacy,omitempty"`
 }
 
 // RiskScoreEntry represents historical risk score
@@ -212,9 +228,9 @@ type RiskScoreEntry struct {
 
 // VelocityResult represents velocity check outcome
 type VelocityResult struct {
-	Passed      bool
-	Count       int
-	TimeWindow  time.Duration
-	Limit       int
+	Passed        bool
+	Count         int
+	TimeWindow    time.Duration
+	Limit         int
 	ViolationType string
 }

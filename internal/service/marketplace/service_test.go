@@ -30,24 +30,24 @@ func uuidPtr(id uuid.UUID) *uuid.UUID {
 // MarketplaceServiceTestSuite encapsulates all marketplace service tests
 type MarketplaceServiceTestSuite struct {
 	suite.Suite
-	ctx                   context.Context
-	orchestrator          *orchestrator
-	callRepo              *mockCallRepository
-	bidRepo               *mockBidRepository
-	accountRepo           *mockAccountRepository
-	buyerRoutingService   *mockBuyerRoutingService
-	sellerDistService     *mockSellerDistributionService
-	biddingService        *mockBiddingService
-	fraudService          *mockFraudService
-	telephonyService      *mockTelephonyService
-	metrics               *mockMarketplaceMetrics
-	config                *OrchestratorConfig
+	ctx                 context.Context
+	orchestrator        *orchestrator
+	callRepo            *mockCallRepository
+	bidRepo             *mockBidRepository
+	accountRepo         *mockAccountRepository
+	buyerRoutingService *mockBuyerRoutingService
+	sellerDistService   *mockSellerDistributionService
+	biddingService      *mockBiddingService
+	fraudService        *mockFraudService
+	telephonyService    *mockTelephonyService
+	metrics             *mockMarketplaceMetrics
+	config              *OrchestratorConfig
 }
 
 // SetupTest runs before each test in the suite
 func (s *MarketplaceServiceTestSuite) SetupTest() {
 	s.ctx = context.Background()
-	
+
 	// Initialize mocks
 	s.callRepo = new(mockCallRepository)
 	s.bidRepo = new(mockBidRepository)
@@ -58,7 +58,7 @@ func (s *MarketplaceServiceTestSuite) SetupTest() {
 	s.fraudService = new(mockFraudService)
 	s.telephonyService = new(mockTelephonyService)
 	s.metrics = new(mockMarketplaceMetrics)
-	
+
 	// Default configuration
 	s.config = &OrchestratorConfig{
 		DefaultAuctionDuration: 30 * time.Second,
@@ -74,7 +74,7 @@ func (s *MarketplaceServiceTestSuite) SetupTest() {
 		MinSellerQualityScore:  5.0,
 		MaxFraudRiskScore:      0.7,
 	}
-	
+
 	// Create orchestrator
 	s.orchestrator = NewOrchestrator(
 		s.callRepo,
@@ -123,12 +123,12 @@ func (s *MarketplaceServiceTestSuite) TestProcessIncomingCall_DirectAssignment_S
 		BuyerID:    &buyerID,
 		Priority:   PriorityNormal,
 	}
-	
+
 	testCall := s.createTestCall(uuid.New(), &buyerID, nil)
 	testCall.FromNumber = values.MustNewPhoneNumber(request.FromNumber)
 	testCall.ToNumber = values.MustNewPhoneNumber(request.ToNumber)
 	testCall.Direction = request.Direction
-	
+
 	routingDecision := &buyer_routing.BuyerRoutingDecision{
 		CallID:    testCall.ID,
 		BidID:     uuid.New(),
@@ -139,13 +139,13 @@ func (s *MarketplaceServiceTestSuite) TestProcessIncomingCall_DirectAssignment_S
 		Reason:    "Direct assignment requested",
 		Timestamp: time.Now(),
 	}
-	
+
 	// Setup expectations
 	s.callRepo.On("Create", s.ctx, mock.AnythingOfType("*call.Call")).Return(nil)
 	s.buyerRoutingService.On("RouteCall", s.ctx, mock.AnythingOfType("uuid.UUID")).Return(routingDecision, nil)
 	s.callRepo.On("Update", s.ctx, mock.AnythingOfType("*call.Call")).Return(nil)
 	s.callRepo.On("GetByID", s.ctx, mock.AnythingOfType("uuid.UUID")).Return(testCall, nil)
-	
+
 	// Mock telephony for direct assignment
 	telephonyResponse := &telephony.CallResponse{
 		CallID:    testCall.ID,
@@ -154,13 +154,13 @@ func (s *MarketplaceServiceTestSuite) TestProcessIncomingCall_DirectAssignment_S
 		StartTime: time.Now(),
 	}
 	s.telephonyService.On("InitiateCall", s.ctx, mock.AnythingOfType("*call.Call")).Return(telephonyResponse, nil)
-	
+
 	s.metrics.On("RecordCallProcessing", s.ctx, mock.AnythingOfType("*marketplace.CallProcessingResult"))
 	s.metrics.On("RecordRoutingDecision", s.ctx, mock.AnythingOfType("*marketplace.RoutingResult"))
-	
+
 	// Act
 	result, err := s.orchestrator.ProcessIncomingCall(s.ctx, request)
-	
+
 	// Assert
 	s.NoError(err)
 	s.NotNil(result)
@@ -182,35 +182,35 @@ func (s *MarketplaceServiceTestSuite) TestProcessIncomingCall_SellerDistribution
 		SellerID:   &sellerID,
 		Priority:   PriorityNormal,
 	}
-	
+
 	testCall := s.createTestCall(uuid.New(), nil, &sellerID)
 	testCall.FromNumber = values.MustNewPhoneNumber(request.FromNumber)
 	testCall.ToNumber = values.MustNewPhoneNumber(request.ToNumber)
 	testCall.Direction = request.Direction
-	
+
 	distributionDecision := &seller_distribution.SellerDistributionDecision{
 		SelectedSellers: []uuid.UUID{uuid.New(), uuid.New()},
 		Algorithm:       "geographic_distribution",
 		Score:           0.8,
 	}
-	
+
 	auctionInfo := &AuctionInfo{
 		ID:        uuid.New(),
 		CallID:    testCall.ID,
 		Status:    "active",
 		StartedAt: time.Now(),
 	}
-	
+
 	// Setup expectations
 	s.callRepo.On("Create", s.ctx, mock.AnythingOfType("*call.Call")).Return(nil)
 	s.callRepo.On("GetByID", s.ctx, mock.AnythingOfType("uuid.UUID")).Return(testCall, nil)
 	s.sellerDistService.On("DistributeCall", s.ctx, mock.AnythingOfType("uuid.UUID")).Return(distributionDecision, nil)
 	s.biddingService.On("StartAuction", s.ctx, mock.AnythingOfType("uuid.UUID"), s.config.DefaultAuctionDuration).Return(auctionInfo, nil)
 	s.metrics.On("RecordCallProcessing", s.ctx, mock.AnythingOfType("*marketplace.CallProcessingResult"))
-	
+
 	// Act
 	result, err := s.orchestrator.ProcessIncomingCall(s.ctx, request)
-	
+
 	// Assert
 	s.NoError(err)
 	s.NotNil(result)
@@ -271,11 +271,11 @@ func (s *MarketplaceServiceTestSuite) TestProcessIncomingCall_ValidationErrors()
 			expectedError: "either seller_id or buyer_id must be provided",
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			result, err := s.orchestrator.ProcessIncomingCall(s.ctx, tc.request)
-			
+
 			s.Error(err)
 			s.Nil(result)
 			s.Contains(err.Error(), tc.expectedError)
@@ -292,9 +292,9 @@ func (s *MarketplaceServiceTestSuite) TestProcessBuyerBid_Success() {
 	callID := uuid.New()
 	buyerID := uuid.New()
 	sellerID := uuid.New() // Marketplace bids require a seller
-	
+
 	buyer := s.createTestAccount(buyerID, account.TypeBuyer, 8.5)
-	
+
 	request := &BidRequest{
 		CallID:   callID,
 		BuyerID:  buyerID,
@@ -303,10 +303,10 @@ func (s *MarketplaceServiceTestSuite) TestProcessBuyerBid_Success() {
 		Criteria: bid.BidCriteria{
 			CallType: []string{"inbound"},
 		},
-		Quality: buyer.QualityMetrics,
+		Quality:   buyer.QualityMetrics,
 		ExpiresAt: time.Now().Add(time.Hour),
 	}
-	
+
 	fraudCheckResult := &fraud.FraudCheckResult{
 		ID:         uuid.New(),
 		EntityID:   buyerID,
@@ -316,7 +316,7 @@ func (s *MarketplaceServiceTestSuite) TestProcessBuyerBid_Success() {
 		RiskScore:  0.1,
 		Confidence: 0.95,
 	}
-	
+
 	// Setup expectations
 	// Create a marketplace call with seller ID
 	testCall := s.createTestCall(callID, nil, &sellerID)
@@ -324,10 +324,10 @@ func (s *MarketplaceServiceTestSuite) TestProcessBuyerBid_Success() {
 	s.accountRepo.On("GetByID", s.ctx, buyerID).Return(buyer, nil)
 	s.fraudService.On("CheckBid", s.ctx, mock.AnythingOfType("*bid.Bid"), buyer).Return(fraudCheckResult, nil)
 	s.bidRepo.On("Create", s.ctx, mock.AnythingOfType("*bid.Bid")).Return(nil)
-	
+
 	// Act
 	result, err := s.orchestrator.ProcessBuyerBid(s.ctx, request)
-	
+
 	// Assert
 	s.NoError(err)
 	s.NotNil(result)
@@ -343,9 +343,9 @@ func (s *MarketplaceServiceTestSuite) TestProcessBuyerBid_FraudRejection() {
 	callID := uuid.New()
 	buyerID := uuid.New()
 	sellerID := uuid.New() // Marketplace bids require a seller
-	
+
 	buyer := s.createTestAccount(buyerID, account.TypeBuyer, 7.0)
-	
+
 	request := &BidRequest{
 		CallID:   callID,
 		BuyerID:  buyerID,
@@ -354,10 +354,10 @@ func (s *MarketplaceServiceTestSuite) TestProcessBuyerBid_FraudRejection() {
 		Criteria: bid.BidCriteria{
 			CallType: []string{"inbound"},
 		},
-		Quality: buyer.QualityMetrics,
+		Quality:   buyer.QualityMetrics,
 		ExpiresAt: time.Now().Add(time.Hour),
 	}
-	
+
 	fraudCheckResult := &fraud.FraudCheckResult{
 		ID:         uuid.New(),
 		EntityID:   buyerID,
@@ -368,7 +368,7 @@ func (s *MarketplaceServiceTestSuite) TestProcessBuyerBid_FraudRejection() {
 		Confidence: 0.95,
 		Reasons:    []string{"Suspicious bidding pattern", "High velocity"},
 	}
-	
+
 	// Setup expectations
 	// Create a marketplace call with seller ID
 	testCall := s.createTestCall(callID, nil, &sellerID)
@@ -376,10 +376,10 @@ func (s *MarketplaceServiceTestSuite) TestProcessBuyerBid_FraudRejection() {
 	s.accountRepo.On("GetByID", s.ctx, buyerID).Return(buyer, nil)
 	s.fraudService.On("CheckBid", s.ctx, mock.AnythingOfType("*bid.Bid"), buyer).Return(fraudCheckResult, nil)
 	// Note: No bid creation expected when fraud check fails
-	
+
 	// Act
 	result, err := s.orchestrator.ProcessBuyerBid(s.ctx, request)
-	
+
 	// Assert
 	s.NoError(err)
 	s.NotNil(result)
@@ -452,7 +452,7 @@ func (s *MarketplaceServiceTestSuite) TestProcessBuyerBid_ValidationErrors() {
 			},
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			// Arrange
@@ -469,13 +469,13 @@ func (s *MarketplaceServiceTestSuite) TestProcessBuyerBid_ValidationErrors() {
 				},
 				ExpiresAt: time.Now().Add(time.Hour),
 			}
-			
+
 			tc.modifyRequest(request)
 			tc.setupMocks(request)
-			
+
 			// Act
 			result, err := s.orchestrator.ProcessBuyerBid(s.ctx, request)
-			
+
 			// Assert
 			s.Error(err)
 			s.Contains(err.Error(), tc.expectedError)
@@ -492,9 +492,9 @@ func (s *MarketplaceServiceTestSuite) TestExecuteCallRouting_Success() {
 	// Arrange
 	callID := uuid.New()
 	buyerID := uuid.New()
-	
+
 	testCall := s.createTestCall(callID, &buyerID, nil)
-	
+
 	routingDecision := &buyer_routing.BuyerRoutingDecision{
 		CallID:    callID,
 		BidID:     uuid.New(),
@@ -505,24 +505,24 @@ func (s *MarketplaceServiceTestSuite) TestExecuteCallRouting_Success() {
 		Reason:    "Best skill match",
 		Timestamp: time.Now(),
 	}
-	
+
 	telephonyResponse := &telephony.CallResponse{
 		CallID:    uuid.New(),
 		CallSID:   "CALL123456",
 		Status:    call.StatusInProgress,
 		StartTime: time.Now(),
 	}
-	
+
 	// Setup expectations
 	s.callRepo.On("GetByID", s.ctx, callID).Return(testCall, nil)
 	s.buyerRoutingService.On("RouteCall", s.ctx, callID).Return(routingDecision, nil)
 	s.callRepo.On("Update", s.ctx, mock.AnythingOfType("*call.Call")).Return(nil)
 	s.telephonyService.On("InitiateCall", s.ctx, mock.AnythingOfType("*call.Call")).Return(telephonyResponse, nil)
 	s.metrics.On("RecordRoutingDecision", s.ctx, mock.AnythingOfType("*marketplace.RoutingResult"))
-	
+
 	// Act
 	result, err := s.orchestrator.ExecuteCallRouting(s.ctx, callID)
-	
+
 	// Assert
 	s.NoError(err)
 	s.NotNil(result)
@@ -536,9 +536,9 @@ func (s *MarketplaceServiceTestSuite) TestExecuteCallRouting_Success() {
 func (s *MarketplaceServiceTestSuite) TestExecuteCallRouting_NoBuyerAvailable() {
 	// Arrange
 	callID := uuid.New()
-	
+
 	testCall := s.createTestCall(callID, nil, nil)
-	
+
 	routingDecision := &buyer_routing.BuyerRoutingDecision{
 		CallID:    callID,
 		BidID:     uuid.Nil,
@@ -549,7 +549,7 @@ func (s *MarketplaceServiceTestSuite) TestExecuteCallRouting_NoBuyerAvailable() 
 		Reason:    "No buyer available",
 		Timestamp: time.Now(),
 	}
-	
+
 	// Setup expectations
 	s.callRepo.On("GetByID", s.ctx, callID).Return(testCall, nil)
 	s.buyerRoutingService.On("RouteCall", s.ctx, callID).Return(routingDecision, nil)
@@ -558,10 +558,10 @@ func (s *MarketplaceServiceTestSuite) TestExecuteCallRouting_NoBuyerAvailable() 
 	s.telephonyService.On("InitiateCall", s.ctx, mock.AnythingOfType("*call.Call")).
 		Return(nil, fmt.Errorf("cannot initiate call without buyer"))
 	s.metrics.On("RecordRoutingDecision", s.ctx, mock.AnythingOfType("*marketplace.RoutingResult"))
-	
+
 	// Act
 	result, err := s.orchestrator.ExecuteCallRouting(s.ctx, callID)
-	
+
 	// Assert
 	s.NoError(err)
 	s.NotNil(result)
@@ -584,28 +584,28 @@ func (s *MarketplaceServiceTestSuite) TestGetMarketplaceStatus_Success() {
 		s.createTestAccount(uuid.New(), account.TypeBuyer, 8.0),
 		s.createTestAccount(uuid.New(), account.TypeBuyer, 8.5),
 	}
-	
+
 	sellers := []*account.Account{
 		s.createTestAccount(uuid.New(), account.TypeSeller, 7.5),
 	}
-	
+
 	marketplaceMetrics := &MarketplaceMetrics{
-		CallsPerHour:        150,
-		AverageAuctionTime:  25000,
-		BuyerUtilization:    0.75,
-		SellerUtilization:   0.80,
-		RevenuePerHour:      1250.50,
-		FailureRate:         0.05,
+		CallsPerHour:       150,
+		AverageAuctionTime: 25000,
+		BuyerUtilization:   0.75,
+		SellerUtilization:  0.80,
+		RevenuePerHour:     1250.50,
+		FailureRate:        0.05,
 	}
-	
+
 	// Setup expectations
 	s.accountRepo.On("GetActiveBuyers", s.ctx, 1000).Return(buyers, nil)
 	s.accountRepo.On("GetActiveSellers", s.ctx, 1000).Return(sellers, nil)
 	s.metrics.On("GetCurrentMetrics", s.ctx).Return(marketplaceMetrics, nil)
-	
+
 	// Act
 	status, err := s.orchestrator.GetMarketplaceStatus(s.ctx)
-	
+
 	// Assert
 	s.NoError(err)
 	s.NotNil(status)
@@ -626,26 +626,26 @@ func (s *MarketplaceServiceTestSuite) TestConcurrentCallProcessing() {
 	numCalls := 10
 	results := make(chan *CallProcessingResult, numCalls)
 	errors := make(chan error, numCalls)
-	
+
 	// Setup mocks to allow multiple calls
 	s.callRepo.On("Create", s.ctx, mock.AnythingOfType("*call.Call")).Return(nil).Times(numCalls)
-	
+
 	// Create a test call that will be returned for any GetByID call
 	testCall := s.createTestCall(uuid.New(), nil, nil)
 	s.callRepo.On("GetByID", s.ctx, mock.AnythingOfType("uuid.UUID")).Return(testCall, nil).Times(numCalls)
-	
+
 	s.callRepo.On("Update", s.ctx, mock.AnythingOfType("*call.Call")).Return(nil).Maybe()
-	
+
 	// Return a valid routing decision for any RouteCall
 	routingDecision := s.generateValidRoutingDecision()
 	s.buyerRoutingService.On("RouteCall", s.ctx, mock.AnythingOfType("uuid.UUID")).Return(routingDecision, nil).Maybe()
-	
+
 	s.sellerDistService.On("DistributeCall", s.ctx, mock.AnythingOfType("uuid.UUID")).Return(
 		s.generateValidDistributionDecision(), nil).Maybe()
-	
-	s.biddingService.On("StartAuction", s.ctx, mock.AnythingOfType("uuid.UUID"), 
+
+	s.biddingService.On("StartAuction", s.ctx, mock.AnythingOfType("uuid.UUID"),
 		mock.AnythingOfType("time.Duration")).Return(s.generateValidAuctionInfo(), nil).Maybe()
-	
+
 	// Mock telephony service for when direct assignment leads to call initiation
 	telephonyResponse := &telephony.CallResponse{
 		CallID:    uuid.New(),
@@ -654,20 +654,20 @@ func (s *MarketplaceServiceTestSuite) TestConcurrentCallProcessing() {
 		StartTime: time.Now(),
 	}
 	s.telephonyService.On("InitiateCall", s.ctx, mock.AnythingOfType("*call.Call")).Return(telephonyResponse, nil).Maybe()
-	
+
 	s.metrics.On("RecordCallProcessing", s.ctx, mock.AnythingOfType("*marketplace.CallProcessingResult")).Maybe()
 	s.metrics.On("RecordRoutingDecision", s.ctx, mock.AnythingOfType("*marketplace.RoutingResult")).Maybe()
-	
+
 	// Process calls concurrently
 	var wg sync.WaitGroup
 	for i := 0; i < numCalls; i++ {
 		wg.Add(1)
 		go func(index int) {
 			defer wg.Done()
-			
+
 			request := s.generateRandomIncomingCallRequest()
 			result, err := s.orchestrator.ProcessIncomingCall(s.ctx, request)
-			
+
 			if err != nil {
 				errors <- err
 			} else {
@@ -675,12 +675,12 @@ func (s *MarketplaceServiceTestSuite) TestConcurrentCallProcessing() {
 			}
 		}(i)
 	}
-	
+
 	// Wait for all goroutines
 	wg.Wait()
 	close(results)
 	close(errors)
-	
+
 	// Verify results
 	successCount := 0
 	for result := range results {
@@ -688,13 +688,13 @@ func (s *MarketplaceServiceTestSuite) TestConcurrentCallProcessing() {
 		s.NotEqual(uuid.Nil, result.CallID)
 		successCount++
 	}
-	
+
 	errorCount := 0
 	for err := range errors {
 		s.T().Logf("Concurrent processing error: %v", err)
 		errorCount++
 	}
-	
+
 	s.T().Logf("Concurrent test results: %d successes, %d errors", successCount, errorCount)
 	s.GreaterOrEqual(successCount, numCalls/2) // At least half should succeed
 }
@@ -706,16 +706,16 @@ func (s *MarketplaceServiceTestSuite) TestConcurrentCallProcessing() {
 func (s *MarketplaceServiceTestSuite) TestProcessIncomingCall_PropertyBased() {
 	// Test property: All valid incoming calls should result in a non-nil response
 	// with a valid status and processing path
-	
+
 	for i := 0; i < 100; i++ {
 		// Generate random valid request
 		request := s.generateRandomIncomingCallRequest()
-		
+
 		// Setup minimal mocks for valid request
 		s.callRepo.On("Create", s.ctx, mock.AnythingOfType("*call.Call")).Return(nil).Maybe()
 		s.callRepo.On("GetByID", s.ctx, mock.AnythingOfType("uuid.UUID")).Return(
 			s.createTestCall(uuid.New(), nil, nil), nil).Maybe()
-		
+
 		if request.BuyerID != nil {
 			s.buyerRoutingService.On("RouteCall", s.ctx, mock.AnythingOfType("uuid.UUID")).Return(
 				s.generateValidRoutingDecision(), nil).Maybe()
@@ -731,16 +731,16 @@ func (s *MarketplaceServiceTestSuite) TestProcessIncomingCall_PropertyBased() {
 		} else if request.SellerID != nil {
 			s.sellerDistService.On("DistributeCall", s.ctx, mock.AnythingOfType("uuid.UUID")).Return(
 				s.generateValidDistributionDecision(), nil).Maybe()
-			s.biddingService.On("StartAuction", s.ctx, mock.AnythingOfType("uuid.UUID"), 
+			s.biddingService.On("StartAuction", s.ctx, mock.AnythingOfType("uuid.UUID"),
 				mock.AnythingOfType("time.Duration")).Return(s.generateValidAuctionInfo(), nil).Maybe()
 		}
-		
+
 		s.metrics.On("RecordCallProcessing", s.ctx, mock.AnythingOfType("*marketplace.CallProcessingResult")).Maybe()
 		s.metrics.On("RecordRoutingDecision", s.ctx, mock.AnythingOfType("*marketplace.RoutingResult")).Maybe()
-		
+
 		// Act
 		result, err := s.orchestrator.ProcessIncomingCall(s.ctx, request)
-		
+
 		// Assert properties
 		if err == nil {
 			s.NotNil(result)
@@ -762,7 +762,7 @@ func BenchmarkProcessIncomingCall(b *testing.B) {
 	suite := new(MarketplaceServiceTestSuite)
 	suite.SetT(&testing.T{})
 	suite.SetupTest()
-	
+
 	buyerID := uuid.New()
 	request := &IncomingCallRequest{
 		FromNumber: "+15551234567",
@@ -771,10 +771,10 @@ func BenchmarkProcessIncomingCall(b *testing.B) {
 		BuyerID:    &buyerID,
 		Priority:   PriorityNormal,
 	}
-	
+
 	// Create test call for benchmark
 	testCall, _ := call.NewCall("+15551234567", "+15557654321", buyerID, call.DirectionInbound)
-	
+
 	// Setup minimal mocks
 	suite.callRepo.On("Create", ctx, mock.AnythingOfType("*call.Call")).Return(nil)
 	suite.buyerRoutingService.On("RouteCall", ctx, mock.AnythingOfType("uuid.UUID")).Return(
@@ -792,9 +792,9 @@ func BenchmarkProcessIncomingCall(b *testing.B) {
 	suite.callRepo.On("GetByID", ctx, mock.AnythingOfType("uuid.UUID")).Return(testCall, nil)
 	suite.metrics.On("RecordCallProcessing", ctx, mock.AnythingOfType("*marketplace.CallProcessingResult"))
 	suite.metrics.On("RecordRoutingDecision", ctx, mock.AnythingOfType("*marketplace.RoutingResult"))
-	
+
 	b.ResetTimer()
-	
+
 	// Benchmark
 	for i := 0; i < b.N; i++ {
 		_, _ = suite.orchestrator.ProcessIncomingCall(ctx, request)
@@ -807,14 +807,14 @@ func BenchmarkExecuteCallRouting(b *testing.B) {
 	suite := new(MarketplaceServiceTestSuite)
 	suite.SetT(&testing.T{})
 	suite.SetupTest()
-	
+
 	callID := uuid.New()
 	buyerID := uuid.New()
-	
+
 	// Create test call for benchmark
 	testCall, _ := call.NewCall("+15551234567", "+15557654321", buyerID, call.DirectionInbound)
 	testCall.ID = callID
-	
+
 	// Setup minimal mocks
 	suite.callRepo.On("GetByID", ctx, callID).Return(testCall, nil)
 	suite.buyerRoutingService.On("RouteCall", ctx, callID).Return(
@@ -836,9 +836,9 @@ func BenchmarkExecuteCallRouting(b *testing.B) {
 			StartTime: time.Now(),
 		}, nil)
 	suite.metrics.On("RecordRoutingDecision", ctx, mock.AnythingOfType("*marketplace.RoutingResult"))
-	
+
 	b.ResetTimer()
-	
+
 	// Benchmark
 	for i := 0; i < b.N; i++ {
 		_, _ = suite.orchestrator.ExecuteCallRouting(ctx, callID)
@@ -852,13 +852,13 @@ func BenchmarkExecuteCallRouting(b *testing.B) {
 func (s *MarketplaceServiceTestSuite) createTestAccount(id uuid.UUID, accountType account.AccountType, qualityScore float64) *account.Account {
 	email, err := values.NewEmail("test@example.com")
 	s.NoError(err)
-	
+
 	phone, err := values.NewPhoneNumber("+15551234567")
 	s.NoError(err)
-	
+
 	balance, err := values.NewMoneyFromFloat(1000.0, "USD")
 	s.NoError(err)
-	
+
 	return &account.Account{
 		ID:          id,
 		Email:       email,
@@ -884,7 +884,7 @@ func (s *MarketplaceServiceTestSuite) createTestAccount(id uuid.UUID, accountTyp
 func (s *MarketplaceServiceTestSuite) createTestCall(id uuid.UUID, buyerID, sellerID *uuid.UUID) *call.Call {
 	var testCall *call.Call
 	var err error
-	
+
 	if sellerID != nil && *sellerID != uuid.Nil {
 		testCall, err = call.NewMarketplaceCall("+15551234567", "+15557654321", *sellerID, call.DirectionInbound)
 	} else if buyerID != nil && *buyerID != uuid.Nil {
@@ -892,17 +892,17 @@ func (s *MarketplaceServiceTestSuite) createTestCall(id uuid.UUID, buyerID, sell
 	} else {
 		// Create a call without buyer or seller for routing scenarios
 		testCall = &call.Call{
-			ID:        id,
+			ID:         id,
 			FromNumber: values.MustNewPhoneNumber("+15551234567"),
 			ToNumber:   values.MustNewPhoneNumber("+15557654321"),
-			Direction: call.DirectionInbound,
-			Status:    call.StatusPending,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
+			Direction:  call.DirectionInbound,
+			Status:     call.StatusPending,
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
 		}
 		return testCall
 	}
-	
+
 	s.NoError(err)
 	testCall.ID = id
 	return testCall
@@ -911,14 +911,14 @@ func (s *MarketplaceServiceTestSuite) createTestCall(id uuid.UUID, buyerID, sell
 func (s *MarketplaceServiceTestSuite) generateRandomIncomingCallRequest() *IncomingCallRequest {
 	fromNumber := fmt.Sprintf("+1555%07d", time.Now().UnixNano()%10000000)
 	toNumber := fmt.Sprintf("+1555%07d", (time.Now().UnixNano()+1)%10000000)
-	
+
 	request := &IncomingCallRequest{
 		FromNumber: fromNumber,
 		ToNumber:   toNumber,
 		Direction:  call.DirectionInbound,
 		Priority:   CallPriority(time.Now().UnixNano() % 4),
 	}
-	
+
 	// Randomly assign either buyer or seller
 	if time.Now().UnixNano()%2 == 0 {
 		buyerID := uuid.New()
@@ -927,7 +927,7 @@ func (s *MarketplaceServiceTestSuite) generateRandomIncomingCallRequest() *Incom
 		sellerID := uuid.New()
 		request.SellerID = &sellerID
 	}
-	
+
 	return request
 }
 
@@ -1249,16 +1249,16 @@ func TestMarketplaceIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
-	
+
 	// Setup test database
 	testDB := testutil.SetupTestDatabase(t)
 	defer testDB.Cleanup()
-	
+
 	// Initialize real repositories
 	callRepo := repository.NewCallRepository(testDB.DB)
 	bidRepo := repository.NewBidRepository(testDB.DB)
 	accountRepo := repository.NewAccountRepository(testDB.DB)
-	
+
 	// Initialize real services with test configurations
 	// buyerRouting := buyer_routing.NewService(dependencies)
 	// sellerDist := seller_distribution.NewService(dependencies)
@@ -1266,7 +1266,7 @@ func TestMarketplaceIntegration(t *testing.T) {
 	// fraud := fraud.NewService(dependencies)
 	// telephony := telephony.NewMockService() // Use mock for external service
 	// metrics := NewInMemoryMetricsCollector()
-	
+
 	// Create orchestrator with real dependencies
 	config := &OrchestratorConfig{
 		DefaultAuctionDuration: 5 * time.Second, // Shorter for tests
@@ -1282,20 +1282,20 @@ func TestMarketplaceIntegration(t *testing.T) {
 		MinSellerQualityScore:  5.0,
 		MaxFraudRiskScore:      0.7,
 	}
-	
+
 	// orchestrator := NewOrchestrator(
 	//	callRepo, bidRepo, accountRepo,
 	//	buyerRouting, sellerDist, bidding,
 	//	fraud, telephony, metrics, config,
 	// )
-	
+
 	ctx := context.Background()
-	
+
 	t.Run("EndToEndCallFlow", func(t *testing.T) {
 		// Create test accounts
 		// buyer := createTestBuyerAccount(t, accountRepo)
 		// seller := createTestSellerAccount(t, accountRepo)
-		
+
 		// Submit incoming call
 		// request := &IncomingCallRequest{
 		//	FromNumber: "+15551234567",
@@ -1304,11 +1304,11 @@ func TestMarketplaceIntegration(t *testing.T) {
 		//	SellerID:   &seller.ID,
 		//	Priority:   PriorityNormal,
 		// }
-		
+
 		// result, err := orchestrator.ProcessIncomingCall(ctx, request)
 		// require.NoError(t, err)
 		// assert.NotNil(t, result.AuctionID)
-		
+
 		// Submit bids
 		// bidRequest := &BidRequest{
 		//	CallID:   result.CallID,
@@ -1321,18 +1321,18 @@ func TestMarketplaceIntegration(t *testing.T) {
 		//	Quality:   buyer.QualityMetrics,
 		//	ExpiresAt: time.Now().Add(time.Hour),
 		// }
-		
+
 		// bidResult, err := orchestrator.ProcessBuyerBid(ctx, bidRequest)
 		// require.NoError(t, err)
 		// assert.Equal(t, BidStatusAccepted, bidResult.Status)
-		
+
 		// Complete auction
 		// time.Sleep(config.DefaultAuctionDuration)
-		
+
 		// auctionResult, err := orchestrator.HandleAuctionCompletion(ctx, *result.AuctionID)
 		// require.NoError(t, err)
 		// assert.Equal(t, buyer.ID, *auctionResult.WinningBuyerID)
-		
+
 		// Execute routing
 		// routingResult, err := orchestrator.ExecuteCallRouting(ctx, result.CallID)
 		// require.NoError(t, err)

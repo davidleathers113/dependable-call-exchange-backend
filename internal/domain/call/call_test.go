@@ -3,11 +3,11 @@ package call_test
 import (
 	"testing"
 	"time"
-	
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	
+
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil/fixtures"
@@ -54,7 +54,7 @@ func TestNewCall(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c, err := call.NewCall(tt.from, tt.to, tt.buyerID, tt.direction)
@@ -110,17 +110,17 @@ func TestCall_UpdateStatus(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := tt.setup()
 			oldUpdatedAt := c.UpdatedAt
-			
+
 			// Small delay to ensure time difference
 			time.Sleep(10 * time.Millisecond)
-			
+
 			c.UpdateStatus(tt.newStatus)
-			
+
 			tt.validate(t, c, oldUpdatedAt)
 		})
 	}
@@ -187,7 +187,7 @@ func TestCall_Complete(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := tt.setup()
@@ -202,7 +202,7 @@ func TestCall_Fail(t *testing.T) {
 	mockClock := &call.MockClock{CurrentTime: time.Now()}
 	call.SetClock(mockClock)
 	defer call.ResetClock()
-	
+
 	tests := []struct {
 		name     string
 		setup    func() *call.Call
@@ -234,16 +234,16 @@ func TestCall_Fail(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := tt.setup()
 			oldUpdatedAt := c.UpdatedAt
-			
+
 			// Advance mock clock instead of sleeping
 			mockClock.Advance(10 * time.Millisecond)
 			c.Fail()
-			
+
 			tt.validate(t, c)
 			assert.True(t, c.UpdatedAt.After(oldUpdatedAt))
 		})
@@ -266,7 +266,7 @@ func TestStatus_String(t *testing.T) {
 		{call.StatusBusy, "busy"},
 		{call.Status(999), "unknown"},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.status.String())
@@ -283,7 +283,7 @@ func TestDirection_String(t *testing.T) {
 		{call.DirectionOutbound, "outbound"},
 		{call.Direction(999), "unknown"},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.direction.String())
@@ -293,7 +293,7 @@ func TestDirection_String(t *testing.T) {
 
 func TestCall_Scenarios(t *testing.T) {
 	scenarios := fixtures.NewCallScenarios(t)
-	
+
 	t.Run("inbound call has correct properties", func(t *testing.T) {
 		c := scenarios.InboundCall()
 		assert.Equal(t, call.DirectionInbound, c.Direction)
@@ -301,19 +301,19 @@ func TestCall_Scenarios(t *testing.T) {
 		assert.Equal(t, "US", c.Location.Country)
 		assert.Equal(t, "CA", c.Location.State)
 	})
-	
+
 	t.Run("outbound call has seller ID", func(t *testing.T) {
 		c := scenarios.OutboundCall()
 		assert.Equal(t, call.DirectionOutbound, c.Direction)
 		assert.NotNil(t, c.SellerID)
 	})
-	
+
 	t.Run("active call is in progress", func(t *testing.T) {
 		c := scenarios.ActiveCall()
 		assert.Equal(t, call.StatusInProgress, c.Status)
 		assert.Nil(t, c.EndTime)
 	})
-	
+
 	t.Run("completed call has duration and cost", func(t *testing.T) {
 		c := scenarios.CompletedCall()
 		assert.Equal(t, call.StatusCompleted, c.Status)
@@ -322,7 +322,7 @@ func TestCall_Scenarios(t *testing.T) {
 		assert.Greater(t, *c.Duration, 0)
 		assert.True(t, c.Cost.IsPositive(), "Cost should be positive")
 	})
-	
+
 	t.Run("failed call has failed status", func(t *testing.T) {
 		c := scenarios.FailedCall()
 		assert.Equal(t, call.StatusFailed, c.Status)
@@ -338,7 +338,7 @@ func TestCall_Validation(t *testing.T) {
 			"5551234567",
 			"+44 20 1234 5678",
 		}
-		
+
 		for _, num := range numbers {
 			c, err := call.NewCall(num, num, uuid.New(), call.DirectionInbound)
 			require.NoError(t, err)
@@ -348,15 +348,15 @@ func TestCall_Validation(t *testing.T) {
 			assert.False(t, c.ToNumber.IsEmpty())
 		}
 	})
-	
+
 	t.Run("time consistency", func(t *testing.T) {
 		c, err := call.NewCall("+15551234567", "+15559876543", uuid.New(), call.DirectionInbound)
 		require.NoError(t, err)
-		
+
 		// CreatedAt and UpdatedAt should be very close
 		diff := c.UpdatedAt.Sub(c.CreatedAt)
 		assert.Less(t, diff, time.Millisecond)
-		
+
 		// StartTime should match CreatedAt closely
 		startDiff := c.StartTime.Sub(c.CreatedAt)
 		assert.Less(t, startDiff.Abs(), time.Millisecond)
@@ -369,9 +369,9 @@ func TestCall_EdgeCases(t *testing.T) {
 		mockClock := &call.MockClock{CurrentTime: time.Now()}
 		call.SetClock(mockClock)
 		defer call.ResetClock()
-		
+
 		c := fixtures.NewCallBuilder(t).Build()
-		
+
 		// Progress through multiple statuses
 		statuses := []call.Status{
 			call.StatusQueued,
@@ -379,7 +379,7 @@ func TestCall_EdgeCases(t *testing.T) {
 			call.StatusInProgress,
 			call.StatusCompleted,
 		}
-		
+
 		var lastUpdate time.Time
 		for _, status := range statuses {
 			mockClock.Advance(5 * time.Millisecond)
@@ -389,17 +389,17 @@ func TestCall_EdgeCases(t *testing.T) {
 			lastUpdate = c.UpdatedAt
 		}
 	})
-	
+
 	t.Run("completing already completed call", func(t *testing.T) {
 		c := fixtures.NewCallBuilder(t).
 			WithStatus(call.StatusCompleted).
 			Build()
-		
+
 		// First completion
 		c.Complete(100, values.MustNewMoneyFromFloat(10.0, "USD"))
 		firstDuration := *c.Duration
 		firstCost := *c.Cost
-		
+
 		// Second completion should overwrite
 		c.Complete(200, values.MustNewMoneyFromFloat(20.0, "USD"))
 		assert.Equal(t, 200, *c.Duration)
@@ -407,26 +407,26 @@ func TestCall_EdgeCases(t *testing.T) {
 		assert.NotEqual(t, firstDuration, *c.Duration)
 		assert.NotEqual(t, firstCost, *c.Cost)
 	})
-	
+
 	t.Run("concurrent modifications", func(t *testing.T) {
 		c := fixtures.NewCallBuilder(t).Build()
-		
+
 		// Simulate concurrent updates
 		done := make(chan bool, 2)
-		
+
 		go func() {
 			c.UpdateStatus(call.StatusInProgress)
 			done <- true
 		}()
-		
+
 		go func() {
 			c.UpdateStatus(call.StatusRinging)
 			done <- true
 		}()
-		
+
 		<-done
 		<-done
-		
+
 		// One of the statuses should have won
 		assert.Contains(t, []call.Status{call.StatusInProgress, call.StatusRinging}, c.Status)
 	})
@@ -436,17 +436,17 @@ func TestCall_Performance(t *testing.T) {
 	t.Run("creation performance", func(t *testing.T) {
 		start := time.Now()
 		count := 10000
-		
+
 		for i := 0; i < count; i++ {
 			_, _ = call.NewCall("+15551234567", "+15559876543", uuid.New(), call.DirectionInbound)
 		}
-		
+
 		elapsed := time.Since(start)
 		perCall := elapsed / time.Duration(count)
-		
+
 		// Should be able to create calls very quickly
 		// Adjusted to 20µs to account for system variations while still ensuring good performance
-		assert.Less(t, perCall, 20*time.Microsecond, 
+		assert.Less(t, perCall, 20*time.Microsecond,
 			"Call creation took %v per call, expected < 20µs", perCall)
 	})
 }
@@ -459,7 +459,7 @@ func TestCall_TableDriven(t *testing.T) {
 		action   func(*call.Call)
 		expected func(*testing.T, *call.Call)
 	}
-	
+
 	tests := []testCase{
 		{
 			name: "status progression",
@@ -495,7 +495,7 @@ func TestCall_TableDriven(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			c := tc.setup()

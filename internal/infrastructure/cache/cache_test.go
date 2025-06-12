@@ -107,7 +107,7 @@ func TestRedisCache_BasicOperations(t *testing.T) {
 	t.Run("Get non-existent key", func(t *testing.T) {
 		_, err := cache.Get(ctx, "non_existent_key")
 		assert.Error(t, err)
-		
+
 		var notFoundErr ErrCacheKeyNotFound
 		assert.ErrorAs(t, err, &notFoundErr)
 		assert.Equal(t, "non_existent_key", notFoundErr.Key)
@@ -236,8 +236,8 @@ func TestRedisCache_JSONOperations(t *testing.T) {
 	ctx := context.Background()
 
 	type TestStruct struct {
-		ID   int    `json:"id"`
-		Name string `json:"name"`
+		ID   int      `json:"id"`
+		Name string   `json:"name"`
 		Tags []string `json:"tags"`
 	}
 
@@ -344,7 +344,7 @@ func TestRedisCache_ConcurrentAccess(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	
+
 	t.Run("concurrent increments", func(t *testing.T) {
 		key := "test:concurrent_incr"
 		numGoroutines := 10
@@ -356,7 +356,7 @@ func TestRedisCache_ConcurrentAccess(t *testing.T) {
 		for i := 0; i < numGoroutines; i++ {
 			go func() {
 				defer func() { done <- struct{}{} }()
-				
+
 				for j := 0; j < incrementsPerGoroutine; j++ {
 					_, err := cache.Increment(ctx, key)
 					assert.NoError(t, err)

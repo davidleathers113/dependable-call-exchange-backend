@@ -79,12 +79,12 @@ func TestNewEmail(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			email, err := NewEmail(tt.address)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
 			}
-			
+
 			require.NoError(t, err)
 			assert.Equal(t, tt.address, email.String())
 		})
@@ -160,11 +160,11 @@ func TestEmail_Equal(t *testing.T) {
 
 func TestEmail_IsDomainAllowed(t *testing.T) {
 	email := MustNewEmail("user@example.com")
-	
+
 	allowedDomains := []string{"example.com", "test.org"}
-	
+
 	assert.True(t, email.IsDomainAllowed(allowedDomains))
-	
+
 	disallowedDomains := []string{"other.com", "test.org"}
 	assert.False(t, email.IsDomainAllowed(disallowedDomains))
 }
@@ -206,24 +206,24 @@ func TestEmail_JSON(t *testing.T) {
 	t.Run("Marshal", func(t *testing.T) {
 		data, err := json.Marshal(email)
 		require.NoError(t, err)
-		
+
 		expected := `"user@example.com"`
 		assert.Equal(t, expected, string(data))
 	})
 
 	t.Run("Unmarshal valid", func(t *testing.T) {
 		data := `"user@example.com"`
-		
+
 		var email Email
 		err := json.Unmarshal([]byte(data), &email)
 		require.NoError(t, err)
-		
+
 		assert.Equal(t, "user@example.com", email.String())
 	})
 
 	t.Run("Unmarshal invalid", func(t *testing.T) {
 		data := `"invalid-email"`
-		
+
 		var email Email
 		err := json.Unmarshal([]byte(data), &email)
 		assert.Error(t, err)
@@ -334,7 +334,7 @@ func TestValidateEmailDomain(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateEmailDomain(tt.domain)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -349,7 +349,7 @@ func TestEmailValidationError(t *testing.T) {
 		Address: "invalid@email",
 		Reason:  "missing TLD",
 	}
-	
+
 	expected := "invalid email 'invalid@email': missing TLD"
 	assert.Equal(t, expected, err.Error())
 }

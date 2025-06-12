@@ -2,7 +2,7 @@ package database
 
 import (
 	"context"
-	
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -10,10 +10,10 @@ import (
 
 // Compile-time interface checks
 var (
-	_ Rows = (*pgxRowsAdapterImpl)(nil)
-	_ Row = (*pgxRowAdapterImpl)(nil)
-	_ Result = (*pgxResultAdapterImpl)(nil)
-	_ Tx = (*pgxTxAdapterImpl)(nil)
+	_ Rows       = (*pgxRowsAdapterImpl)(nil)
+	_ Row        = (*pgxRowAdapterImpl)(nil)
+	_ Result     = (*pgxResultAdapterImpl)(nil)
+	_ Tx         = (*pgxTxAdapterImpl)(nil)
 	_ Connection = (*pgxConnectionAdapter)(nil)
 )
 
@@ -42,7 +42,6 @@ func (r *pgxRowsAdapterImpl) Values() ([]interface{}, error) {
 	return r.rows.Values()
 }
 
-
 // Implementation of pgxRowAdapter
 type pgxRowAdapterImpl struct {
 	row pgx.Row
@@ -51,7 +50,6 @@ type pgxRowAdapterImpl struct {
 func (r *pgxRowAdapterImpl) Scan(dest ...interface{}) error {
 	return r.row.Scan(dest...)
 }
-
 
 // Implementation of pgxResultAdapter
 type pgxResultAdapterImpl struct {
@@ -65,7 +63,6 @@ func (r *pgxResultAdapterImpl) RowsAffected() int64 {
 func (r *pgxResultAdapterImpl) String() string {
 	return r.tag.String()
 }
-
 
 // Implementation of pgxTxAdapter
 type pgxTxAdapterImpl struct {
@@ -109,7 +106,7 @@ type pgxConnectionAdapter struct {
 func (c *pgxConnectionAdapter) Query(ctx context.Context, query string, args ...interface{}) (Rows, error) {
 	var rows pgx.Rows
 	var err error
-	
+
 	switch conn := c.conn.(type) {
 	case *pgx.Conn:
 		rows, err = conn.Query(ctx, query, args...)
@@ -118,7 +115,7 @@ func (c *pgxConnectionAdapter) Query(ctx context.Context, query string, args ...
 	default:
 		panic("unsupported connection type")
 	}
-	
+
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +124,7 @@ func (c *pgxConnectionAdapter) Query(ctx context.Context, query string, args ...
 
 func (c *pgxConnectionAdapter) QueryRow(ctx context.Context, query string, args ...interface{}) Row {
 	var row pgx.Row
-	
+
 	switch conn := c.conn.(type) {
 	case *pgx.Conn:
 		row = conn.QueryRow(ctx, query, args...)
@@ -136,14 +133,14 @@ func (c *pgxConnectionAdapter) QueryRow(ctx context.Context, query string, args 
 	default:
 		panic("unsupported connection type")
 	}
-	
+
 	return &pgxRowAdapterImpl{row: row}
 }
 
 func (c *pgxConnectionAdapter) Exec(ctx context.Context, query string, args ...interface{}) (Result, error) {
 	var tag pgconn.CommandTag
 	var err error
-	
+
 	switch conn := c.conn.(type) {
 	case *pgx.Conn:
 		tag, err = conn.Exec(ctx, query, args...)
@@ -152,7 +149,7 @@ func (c *pgxConnectionAdapter) Exec(ctx context.Context, query string, args ...i
 	default:
 		panic("unsupported connection type")
 	}
-	
+
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +159,7 @@ func (c *pgxConnectionAdapter) Exec(ctx context.Context, query string, args ...i
 func (c *pgxConnectionAdapter) Begin(ctx context.Context) (Tx, error) {
 	var tx pgx.Tx
 	var err error
-	
+
 	switch conn := c.conn.(type) {
 	case *pgx.Conn:
 		tx, err = conn.Begin(ctx)
@@ -171,7 +168,7 @@ func (c *pgxConnectionAdapter) Begin(ctx context.Context) (Tx, error) {
 	default:
 		panic("unsupported connection type")
 	}
-	
+
 	if err != nil {
 		return nil, err
 	}

@@ -7,98 +7,98 @@ import (
 
 func TestNewQualityMetrics(t *testing.T) {
 	tests := []struct {
-		name               string
-		qualityScore       float64
-		fraudScore         float64
-		historicalRating   float64
-		conversionRate     float64
-		averageCallTime    int
-		trustScore         float64
-		reliabilityScore   float64
-		expectError        bool
-		expectedErrorMsg   string
+		name             string
+		qualityScore     float64
+		fraudScore       float64
+		historicalRating float64
+		conversionRate   float64
+		averageCallTime  int
+		trustScore       float64
+		reliabilityScore float64
+		expectError      bool
+		expectedErrorMsg string
 	}{
 		{
-			name:               "valid metrics",
-			qualityScore:       8.5,
-			fraudScore:         1.2,
-			historicalRating:   9.0,
-			conversionRate:     0.75,
-			averageCallTime:    180,
-			trustScore:         8.0,
-			reliabilityScore:   7.5,
-			expectError:        false,
+			name:             "valid metrics",
+			qualityScore:     8.5,
+			fraudScore:       1.2,
+			historicalRating: 9.0,
+			conversionRate:   0.75,
+			averageCallTime:  180,
+			trustScore:       8.0,
+			reliabilityScore: 7.5,
+			expectError:      false,
 		},
 		{
-			name:               "default values",
-			qualityScore:       5.0,
-			fraudScore:         0.0,
-			historicalRating:   5.0,
-			conversionRate:     0.0,
-			averageCallTime:    0,
-			trustScore:         5.0,
-			reliabilityScore:   5.0,
-			expectError:        false,
+			name:             "default values",
+			qualityScore:     5.0,
+			fraudScore:       0.0,
+			historicalRating: 5.0,
+			conversionRate:   0.0,
+			averageCallTime:  0,
+			trustScore:       5.0,
+			reliabilityScore: 5.0,
+			expectError:      false,
 		},
 		{
-			name:               "quality score too high",
-			qualityScore:       11.0,
-			fraudScore:         0.0,
-			historicalRating:   5.0,
-			conversionRate:     0.5,
-			averageCallTime:    120,
-			trustScore:         5.0,
-			reliabilityScore:   5.0,
-			expectError:        true,
-			expectedErrorMsg:   "quality_score must be between 0.0 and 10.0",
+			name:             "quality score too high",
+			qualityScore:     11.0,
+			fraudScore:       0.0,
+			historicalRating: 5.0,
+			conversionRate:   0.5,
+			averageCallTime:  120,
+			trustScore:       5.0,
+			reliabilityScore: 5.0,
+			expectError:      true,
+			expectedErrorMsg: "quality_score must be between 0.0 and 10.0",
 		},
 		{
-			name:               "quality score too low",
-			qualityScore:       -1.0,
-			fraudScore:         0.0,
-			historicalRating:   5.0,
-			conversionRate:     0.5,
-			averageCallTime:    120,
-			trustScore:         5.0,
-			reliabilityScore:   5.0,
-			expectError:        true,
-			expectedErrorMsg:   "quality_score must be between 0.0 and 10.0",
+			name:             "quality score too low",
+			qualityScore:     -1.0,
+			fraudScore:       0.0,
+			historicalRating: 5.0,
+			conversionRate:   0.5,
+			averageCallTime:  120,
+			trustScore:       5.0,
+			reliabilityScore: 5.0,
+			expectError:      true,
+			expectedErrorMsg: "quality_score must be between 0.0 and 10.0",
 		},
 		{
-			name:               "conversion rate too high",
-			qualityScore:       8.0,
-			fraudScore:         0.0,
-			historicalRating:   5.0,
-			conversionRate:     1.5,
-			averageCallTime:    120,
-			trustScore:         5.0,
-			reliabilityScore:   5.0,
-			expectError:        true,
-			expectedErrorMsg:   "conversion_rate must be between 0.0 and 1.0",
+			name:             "conversion rate too high",
+			qualityScore:     8.0,
+			fraudScore:       0.0,
+			historicalRating: 5.0,
+			conversionRate:   1.5,
+			averageCallTime:  120,
+			trustScore:       5.0,
+			reliabilityScore: 5.0,
+			expectError:      true,
+			expectedErrorMsg: "conversion_rate must be between 0.0 and 1.0",
 		},
 		{
-			name:               "negative average call time",
-			qualityScore:       8.0,
-			fraudScore:         0.0,
-			historicalRating:   5.0,
-			conversionRate:     0.5,
-			averageCallTime:    -60,
-			trustScore:         5.0,
-			reliabilityScore:   5.0,
-			expectError:        true,
-			expectedErrorMsg:   "average_call_time cannot be negative",
+			name:             "negative average call time",
+			qualityScore:     8.0,
+			fraudScore:       0.0,
+			historicalRating: 5.0,
+			conversionRate:   0.5,
+			averageCallTime:  -60,
+			trustScore:       5.0,
+			reliabilityScore: 5.0,
+			expectError:      true,
+			expectedErrorMsg: "average_call_time cannot be negative",
 		},
 		{
-			name:               "call time too long",
-			qualityScore:       8.0,
-			fraudScore:         0.0,
-			historicalRating:   5.0,
-			conversionRate:     0.5,
-			averageCallTime:    90000, // > 24 hours
-			trustScore:         5.0,
-			reliabilityScore:   5.0,
-			expectError:        true,
-			expectedErrorMsg:   "average_call_time too long (max 24 hours)",
+			name:             "call time too long",
+			qualityScore:     8.0,
+			fraudScore:       0.0,
+			historicalRating: 5.0,
+			conversionRate:   0.5,
+			averageCallTime:  90000, // > 24 hours
+			trustScore:       5.0,
+			reliabilityScore: 5.0,
+			expectError:      true,
+			expectedErrorMsg: "average_call_time too long (max 24 hours)",
 		},
 	}
 
@@ -166,9 +166,9 @@ func TestNewDefaultQualityMetrics(t *testing.T) {
 
 func TestQualityMetrics_OverallScore(t *testing.T) {
 	tests := []struct {
-		name           string
-		metrics        QualityMetrics
-		expectedRange  [2]float64 // min, max expected score
+		name          string
+		metrics       QualityMetrics
+		expectedRange [2]float64 // min, max expected score
 	}{
 		{
 			name: "high quality metrics",
@@ -195,9 +195,9 @@ func TestQualityMetrics_OverallScore(t *testing.T) {
 			expectedRange: [2]float64{0.0, 4.0},
 		},
 		{
-			name:           "default metrics",
-			metrics:        NewDefaultQualityMetrics(),
-			expectedRange:  [2]float64{4.0, 6.0},
+			name:          "default metrics",
+			metrics:       NewDefaultQualityMetrics(),
+			expectedRange: [2]float64{4.0, 6.0},
 		},
 	}
 
@@ -206,7 +206,7 @@ func TestQualityMetrics_OverallScore(t *testing.T) {
 			score := tt.metrics.OverallScore()
 
 			if score < tt.expectedRange[0] || score > tt.expectedRange[1] {
-				t.Errorf("overall score %f not in expected range [%f, %f]", 
+				t.Errorf("overall score %f not in expected range [%f, %f]",
 					score, tt.expectedRange[0], tt.expectedRange[1])
 			}
 
@@ -403,25 +403,25 @@ func TestQualityMetrics_String(t *testing.T) {
 	}
 
 	str := metrics.String()
-	
+
 	// Should contain the type name and key metrics
 	if len(str) == 0 {
 		t.Error("String() should return non-empty string")
 	}
-	
+
 	// Should contain formatted overall score
 	overallScore := metrics.OverallScore()
 	if !contains(str, "Overall") {
 		t.Error("String() should contain overall score information")
 	}
-	
+
 	t.Logf("String representation: %s (Overall: %.2f)", str, overallScore)
 }
 
 // Helper function for string contains check
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && s[len(s)-len(substr):] == substr || 
-		   (len(s) > len(substr) && findSubstring(s, substr))
+	return len(s) >= len(substr) && s[len(s)-len(substr):] == substr ||
+		(len(s) > len(substr) && findSubstring(s, substr))
 }
 
 func findSubstring(s, substr string) bool {

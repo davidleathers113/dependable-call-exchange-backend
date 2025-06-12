@@ -45,6 +45,19 @@
 - Use table-driven tests for different scenarios
 - Include integration tests with real infrastructure
 
+## Orchestrator Pattern
+
+Per ADR-001, orchestrator services are allowed up to 8 dependencies when they:
+- Coordinate 3+ distinct subsystems
+- Use interface dependencies
+- Follow naming convention (*OrchestrationService or *CoordinatorService)
+
+Current orchestrators:
+- `bidding.coordinatorService` - 8 dependencies (coordinates bid lifecycle)
+- `bidding.auctionOrchestrationService` - 6 dependencies (manages auctions)
+
+These services act as facades to coordinate complex workflows across multiple domains.
+
 ## Routing Algorithms
 
 ### Available Algorithms

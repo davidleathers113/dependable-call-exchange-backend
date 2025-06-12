@@ -23,13 +23,13 @@ const (
 
 // AppError represents a structured application error
 type AppError struct {
-	Type        ErrorType              `json:"type"`
-	Code        string                 `json:"code"`
-	Message     string                 `json:"message"`
-	Details     map[string]interface{} `json:"details,omitempty"`
-	Cause       error                  `json:"-"`
-	Retryable   bool                   `json:"retryable"`
-	StatusCode  int                    `json:"status_code"`
+	Type       ErrorType              `json:"type"`
+	Code       string                 `json:"code"`
+	Message    string                 `json:"message"`
+	Details    map[string]interface{} `json:"details,omitempty"`
+	Cause      error                  `json:"-"`
+	Retryable  bool                   `json:"retryable"`
+	StatusCode int                    `json:"status_code"`
 }
 
 func (e *AppError) Error() string {
@@ -169,15 +169,15 @@ func NewFraudError(reason, message string) *AppError {
 
 // Predefined common errors
 var (
-	ErrInvalidInput       = NewValidationError("INVALID_INPUT", "Invalid input provided")
-	ErrInsufficientFunds  = NewBusinessError("INSUFFICIENT_FUNDS", "Insufficient funds")
-	ErrAccountSuspended   = NewBusinessError("ACCOUNT_SUSPENDED", "Account is suspended")
-	ErrCallNotFound       = NewNotFoundError("call")
-	ErrBidNotFound        = NewNotFoundError("bid")
-	ErrAccountNotFound    = NewNotFoundError("account")
-	ErrAuctionExpired     = NewBusinessError("AUCTION_EXPIRED", "Auction has expired")
-	ErrBidTooLow          = NewBusinessError("BID_TOO_LOW", "Bid amount is below minimum")
-	ErrDuplicateBid       = NewConflictError("Duplicate bid detected")
+	ErrInvalidInput      = NewValidationError("INVALID_INPUT", "Invalid input provided")
+	ErrInsufficientFunds = NewBusinessError("INSUFFICIENT_FUNDS", "Insufficient funds")
+	ErrAccountSuspended  = NewBusinessError("ACCOUNT_SUSPENDED", "Account is suspended")
+	ErrCallNotFound      = NewNotFoundError("call")
+	ErrBidNotFound       = NewNotFoundError("bid")
+	ErrAccountNotFound   = NewNotFoundError("account")
+	ErrAuctionExpired    = NewBusinessError("AUCTION_EXPIRED", "Auction has expired")
+	ErrBidTooLow         = NewBusinessError("BID_TOO_LOW", "Bid amount is below minimum")
+	ErrDuplicateBid      = NewConflictError("Duplicate bid detected")
 )
 
 // Wrap wraps an error with a message using fmt.Errorf with %w

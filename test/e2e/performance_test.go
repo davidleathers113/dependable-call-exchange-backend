@@ -5,47 +5,48 @@ package e2e
 import (
 	"fmt"
 	"math"
-	"net/http"
-	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
-	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil"
-	"github.com/google/uuid"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
+	"github.com/davidleathers/dependable-call-exchange-backend/test/e2e/infrastructure"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-// TestPerformance_HighVolume tests system performance under high load
 func TestPerformance_HighVolume(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping performance test in short mode")
 	}
 	
-	testDB := testutil.NewTestDB(t)
-	ctx := testutil.TestContext(t)
-	
-	server := setupTestServer(t, testDB, false)
-	defer server.Close()
+	env := infrastructure.NewTestEnvironment(t)
+	client := infrastructure.NewAPIClient(t, env.APIURL)
 	
 	t.Run("10K Calls Per Second", func(t *testing.T) {
+		env.ResetDatabase()
+		
 		// Create test accounts
 		numBuyers := 100
-		buyers := make([]*account.Account, numBuyers)
+		buyers := make([]*AuthenticatedUser, numBuyers)
 		for i := 0; i < numBuyers; i++ {
-			buyers[i] = createTestAccount(t, ctx, testDB, fmt.Sprintf("buyer%d", i), account.TypeBuyer)
+			acc := createAccountInDB(t, env, fmt.Sprintf("buyer%d", i), account.TypeBuyer, 10000.00)
+			buyers[i] = authenticateAccount(t, client, acc.Email.String())
 		}
 		
 		numSellers := 50
-		sellers := make([]*account.Account, numSellers)
+		sellers := make([]*AuthenticatedUser, numSellers)
 		for i := 0; i < numSellers; i++ {
-			sellers[i] = createTestAccount(t, ctx, testDB, fmt.Sprintf("seller%d", i), account.TypeSeller)
-			// Create bid profiles for sellers
-			createBidProfile(t, server, sellers[i].ID, bid.BidCriteria{
-				MaxBudget: 100.00,
+			acc := createAccountInDB(t, env, fmt.Sprintf("seller%d", i), account.TypeSeller, 0.00)
+			sellers[i] = authenticateAccount(t, client, acc.Email.String())
+			
+			// Create bid profiles
+			localClient := infrastructure.NewAPIClient(t, env.APIURL)
+			localClient.SetToken(sellers[i].Token)
+			createBidProfile(t, localClient, bid.BidCriteria{
+				MaxBudget: values.MustNewMoneyFromFloat(100.00, values.USD),
 				CallType:  []string{"sales"},
 			})
 		}
@@ -73,29 +74,31 @@ func TestPerformance_HighVolume(t *testing.T) {
 			go func(workerID int) {
 				defer wg.Done()
 				
+				localClient := infrastructure.NewAPIClient(t, env.APIURL)
+				buyer := buyers[workerID%len(buyers)]
+				localClient.SetToken(buyer.Token)
+				
 				for time.Now().Before(deadline) {
 					select {
 					case <-callChan:
 						// Make call
 						callStart := time.Now()
-						buyer := buyers[workerID%len(buyers)]
 						
-						resp, err := makeCall(server, buyer.ID, 
-							fmt.Sprintf("+1415555%04d", atomic.AddInt64(&totalCalls, 1)%10000),
-							"+18005551234")
+						resp := localClient.Post("/api/v1/calls", map[string]interface{}{
+							"from_number": fmt.Sprintf("+1415555%04d", atomic.AddInt64(&totalCalls, 1)%10000),
+							"to_number":   "+18005551234",
+						})
 						
 						latency := time.Since(callStart).Milliseconds()
 						atomic.AddInt64(&totalLatency, latency)
 						
-						if err != nil || resp.StatusCode != http.StatusCreated {
-							atomic.AddInt64(&failedCalls, 1)
-						} else {
+						if resp.StatusCode == 201 {
 							atomic.AddInt64(&successfulCalls, 1)
+						} else {
+							atomic.AddInt64(&failedCalls, 1)
 						}
 						
-						if resp != nil {
-							resp.Body.Close()
-						}
+						resp.Body.Close()
 						
 					default:
 						// No call to make, brief pause
@@ -151,19 +154,24 @@ func TestPerformance_HighVolume(t *testing.T) {
 	})
 	
 	t.Run("Concurrent Auction Performance", func(t *testing.T) {
+		env.ResetDatabase()
+		
 		// Test auction performance with many concurrent bidders
-		buyer := createTestAccount(t, ctx, testDB, "auction-buyer", account.TypeBuyer)
+		buyer := createAccountInDB(t, env, "auction-buyer", account.TypeBuyer, 10000.00)
+		buyerAuth := authenticateAccount(t, client, buyer.Email.String())
 		
 		// Create many sellers
 		numSellers := 1000
-		sellers := make([]*account.Account, numSellers)
+		sellers := make([]*AuthenticatedUser, numSellers)
 		for i := 0; i < numSellers; i++ {
-			sellers[i] = createTestAccount(t, ctx, testDB, fmt.Sprintf("auction-seller%d", i), account.TypeSeller)
+			acc := createAccountInDB(t, env, fmt.Sprintf("auction-seller%d", i), account.TypeSeller, 0.00)
+			sellers[i] = authenticateAccount(t, client, acc.Email.String())
 		}
 		
 		// Create call and start auction
-		incomingCall := simulateIncomingCall(t, server, buyer.ID, "+14155551234", "+18005551234")
-		auction := startAuction(t, server, incomingCall.ID)
+		client.SetToken(buyerAuth.Token)
+		incomingCall := simulateIncomingCall(t, client, "+14155551234", "+18005551234")
+		auction := startAuction(t, client, incomingCall.ID)
 		
 		// Measure bidding performance
 		var totalBids int64
@@ -176,13 +184,16 @@ func TestPerformance_HighVolume(t *testing.T) {
 		// All sellers bid concurrently
 		for i, seller := range sellers {
 			wg.Add(1)
-			go func(idx int, s *account.Account) {
+			go func(idx int, s *AuthenticatedUser) {
 				defer wg.Done()
+				
+				localClient := infrastructure.NewAPIClient(t, env.APIURL)
+				localClient.SetToken(s.Token)
 				
 				bidStart := time.Now()
 				amount := 3.00 + float64(idx%100)*0.10 // Varying amounts
 				
-				_, err := placeBidConcurrent(server, auction.ID, s.ID, amount)
+				_, err := placeBidConcurrent(localClient, auction.ID, amount)
 				
 				latency := time.Since(bidStart).Milliseconds()
 				atomic.AddInt64(&bidLatency, latency)
@@ -198,7 +209,8 @@ func TestPerformance_HighVolume(t *testing.T) {
 		elapsed := time.Since(start)
 		
 		// Complete auction
-		completeAuction(t, server, auction.ID)
+		client.SetToken(buyerAuth.Token)
+		completeAuction(t, client, auction.ID)
 		
 		// Calculate metrics
 		total := atomic.LoadInt64(&totalBids)
@@ -220,18 +232,18 @@ func TestPerformance_HighVolume(t *testing.T) {
 	})
 }
 
-// TestPerformance_LatencyPercentiles tests latency at different percentiles
 func TestPerformance_LatencyPercentiles(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping performance test in short mode")
 	}
 	
-	testDB := testutil.NewTestDB(t)
-	server := setupTestServer(t, testDB, false)
-	defer server.Close()
+	env := infrastructure.NewTestEnvironment(t)
+	client := infrastructure.NewAPIClient(t, env.APIURL)
 	
 	// Create test data
-	buyer := createTestAccount(t, testutil.TestContext(t), testDB, "perf-buyer", account.TypeBuyer)
+	env.ResetDatabase()
+	buyer := createAccountInDB(t, env, "perf-buyer", account.TypeBuyer, 10000.00)
+	buyerAuth := authenticateAccount(t, client, buyer.Email.String())
 	
 	// Collect latency samples
 	numRequests := 10000
@@ -247,24 +259,26 @@ func TestPerformance_LatencyPercentiles(t *testing.T) {
 		go func(workerID int) {
 			defer wg.Done()
 			
+			localClient := infrastructure.NewAPIClient(t, env.APIURL)
+			localClient.SetToken(buyerAuth.Token)
+			
 			for j := 0; j < requestsPerWorker; j++ {
 				start := time.Now()
 				
-				resp, err := makeCall(server, buyer.ID,
-					fmt.Sprintf("+1415555%04d", workerID*1000+j),
-					"+18005551234")
+				resp := localClient.Post("/api/v1/calls", map[string]interface{}{
+					"from_number": fmt.Sprintf("+1415555%04d", workerID*1000+j),
+					"to_number":   "+18005551234",
+				})
 				
 				latency := time.Since(start).Milliseconds()
 				
-				if err == nil && resp.StatusCode == http.StatusCreated {
+				if resp.StatusCode == 201 {
 					mu.Lock()
 					latencies = append(latencies, latency)
 					mu.Unlock()
 				}
 				
-				if resp != nil {
-					resp.Body.Close()
-				}
+				resp.Body.Close()
 				
 				// Small delay between requests
 				time.Sleep(time.Millisecond)
@@ -291,18 +305,17 @@ func TestPerformance_LatencyPercentiles(t *testing.T) {
 	assert.Less(t, percentiles[99], int64(100), "P99 should be <100ms")
 }
 
-// TestPerformance_ResourceUtilization tests resource usage under load
 func TestPerformance_ResourceUtilization(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping performance test in short mode")
 	}
 	
-	testDB := testutil.NewTestDB(t)
-	server := setupTestServer(t, testDB, false)
-	defer server.Close()
+	env := infrastructure.NewTestEnvironment(t)
+	client := infrastructure.NewAPIClient(t, env.APIURL)
 	
 	// Monitor database connections
-	initialConnections := testDB.Stats().OpenConnections
+	initialStats := env.DB.Stats()
+	initialConnections := initialStats.OpenConnections
 	
 	// Create load
 	var wg sync.WaitGroup
@@ -313,18 +326,20 @@ func TestPerformance_ResourceUtilization(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			
-			buyer := createTestAccount(t, testutil.TestContext(t), testDB, 
-				fmt.Sprintf("resource-buyer%d", id), account.TypeBuyer)
+			buyer := createAccountInDB(t, env, 
+				fmt.Sprintf("resource-buyer%d", id), account.TypeBuyer, 1000.00)
+			buyerAuth := authenticateAccount(t, client, buyer.Email.String())
+			
+			localClient := infrastructure.NewAPIClient(t, env.APIURL)
+			localClient.SetToken(buyerAuth.Token)
 			
 			// Make several calls
 			for j := 0; j < 10; j++ {
-				resp, _ := makeCall(server, buyer.ID,
-					fmt.Sprintf("+1415555%04d", id*100+j),
-					"+18005551234")
-				
-				if resp != nil {
-					resp.Body.Close()
-				}
+				resp := localClient.Post("/api/v1/calls", map[string]interface{}{
+					"from_number": fmt.Sprintf("+1415555%04d", id*100+j),
+					"to_number":   "+18005551234",
+				})
+				resp.Body.Close()
 			}
 		}(i)
 	}
@@ -338,7 +353,7 @@ func TestPerformance_ResourceUtilization(t *testing.T) {
 		for {
 			select {
 			case <-ticker.C:
-				stats := testDB.Stats()
+				stats := env.DB.Stats()
 				if stats.OpenConnections > maxConnections {
 					maxConnections = stats.OpenConnections
 				}
@@ -353,7 +368,7 @@ func TestPerformance_ResourceUtilization(t *testing.T) {
 	done <- true
 	
 	// Final stats
-	finalStats := testDB.Stats()
+	finalStats := env.DB.Stats()
 	
 	t.Logf("Resource Utilization:")
 	t.Logf("  Initial Connections: %d", initialConnections)

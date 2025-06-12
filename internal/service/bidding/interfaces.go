@@ -99,6 +99,10 @@ type NotificationService interface {
 	NotifyBidLost(ctx context.Context, bid *bid.Bid) error
 	// NotifyBidExpired sends expiration notification
 	NotifyBidExpired(ctx context.Context, bid *bid.Bid) error
+	// NotifyAuctionStarted sends auction start notification
+	NotifyAuctionStarted(ctx context.Context, callID uuid.UUID) error
+	// NotifyAuctionClosed sends auction completion notification
+	NotifyAuctionClosed(ctx context.Context, result any) error
 }
 
 // MetricsCollector defines the interface for metrics
@@ -109,26 +113,30 @@ type MetricsCollector interface {
 	RecordAuctionDuration(ctx context.Context, callID uuid.UUID, duration time.Duration)
 	// RecordBidAmount records bid amount distribution
 	RecordBidAmount(ctx context.Context, amount float64)
+	// RecordBidValidation records bid validation results
+	RecordBidValidation(ctx context.Context, bidID uuid.UUID, valid bool, reason string)
+	// RecordAuctionParticipants records number of auction participants
+	RecordAuctionParticipants(ctx context.Context, callID uuid.UUID, count int)
 }
 
 // PlaceBidRequest represents a bid placement request
 type PlaceBidRequest struct {
-	CallID       uuid.UUID
-	BuyerID      uuid.UUID
-	Amount       float64
-	Criteria     map[string]interface{}
-	Duration     time.Duration // How long bid is valid
-	AutoRenew    bool         // Auto-renew on expiration
-	MaxAmount    float64      // Maximum for auto-bidding
+	CallID    uuid.UUID
+	BuyerID   uuid.UUID
+	Amount    float64
+	Criteria  map[string]any
+	Duration  time.Duration // How long bid is valid
+	AutoRenew bool          // Auto-renew on expiration
+	MaxAmount float64       // Maximum for auto-bidding
 }
 
 // BidUpdate represents bid modification request
 type BidUpdate struct {
-	Amount       *float64
-	Criteria     map[string]interface{}
-	ExtendBy     *time.Duration
-	AutoRenew    *bool
-	MaxAmount    *float64
+	Amount    *float64
+	Criteria  map[string]any
+	ExtendBy  *time.Duration
+	AutoRenew *bool
+	MaxAmount *float64
 }
 
 // AuctionResult represents the outcome of an auction

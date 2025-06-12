@@ -7,6 +7,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -17,7 +18,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"go.opentelemetry.io/otel/trace"
-	"go.opentelemetry.io/otel/codes"
 )
 
 // Config holds the configuration for OpenTelemetry
@@ -107,7 +107,7 @@ func InitializeOpenTelemetry(ctx context.Context, cfg *Config) (*Provider, error
 	// Set global providers
 	otel.SetTracerProvider(tp)
 	otel.SetMeterProvider(mp)
-	
+
 	// Set global propagator
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},

@@ -16,10 +16,10 @@ type PhoneNumber struct {
 var (
 	// E.164 format regex: + followed by up to 15 digits
 	e164Regex = regexp.MustCompile(`^\+[1-9]\d{1,14}$`)
-	
+
 	// US phone number regex for parsing various formats
 	usPhoneRegex = regexp.MustCompile(`^(?:\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})$`)
-	
+
 	// International phone regex for basic validation
 	intlPhoneRegex = regexp.MustCompile(`^(?:\+?[1-9]\d{0,3})?[-.\s]?\(?[0-9]{1,4}\)?[-.\s]?[0-9]{1,4}[-.\s]?[0-9]{1,9}$`)
 )
@@ -29,25 +29,25 @@ func NewPhoneNumber(number string) (PhoneNumber, error) {
 	if number == "" {
 		return PhoneNumber{}, fmt.Errorf("phone number cannot be empty")
 	}
-	
+
 	// Clean and normalize the input
 	cleaned := cleanPhoneNumber(number)
-	
+
 	// Try to parse as E.164 format first
 	if e164Regex.MatchString(cleaned) {
 		return PhoneNumber{number: cleaned}, nil
 	}
-	
+
 	// Try to parse as US phone number
 	if normalized, ok := parseUSPhoneNumber(number); ok {
 		return PhoneNumber{number: normalized}, nil
 	}
-	
+
 	// Try basic international format
 	if normalized, ok := parseInternationalPhoneNumber(number); ok {
 		return PhoneNumber{number: normalized}, nil
 	}
-	
+
 	return PhoneNumber{}, fmt.Errorf("invalid phone number format: %s", number)
 }
 
@@ -56,7 +56,7 @@ func NewPhoneNumberE164(number string) (PhoneNumber, error) {
 	if !e164Regex.MatchString(number) {
 		return PhoneNumber{}, fmt.Errorf("invalid E.164 format: %s", number)
 	}
-	
+
 	return PhoneNumber{number: number}, nil
 }
 
@@ -94,7 +94,7 @@ func (p PhoneNumber) CountryCode() string {
 	if len(p.number) < 2 {
 		return ""
 	}
-	
+
 	// Extract country code - this is a simplified implementation
 	if strings.HasPrefix(p.number, "+1") {
 		return "+1"
@@ -108,12 +108,12 @@ func (p PhoneNumber) CountryCode() string {
 	if strings.HasPrefix(p.number, "+49") {
 		return "+49"
 	}
-	
+
 	// Generic extraction for other countries (up to 4 digits)
 	for i := 2; i <= 5 && i < len(p.number); i++ {
 		return p.number[:i]
 	}
-	
+
 	return ""
 }
 
@@ -131,15 +131,15 @@ func (p PhoneNumber) FormatUS() string {
 	if !p.IsUS() {
 		return p.number
 	}
-	
+
 	national := p.NationalNumber()
 	if len(national) != 10 {
 		return p.number
 	}
-	
-	return fmt.Sprintf("(%s) %s-%s", 
-		national[:3], 
-		national[3:6], 
+
+	return fmt.Sprintf("(%s) %s-%s",
+		national[:3],
+		national[3:6],
 		national[6:])
 }
 
@@ -147,11 +147,11 @@ func (p PhoneNumber) FormatUS() string {
 func (p PhoneNumber) FormatInternational() string {
 	countryCode := p.CountryCode()
 	national := p.NationalNumber()
-	
+
 	if countryCode == "" {
 		return p.number
 	}
-	
+
 	// Add spaces for readability
 	return countryCode + " " + formatNationalWithSpaces(national)
 }
@@ -166,19 +166,19 @@ func (p PhoneNumber) IsMobile() bool {
 	if !p.IsUS() {
 		return false // Cannot determine for international numbers
 	}
-	
+
 	national := p.NationalNumber()
 	if len(national) != 10 {
 		return false
 	}
-	
+
 	// US mobile number area codes (simplified)
 	areaCode := national[:3]
 	mobileAreaCodes := map[string]bool{
 		"201": true, "202": true, "203": true, "204": true, "205": true,
 		// Add more mobile area codes as needed
 	}
-	
+
 	return mobileAreaCodes[areaCode]
 }
 
@@ -187,12 +187,12 @@ func (p PhoneNumber) AreaCode() string {
 	if !p.IsUS() {
 		return ""
 	}
-	
+
 	national := p.NationalNumber()
 	if len(national) != 10 {
 		return ""
 	}
-	
+
 	return national[:3]
 }
 
@@ -201,12 +201,12 @@ func (p PhoneNumber) Exchange() string {
 	if !p.IsUS() {
 		return ""
 	}
-	
+
 	national := p.NationalNumber()
 	if len(national) != 10 {
 		return ""
 	}
-	
+
 	return national[3:6]
 }
 
@@ -215,12 +215,12 @@ func (p PhoneNumber) Subscriber() string {
 	if !p.IsUS() {
 		return ""
 	}
-	
+
 	national := p.NationalNumber()
 	if len(national) != 10 {
 		return ""
 	}
-	
+
 	return national[6:]
 }
 
@@ -235,48 +235,53 @@ func (p *PhoneNumber) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &number); err != nil {
 		return err
 	}
-	
-	phone, err := NewPhoneNumber(number)
-	if err != nil {
-		return err
-	}
-	
-	*p = phone
-	return nil
-}
 
-// Scan implements sql.Scanner for database scanning
-func (p *PhoneNumber) Scan(value interface{}) error {
-	if value == nil {
-		*p = PhoneNumber{}
-		return nil
-	}
-	
-	var number string
-	switch v := value.(type) {
-	case []byte:
-		number = string(v)
-	case string:
-		number = v
-	default:
-		return fmt.Errorf("cannot scan %T into PhoneNumber", value)
-	}
-	
 	phone, err := NewPhoneNumber(number)
 	if err != nil {
 		return err
 	}
-	
+
 	*p = phone
 	return nil
 }
 
 // Value implements driver.Valuer for database storage
 func (p PhoneNumber) Value() (driver.Value, error) {
-	if p.IsEmpty() {
+	if p.number == "" {
 		return nil, nil
 	}
 	return p.number, nil
+}
+
+// Scan implements sql.Scanner for database retrieval
+func (p *PhoneNumber) Scan(value interface{}) error {
+	if value == nil {
+		*p = PhoneNumber{}
+		return nil
+	}
+
+	var str string
+	switch v := value.(type) {
+	case string:
+		str = v
+	case []byte:
+		str = string(v)
+	default:
+		return fmt.Errorf("cannot scan %T into PhoneNumber", value)
+	}
+
+	if str == "" {
+		*p = PhoneNumber{}
+		return nil
+	}
+
+	phone, err := NewPhoneNumber(str)
+	if err != nil {
+		return err
+	}
+
+	*p = phone
+	return nil
 }
 
 // Helper functions
@@ -297,24 +302,24 @@ func parseUSPhoneNumber(number string) (string, bool) {
 	if len(matches) != 4 {
 		return "", false
 	}
-	
+
 	// Format as E.164 (+1AAANNNNNNN)
 	return "+1" + matches[1] + matches[2] + matches[3], true
 }
 
 func parseInternationalPhoneNumber(number string) (string, bool) {
 	cleaned := cleanPhoneNumber(number)
-	
+
 	// Must start with + for international
 	if !strings.HasPrefix(cleaned, "+") {
 		return "", false
 	}
-	
+
 	// Must be valid E.164 format
 	if !e164Regex.MatchString(cleaned) {
 		return "", false
 	}
-	
+
 	return cleaned, true
 }
 
@@ -322,12 +327,12 @@ func formatNationalWithSpaces(national string) string {
 	if len(national) <= 4 {
 		return national
 	}
-	
+
 	// For US numbers (10 digits), format as XXX XXX XXXX
 	if len(national) == 10 {
 		return national[:3] + " " + national[3:6] + " " + national[6:]
 	}
-	
+
 	// For other numbers, add space every 3 digits for readability
 	result := ""
 	for i, char := range national {
@@ -336,7 +341,7 @@ func formatNationalWithSpaces(national string) string {
 		}
 		result += string(char)
 	}
-	
+
 	return result
 }
 

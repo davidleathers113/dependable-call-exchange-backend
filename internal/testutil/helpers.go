@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 	"time"
-	
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -28,13 +28,13 @@ func GenerateUUID(t *testing.T) uuid.UUID {
 // AssertEventually asserts that a condition is met within a timeout
 func AssertEventually(t *testing.T, condition func() bool, timeout time.Duration, tick time.Duration, msgAndArgs ...interface{}) {
 	t.Helper()
-	
+
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
-	
+
 	ticker := time.NewTicker(tick)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-timer.C:
@@ -70,7 +70,7 @@ func AssertTimeWithin(t *testing.T, actual, expected time.Time, delta time.Durat
 	if diff < 0 {
 		diff = -diff
 	}
-	require.LessOrEqual(t, diff, delta, 
+	require.LessOrEqual(t, diff, delta,
 		"expected time %v to be within %v of %v, but difference was %v",
 		actual, delta, expected, diff)
 }
@@ -85,19 +85,19 @@ func EqualIgnoreOrder[T comparable](a, b []T) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	
+
 	counts := make(map[T]int)
 	for _, item := range a {
 		counts[item]++
 	}
-	
+
 	for _, item := range b {
 		counts[item]--
 		if counts[item] < 0 {
 			return false
 		}
 	}
-	
+
 	return true
 }
 

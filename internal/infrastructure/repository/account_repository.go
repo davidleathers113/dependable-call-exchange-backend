@@ -8,32 +8,42 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/lib/pq"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/infrastructure/database/adapters"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/service/bidding"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/service/seller_distribution"
+	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 // accountRepository implements AccountRepository using PostgreSQL
 type accountRepository struct {
-	db    interface {
+	db interface {
 		ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 		QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 		QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
 	}
-	dbConn *sql.DB // Keep reference to original DB for transaction operations
+	dbConn   *sql.DB // Keep reference to original DB for transaction operations
+	adapters *adapters.Adapters
 }
 
 // NewAccountRepository creates a new account repository
 func NewAccountRepository(db *sql.DB) bidding.AccountRepository {
-	return &accountRepository{db: db, dbConn: db}
+	return &accountRepository{
+		db:       db,
+		dbConn:   db,
+		adapters: adapters.NewAdapters(),
+	}
 }
 
 // NewAccountRepositoryWithTx creates a new account repository with a transaction
 func NewAccountRepositoryWithTx(tx *sql.Tx) bidding.AccountRepository {
-	return &accountRepository{db: tx, dbConn: nil}
+	return &accountRepository{
+		db:       tx,
+		dbConn:   nil,
+		adapters: adapters.NewAdapters(),
+	}
 }
 
 // GetByID retrieves an account by ID
@@ -76,23 +86,22 @@ func (r *accountRepository) GetByID(ctx context.Context, id uuid.UUID) (*account
 		return nil, fmt.Errorf("failed to get account: %w", err)
 	}
 
-	// Convert database values to value objects
-	email, err := values.NewEmail(emailStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid email from database: %w", err)
+	// Convert database values to value objects using adapters
+	if err := r.adapters.Email.Scan(&a.Email, emailStr); err != nil {
+		return nil, fmt.Errorf("failed to scan email: %w", err)
 	}
-	a.Email = email
 
-	phone, err := values.NewPhoneNumber(phoneStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid phone number from database: %w", err)
+	if err := r.adapters.Phone.Scan(&a.PhoneNumber, phoneStr); err != nil {
+		return nil, fmt.Errorf("failed to scan phone number: %w", err)
 	}
-	a.PhoneNumber = phone
 
-	// Convert balance and credit limit to Money value objects
-	// Assuming USD currency - in production, currency should be stored
-	a.Balance = values.MustNewMoneyFromFloat(balanceFloat, "USD")
-	a.CreditLimit = values.MustNewMoneyFromFloat(creditLimitFloat, "USD")
+	// Convert balance and credit limit to Money value objects using adapter
+	if err := r.adapters.Money.ScanFromFloat64(&a.Balance, balanceFloat, "USD"); err != nil {
+		return nil, fmt.Errorf("failed to scan balance: %w", err)
+	}
+	if err := r.adapters.Money.ScanFromFloat64(&a.CreditLimit, creditLimitFloat, "USD"); err != nil {
+		return nil, fmt.Errorf("failed to scan credit limit: %w", err)
+	}
 
 	// Convert database values
 	a.Type = parseAccountType(typeStr)
@@ -126,12 +135,12 @@ func (r *accountRepository) GetByID(ctx context.Context, id uuid.UUID) (*account
 func (r *accountRepository) UpdateBalance(ctx context.Context, id uuid.UUID, amount float64) error {
 	// This operation needs to be atomic to prevent race conditions
 	// Using a transaction with SELECT FOR UPDATE ensures consistency
-	
+
 	// If we're already in a transaction (WithTx), use it directly
 	if r.dbConn == nil {
 		return r.updateBalanceInTx(ctx, r.db, id, amount)
 	}
-	
+
 	// Otherwise, create a new transaction
 	tx, err := r.dbConn.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
@@ -140,11 +149,11 @@ func (r *accountRepository) UpdateBalance(ctx context.Context, id uuid.UUID, amo
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
-	
+
 	if err := r.updateBalanceInTx(ctx, tx, id, amount); err != nil {
 		return err
 	}
-	
+
 	return tx.Commit()
 }
 
@@ -166,17 +175,17 @@ func (r *accountRepository) updateBalanceInTx(ctx context.Context, tx interface 
 
 	// Calculate new balance
 	newBalance := currentBalance + amount
-	
+
 	// Validate balance doesn't go negative unless it's a credit account
 	if newBalance < 0 {
 		// Check if account has credit limit
 		var creditLimit float64
-		err = tx.QueryRowContext(ctx, 
+		err = tx.QueryRowContext(ctx,
 			`SELECT credit_limit FROM accounts WHERE id = $1`, id).Scan(&creditLimit)
 		if err != nil {
 			return fmt.Errorf("failed to check credit limit: %w", err)
 		}
-		
+
 		if newBalance < -creditLimit {
 			return fmt.Errorf("insufficient balance: would exceed credit limit")
 		}
@@ -211,12 +220,12 @@ func (r *accountRepository) updateBalanceInTx(ctx context.Context, tx interface 
 			$1, $2, $3, $4, $5, $6, NOW()
 		)
 	`
-	
+
 	transactionType := "credit"
 	if amount < 0 {
 		transactionType = "debit"
 	}
-	
+
 	_, err = tx.ExecContext(ctx, auditQuery,
 		uuid.New(), id, amount, newBalance,
 		transactionType, "Balance update",
@@ -233,7 +242,7 @@ func (r *accountRepository) updateBalanceInTx(ctx context.Context, tx interface 
 // GetBalance returns current balance
 func (r *accountRepository) GetBalance(ctx context.Context, id uuid.UUID) (float64, error) {
 	query := `SELECT balance FROM accounts WHERE id = $1`
-	
+
 	var balance float64
 	err := r.db.QueryRowContext(ctx, query, id).Scan(&balance)
 	if err != nil {
@@ -297,7 +306,7 @@ func (r *accountRepository) Create(ctx context.Context, a *account.Account) erro
 
 	// For now, we'll store address as JSON in settings
 	// In production, this might be a separate table or structured differently
-	
+
 	query := `
 		INSERT INTO accounts (
 			id, email, name, company, type, status, phone_number,
@@ -320,9 +329,20 @@ func (r *accountRepository) Create(ctx context.Context, a *account.Account) erro
 		company = *a.Company
 	}
 
+	// Use adapters to convert value objects to database values
+	emailValue, err := r.adapters.Email.Value(a.Email)
+	if err != nil {
+		return fmt.Errorf("failed to convert email to database value: %w", err)
+	}
+
+	phoneValue, err := r.adapters.Phone.Value(a.PhoneNumber)
+	if err != nil {
+		return fmt.Errorf("failed to convert phone to database value: %w", err)
+	}
+
 	_, err = r.db.ExecContext(ctx, query,
-		a.ID, a.Email.String(), a.Name, company, a.Type.String(), a.Status.String(), a.PhoneNumber.String(),
-		a.Balance.ToFloat64(), a.CreditLimit.ToFloat64(), a.PaymentTerms,
+		a.ID, emailValue, a.Name, company, a.Type.String(), a.Status.String(), phoneValue,
+		r.adapters.Money.ValueAsFloat64(a.Balance), r.adapters.Money.ValueAsFloat64(a.CreditLimit), a.PaymentTerms,
 		a.TCPAConsent, a.GDPRConsent, complianceFlags,
 		a.QualityMetrics.QualityScore, a.QualityMetrics.FraudScore, settingsJSON,
 		a.LastLoginAt, a.CreatedAt, a.UpdatedAt,
@@ -373,7 +393,7 @@ func (r *accountRepository) GetBuyerQualityMetrics(ctx context.Context, buyerID 
 		FROM accounts
 		WHERE id = $1 AND type = 'buyer'
 	`
-	
+
 	var qualityScore, fraudScore float64
 	err := r.db.QueryRowContext(ctx, query, buyerID).Scan(&qualityScore, &fraudScore)
 	if err != nil {
@@ -382,7 +402,7 @@ func (r *accountRepository) GetBuyerQualityMetrics(ctx context.Context, buyerID 
 		}
 		return nil, fmt.Errorf("failed to get buyer quality metrics: %w", err)
 	}
-	
+
 	return &values.QualityMetrics{
 		QualityScore: qualityScore,
 		FraudScore:   fraudScore,
@@ -403,13 +423,13 @@ func (r *accountRepository) GetActiveBuyers(ctx context.Context, limit int) ([]*
 		ORDER BY quality_score DESC
 		LIMIT $1
 	`
-	
+
 	rows, err := r.db.QueryContext(ctx, query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query active buyers: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var accounts []*account.Account
 	for rows.Next() {
 		a, err := r.scanAccount(rows)
@@ -418,11 +438,11 @@ func (r *accountRepository) GetActiveBuyers(ctx context.Context, limit int) ([]*
 		}
 		accounts = append(accounts, a)
 	}
-	
+
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to iterate rows: %w", err)
 	}
-	
+
 	return accounts, nil
 }
 
@@ -440,13 +460,13 @@ func (r *accountRepository) GetActiveSellers(ctx context.Context, limit int) ([]
 		ORDER BY quality_score DESC
 		LIMIT $1
 	`
-	
+
 	rows, err := r.db.QueryContext(ctx, query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query active sellers: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var accounts []*account.Account
 	for rows.Next() {
 		a, err := r.scanAccount(rows)
@@ -455,11 +475,11 @@ func (r *accountRepository) GetActiveSellers(ctx context.Context, limit int) ([]
 		}
 		accounts = append(accounts, a)
 	}
-	
+
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to iterate rows: %w", err)
 	}
-	
+
 	return accounts, nil
 }
 
@@ -471,10 +491,12 @@ func (r *accountRepository) scanAccount(rows *sql.Rows) (*account.Account, error
 	var complianceFlags pq.StringArray
 	var company sql.NullString
 	var lastLoginAt sql.NullTime
-	
+	var emailStr, phoneStr string
+	var balanceFloat, creditLimitFloat float64
+
 	err := rows.Scan(
-		&a.ID, &a.Email, &a.Name, &company, &typeStr, &statusStr, &a.PhoneNumber,
-		&a.Balance, &a.CreditLimit, &a.PaymentTerms,
+		&a.ID, &emailStr, &a.Name, &company, &typeStr, &statusStr, &phoneStr,
+		&balanceFloat, &creditLimitFloat, &a.PaymentTerms,
 		&a.TCPAConsent, &a.GDPRConsent, &complianceFlags,
 		&a.QualityMetrics.QualityScore, &a.QualityMetrics.FraudScore, &settingsJSON,
 		&lastLoginAt, &a.CreatedAt, &a.UpdatedAt,
@@ -482,30 +504,46 @@ func (r *accountRepository) scanAccount(rows *sql.Rows) (*account.Account, error
 	if err != nil {
 		return nil, err
 	}
-	
+
+	// Convert database values to value objects using adapters
+	if err := r.adapters.Email.Scan(&a.Email, emailStr); err != nil {
+		return nil, fmt.Errorf("failed to scan email: %w", err)
+	}
+
+	if err := r.adapters.Phone.Scan(&a.PhoneNumber, phoneStr); err != nil {
+		return nil, fmt.Errorf("failed to scan phone number: %w", err)
+	}
+
+	if err := r.adapters.Money.ScanFromFloat64(&a.Balance, balanceFloat, "USD"); err != nil {
+		return nil, fmt.Errorf("failed to scan balance: %w", err)
+	}
+	if err := r.adapters.Money.ScanFromFloat64(&a.CreditLimit, creditLimitFloat, "USD"); err != nil {
+		return nil, fmt.Errorf("failed to scan credit limit: %w", err)
+	}
+
 	// Convert database values
 	a.Type = parseAccountType(typeStr)
 	a.Status = parseAccountStatus(statusStr)
-	
+
 	if company.Valid {
 		a.Company = &company.String
 	}
-	
+
 	if lastLoginAt.Valid {
 		a.LastLoginAt = &lastLoginAt.Time
 	}
-	
+
 	// Unmarshal JSON fields
 	if err := json.Unmarshal(settingsJSON, &a.Settings); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal settings: %w", err)
 	}
-	
+
 	// Convert PostgreSQL array to string slice
 	a.ComplianceFlags = []string(complianceFlags)
-	
+
 	// Set default address for now
 	a.Address = account.Address{}
-	
+
 	return &a, nil
 }
 
@@ -592,7 +630,7 @@ func (r *accountRepository) GetSellerCapacity(ctx context.Context, sellerID uuid
 
 	// First verify the seller exists
 	var exists bool
-	err := r.db.QueryRowContext(ctx, 
+	err := r.db.QueryRowContext(ctx,
 		"SELECT EXISTS(SELECT 1 FROM accounts WHERE id = $1 AND type = 'seller' AND status = 'active')",
 		sellerID).Scan(&exists)
 	if err != nil {
@@ -607,9 +645,9 @@ func (r *accountRepository) GetSellerCapacity(ctx context.Context, sellerID uuid
 	// In production, this would query actual capacity tables
 	return &seller_distribution.SellerCapacity{
 		SellerID:           sellerID,
-		MaxConcurrentCalls: 5,  // Default capacity
-		CurrentCalls:       0,  // Would be calculated from active calls
-		AvailableSlots:     5,  // MaxConcurrentCalls - CurrentCalls
+		MaxConcurrentCalls: 5, // Default capacity
+		CurrentCalls:       0, // Would be calculated from active calls
+		AvailableSlots:     5, // MaxConcurrentCalls - CurrentCalls
 		LastUpdated:        time.Now(),
 	}, nil
 }

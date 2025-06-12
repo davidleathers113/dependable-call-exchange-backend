@@ -6,14 +6,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	
+
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil/containers"
 )
 
 // EnhancedTestDB provides both traditional and container-based test databases
 type EnhancedTestDB struct {
 	*TestDB
-	container *containers.PostgresContainer
+	container    *containers.PostgresContainer
 	useContainer bool
 }
 
@@ -22,18 +22,18 @@ func NewEnhancedTestDB(t *testing.T, opts ...TestOption) *EnhancedTestDB {
 	config := &testConfig{
 		useContainer: false, // Default to existing infrastructure
 	}
-	
+
 	for _, opt := range opts {
 		opt(config)
 	}
-	
+
 	if config.useContainer {
 		return newContainerTestDB(t)
 	}
-	
+
 	// Fall back to existing TestDB
 	return &EnhancedTestDB{
-		TestDB: NewTestDB(t),
+		TestDB:       NewTestDB(t),
 		useContainer: false,
 	}
 }
@@ -53,29 +53,29 @@ func WithContainers() TestOption {
 
 func newContainerTestDB(t *testing.T) *EnhancedTestDB {
 	ctx := context.Background()
-	
+
 	container, err := containers.NewPostgresContainer(ctx)
 	require.NoError(t, err)
-	
+
 	db, err := sql.Open("postgres", container.ConnectionString)
 	require.NoError(t, err)
-	
+
 	// Create base TestDB structure
 	tdb := &TestDB{
 		t:      t,
 		db:     db,
 		dbName: "dce_test",
 	}
-	
+
 	// Initialize schema
 	tdb.InitSchema()
-	
+
 	enhanced := &EnhancedTestDB{
 		TestDB:       tdb,
 		container:    container,
 		useContainer: true,
 	}
-	
+
 	// Register cleanup
 	t.Cleanup(func() {
 		db.Close()
@@ -83,7 +83,7 @@ func newContainerTestDB(t *testing.T) *EnhancedTestDB {
 			t.Logf("failed to terminate container: %v", err)
 		}
 	})
-	
+
 	return enhanced
 }
 
@@ -94,7 +94,7 @@ func (e *EnhancedTestDB) RestoreSnapshot() error {
 		e.TruncateTables()
 		return nil
 	}
-	
+
 	ctx := context.Background()
 	return e.container.RestoreSnapshot(ctx)
 }
@@ -105,13 +105,13 @@ func (e *EnhancedTestDB) RunInTransaction(fn func(*sql.Tx) error) error {
 	if err != nil {
 		return err
 	}
-	
+
 	defer func() {
 		// Always rollback to ensure test isolation
 		if rbErr := tx.Rollback(); rbErr != nil && rbErr != sql.ErrTxDone {
 			e.t.Errorf("failed to rollback transaction: %v", rbErr)
 		}
 	}()
-	
+
 	return fn(tx)
 }

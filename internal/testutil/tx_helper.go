@@ -10,11 +10,12 @@ import (
 
 // WithTransaction executes a test function within a transaction that's automatically rolled back.
 // This ensures complete test isolation by preventing any database changes from persisting.
-// 
+//
 // Usage:
-//   WithTransaction(t, db, func(tx *sql.Tx) {
-//       // Your test code here - all changes will be rolled back
-//   })
+//
+//	WithTransaction(t, db, func(tx *sql.Tx) {
+//	    // Your test code here - all changes will be rolled back
+//	})
 func WithTransaction(t *testing.T, db *sql.DB, fn func(tx *sql.Tx)) {
 	t.Helper()
 
@@ -42,9 +43,10 @@ func WithRollback(t *testing.T, db *sql.DB, fn func(tx *sql.Tx)) {
 // The transaction is automatically rolled back to ensure test isolation.
 //
 // Usage:
-//   WithTransactionContext(t, ctx, db, func(ctx context.Context, tx *sql.Tx) {
-//       // Your test code here - context is available for cancellation
-//   })
+//
+//	WithTransactionContext(t, ctx, db, func(ctx context.Context, tx *sql.Tx) {
+//	    // Your test code here - context is available for cancellation
+//	})
 func WithTransactionContext(t *testing.T, ctx context.Context, db *sql.DB, fn func(ctx context.Context, tx *sql.Tx)) {
 	t.Helper()
 
@@ -66,10 +68,11 @@ func WithTransactionContext(t *testing.T, ctx context.Context, db *sql.DB, fn fu
 // each within their own isolated transaction. All transactions are rolled back.
 //
 // Usage:
-//   WithParallelTransactions(t, db, 
-//       func(tx *sql.Tx) { /* test 1 */ },
-//       func(tx *sql.Tx) { /* test 2 */ },
-//   )
+//
+//	WithParallelTransactions(t, db,
+//	    func(tx *sql.Tx) { /* test 1 */ },
+//	    func(tx *sql.Tx) { /* test 2 */ },
+//	)
 func WithParallelTransactions(t *testing.T, db *sql.DB, fns ...func(tx *sql.Tx)) {
 	t.Helper()
 
@@ -91,11 +94,12 @@ type TxTestFunc func(t *testing.T, tx *sql.Tx)
 // with test setup and assertions.
 //
 // Usage:
-//   RunTransactionalTest(t, db, "test name", func(t *testing.T, tx *sql.Tx) {
-//       // Setup
-//       // Execute
-//       // Assert
-//   })
+//
+//	RunTransactionalTest(t, db, "test name", func(t *testing.T, tx *sql.Tx) {
+//	    // Setup
+//	    // Execute
+//	    // Assert
+//	})
 func RunTransactionalTest(t *testing.T, db *sql.DB, name string, fn TxTestFunc) {
 	t.Run(name, func(t *testing.T) {
 		tx, err := db.Begin()
@@ -115,8 +119,8 @@ func RunTransactionalTest(t *testing.T, db *sql.DB, name string, fn TxTestFunc) 
 // TransactionTestSuite provides a structured way to run multiple related tests
 // within transactions.
 type TransactionTestSuite struct {
-	t    *testing.T
-	db   *sql.DB
+	t     *testing.T
+	db    *sql.DB
 	tests map[string]TxTestFunc
 }
 

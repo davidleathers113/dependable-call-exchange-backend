@@ -8,10 +8,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/infrastructure/database/adapters"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/service/bidding"
+	"github.com/google/uuid"
 )
 
 // bidRepository implements BidRepository using PostgreSQL
@@ -21,16 +22,23 @@ type bidRepository struct {
 		QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 		QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
 	}
+	adapters *adapters.Adapters
 }
 
 // NewBidRepository creates a new bid repository
 func NewBidRepository(db *sql.DB) bidding.BidRepository {
-	return &bidRepository{db: db}
+	return &bidRepository{
+		db:       db,
+		adapters: adapters.NewAdapters(),
+	}
 }
 
 // NewBidRepositoryWithTx creates a new bid repository with a transaction
 func NewBidRepositoryWithTx(tx *sql.Tx) bidding.BidRepository {
-	return &bidRepository{db: tx}
+	return &bidRepository{
+		db:       tx,
+		adapters: adapters.NewAdapters(),
+	}
 }
 
 // Create stores a new bid
@@ -70,19 +78,23 @@ func (r *bidRepository) Create(ctx context.Context, b *bid.Bid) error {
 	`
 
 	// Handle optional seller_id
-	var sellerID interface{} = sql.NullString{}
+	var sellerID interface{}
 	if b.SellerID != uuid.Nil {
 		sellerID = b.SellerID
+	} else {
+		sellerID = nil
 	}
 
 	// Handle optional auction_id
-	var auctionID interface{} = sql.NullString{}
+	var auctionID interface{}
 	if b.AuctionID != uuid.Nil {
 		auctionID = b.AuctionID
+	} else {
+		auctionID = nil
 	}
 
 	_, err = r.db.ExecContext(ctx, query,
-		b.ID, b.CallID, b.BuyerID, sellerID, b.Amount.ToFloat64(), b.Status.String(),
+		b.ID, b.CallID, b.BuyerID, sellerID, r.adapters.Money.ValueAsFloat64(b.Amount), b.Status.String(),
 		auctionID, b.Rank, criteriaJSON, qualityJSON,
 		b.PlacedAt, b.ExpiresAt, b.AcceptedAt, b.CreatedAt, b.UpdatedAt,
 	)
@@ -125,8 +137,10 @@ func (r *bidRepository) GetByID(ctx context.Context, id uuid.UUID) (*bid.Bid, er
 		return nil, fmt.Errorf("failed to get bid: %w", err)
 	}
 
-	// Convert amount to Money value object
-	b.Amount = values.MustNewMoneyFromFloat(amountFloat, values.USD)
+	// Convert amount to Money value object using adapter
+	if err := r.adapters.Money.ScanFromFloat64(&b.Amount, amountFloat, values.USD); err != nil {
+		return nil, fmt.Errorf("failed to scan amount: %w", err)
+	}
 
 	// Convert database values
 	b.Status = parseBidStatus(statusStr)
@@ -209,7 +223,7 @@ func (r *bidRepository) Update(ctx context.Context, b *bid.Bid) error {
 // Delete removes a bid
 func (r *bidRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	query := `DELETE FROM bids WHERE id = $1`
-	
+
 	result, err := r.db.ExecContext(ctx, query, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete bid: %w", err)
@@ -223,7 +237,7 @@ func (r *bidRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	if rowsAffected == 0 {
 		return fmt.Errorf("bid with ID %s not found", id)
 	}
-	
+
 	return nil
 }
 
@@ -249,7 +263,7 @@ func (r *bidRepository) GetActiveBidsForCall(ctx context.Context, callID uuid.UU
 
 	var bids []*bid.Bid
 	for rows.Next() {
-		b, err := scanBid(rows)
+		b, err := r.scanBid(rows)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan bid: %w", err)
 		}
@@ -284,7 +298,7 @@ func (r *bidRepository) GetByBuyer(ctx context.Context, buyerID uuid.UUID) ([]*b
 
 	var bids []*bid.Bid
 	for rows.Next() {
-		b, err := scanBid(rows)
+		b, err := r.scanBid(rows)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan bid: %w", err)
 		}
@@ -320,7 +334,7 @@ func (r *bidRepository) GetExpiredBids(ctx context.Context, before time.Time) ([
 
 	var bids []*bid.Bid
 	for rows.Next() {
-		b, err := scanBid(rows)
+		b, err := r.scanBid(rows)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan bid: %w", err)
 		}
@@ -335,7 +349,7 @@ func (r *bidRepository) GetExpiredBids(ctx context.Context, before time.Time) ([
 }
 
 // scanBid scans a database row into a Bid struct
-func scanBid(rows *sql.Rows) (*bid.Bid, error) {
+func (r *bidRepository) scanBid(rows *sql.Rows) (*bid.Bid, error) {
 	var b bid.Bid
 	var statusStr string
 	var criteriaJSON, qualityJSON []byte
@@ -353,8 +367,10 @@ func scanBid(rows *sql.Rows) (*bid.Bid, error) {
 		return nil, err
 	}
 
-	// Convert amount to Money value object
-	b.Amount = values.MustNewMoneyFromFloat(amountFloat, values.USD)
+	// Convert amount to Money value object using adapter
+	if err := r.adapters.Money.ScanFromFloat64(&b.Amount, amountFloat, values.USD); err != nil {
+		return nil, fmt.Errorf("failed to scan amount: %w", err)
+	}
 
 	// Convert database values
 	b.Status = parseBidStatus(statusStr)
@@ -423,26 +439,26 @@ func (r *bidRepository) GetActiveBuyerBids(ctx context.Context, buyerID uuid.UUI
 		WHERE buyer_id = $1 AND status = 'active'
 		ORDER BY placed_at DESC
 	`
-	
+
 	rows, err := r.db.QueryContext(ctx, query, buyerID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query active buyer bids: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var bids []*bid.Bid
 	for rows.Next() {
-		b, err := scanBid(rows)
+		b, err := r.scanBid(rows)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan bid: %w", err)
 		}
 		bids = append(bids, b)
 	}
-	
+
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to iterate rows: %w", err)
 	}
-	
+
 	return bids, nil
 }
 
@@ -458,25 +474,25 @@ func (r *bidRepository) GetWonBidsByBuyer(ctx context.Context, buyerID uuid.UUID
 		ORDER BY accepted_at DESC
 		LIMIT $2
 	`
-	
+
 	rows, err := r.db.QueryContext(ctx, query, buyerID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query won bids: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var bids []*bid.Bid
 	for rows.Next() {
-		b, err := scanBid(rows)
+		b, err := r.scanBid(rows)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan bid: %w", err)
 		}
 		bids = append(bids, b)
 	}
-	
+
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to iterate rows: %w", err)
 	}
-	
+
 	return bids, nil
 }

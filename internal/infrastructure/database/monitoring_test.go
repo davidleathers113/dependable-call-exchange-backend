@@ -17,31 +17,31 @@ import (
 func setupMonitoringTest(t *testing.T) (*Monitor, *ConnectionPool, func()) {
 	logger := zaptest.NewLogger(t)
 	db := testutil.NewTestDB(t)
-	
+
 	cfg := &config.DatabaseConfig{
 		URL: db.ConnectionString(),
 	}
-	
+
 	pool, err := NewConnectionPool(cfg, logger)
 	require.NoError(t, err)
-	
+
 	monitor := NewMonitor(pool, logger, nil)
-	
+
 	cleanup := func() {
 		pool.Close()
 		// TestDB cleans up automatically
 	}
-	
+
 	return monitor, pool, cleanup
 }
 
 func TestNewMonitor(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	pool := &ConnectionPool{} // Minimal pool
-	
+
 	t.Run("with default config", func(t *testing.T) {
 		monitor := NewMonitor(pool, logger, nil)
-		
+
 		assert.NotNil(t, monitor)
 		assert.Equal(t, int64(1000), monitor.config.SlowQueryThresholdMs)
 		assert.Equal(t, int64(5000), monitor.config.LockWaitThresholdMs)
@@ -50,7 +50,7 @@ func TestNewMonitor(t *testing.T) {
 		assert.Equal(t, 30*time.Second, monitor.config.ReplicationLagThreshold)
 		assert.Equal(t, 80, monitor.config.ConnectionThreshold)
 	})
-	
+
 	t.Run("with custom config", func(t *testing.T) {
 		config := &MonitorConfig{
 			SlowQueryThresholdMs:    500,
@@ -60,9 +60,9 @@ func TestNewMonitor(t *testing.T) {
 			ReplicationLagThreshold: 60 * time.Second,
 			ConnectionThreshold:     90,
 		}
-		
+
 		monitor := NewMonitor(pool, logger, config)
-		
+
 		assert.NotNil(t, monitor)
 		assert.Equal(t, config, monitor.config)
 	})
@@ -71,23 +71,23 @@ func TestNewMonitor(t *testing.T) {
 func TestMonitor_GetConnectionStats(t *testing.T) {
 	monitor, pool, cleanup := setupMonitoringTest(t)
 	defer cleanup()
-	
+
 	ctx := context.Background()
-	
+
 	// First, enable pg_stat_activity if needed
 	_, _ = pool.GetPrimary().Exec(ctx, `
 		CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 	`)
 	// Ignore error as extension might not be available in test DB
-	
+
 	t.Run("successful stats retrieval", func(t *testing.T) {
 		stats, err := monitor.GetConnectionStats(ctx)
-		
+
 		// May fail if pg_stat_activity is not available
 		if err != nil {
 			t.Skip("pg_stat_activity not available")
 		}
-		
+
 		assert.NotNil(t, stats)
 		assert.GreaterOrEqual(t, stats.TotalConnections, 1) // At least our connection
 		assert.NotNil(t, stats.ConnectionsByState)
@@ -99,9 +99,9 @@ func TestMonitor_GetConnectionStats(t *testing.T) {
 func TestMonitor_GetTableStats(t *testing.T) {
 	monitor, pool, cleanup := setupMonitoringTest(t)
 	defer cleanup()
-	
+
 	ctx := context.Background()
-	
+
 	// Create test tables
 	_, err := pool.GetPrimary().Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS monitor_test_1 (
@@ -129,21 +129,21 @@ func TestMonitor_GetTableStats(t *testing.T) {
 		ANALYZE monitor_test_2;
 	`)
 	require.NoError(t, err)
-	
+
 	defer func() {
 		pool.GetPrimary().Exec(ctx, "DROP TABLE IF EXISTS monitor_test_1, monitor_test_2")
 	}()
-	
+
 	t.Run("retrieve table statistics", func(t *testing.T) {
 		stats, err := monitor.GetTableStats(ctx)
-		
+
 		// May fail if pg_stat_user_tables is not available
 		if err != nil {
 			t.Skip("pg_stat_user_tables not available")
 		}
-		
+
 		assert.NotEmpty(t, stats)
-		
+
 		// Find our test tables
 		var foundTable1, foundTable2 bool
 		for _, stat := range stats {
@@ -160,7 +160,7 @@ func TestMonitor_GetTableStats(t *testing.T) {
 				assert.GreaterOrEqual(t, stat.LiveTuples, int64(40)) // Approximate
 			}
 		}
-		
+
 		assert.True(t, foundTable1, "monitor_test_1 not found in stats")
 		assert.True(t, foundTable2, "monitor_test_2 not found in stats")
 	})
@@ -169,9 +169,9 @@ func TestMonitor_GetTableStats(t *testing.T) {
 func TestMonitor_GetIndexStats(t *testing.T) {
 	monitor, pool, cleanup := setupMonitoringTest(t)
 	defer cleanup()
-	
+
 	ctx := context.Background()
-	
+
 	// Create test table with indexes
 	_, err := pool.GetPrimary().Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS index_test (
@@ -202,19 +202,19 @@ func TestMonitor_GetIndexStats(t *testing.T) {
 		ANALYZE index_test;
 	`)
 	require.NoError(t, err)
-	
+
 	defer pool.GetPrimary().Exec(ctx, "DROP TABLE IF EXISTS index_test")
-	
+
 	t.Run("retrieve index statistics", func(t *testing.T) {
 		stats, err := monitor.GetIndexStats(ctx)
-		
+
 		// May fail if pg_stat_user_indexes is not available
 		if err != nil {
 			t.Skip("pg_stat_user_indexes not available")
 		}
-		
+
 		assert.NotEmpty(t, stats)
-		
+
 		// Find our test indexes
 		var foundPrimary, foundEmail, foundStatus, foundCreated bool
 		for _, stat := range stats {
@@ -236,7 +236,7 @@ func TestMonitor_GetIndexStats(t *testing.T) {
 				}
 			}
 		}
-		
+
 		assert.True(t, foundPrimary, "Primary key index not found")
 		assert.True(t, foundEmail, "Email unique index not found")
 		assert.True(t, foundStatus, "Status index not found")
@@ -247,9 +247,9 @@ func TestMonitor_GetIndexStats(t *testing.T) {
 func TestMonitor_SuggestMissingIndexes(t *testing.T) {
 	monitor, pool, cleanup := setupMonitoringTest(t)
 	defer cleanup()
-	
+
 	ctx := context.Background()
-	
+
 	// Create test table without indexes on frequently queried columns
 	_, err := pool.GetPrimary().Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS missing_index_test (
@@ -276,17 +276,17 @@ func TestMonitor_SuggestMissingIndexes(t *testing.T) {
 		ANALYZE missing_index_test;
 	`)
 	require.NoError(t, err)
-	
+
 	defer pool.GetPrimary().Exec(ctx, "DROP TABLE IF EXISTS missing_index_test")
-	
+
 	t.Run("suggest indexes for unindexed columns", func(t *testing.T) {
 		suggestions, err := monitor.SuggestMissingIndexes(ctx)
-		
+
 		// This test may not produce suggestions depending on data distribution
 		if err != nil {
 			t.Skip("Index suggestions not available")
 		}
-		
+
 		// The suggestions should be valid CREATE INDEX statements
 		for _, suggestion := range suggestions {
 			assert.True(t, strings.HasPrefix(suggestion, "CREATE INDEX"))
@@ -298,19 +298,19 @@ func TestMonitor_SuggestMissingIndexes(t *testing.T) {
 func TestMonitor_GetLockingQueries(t *testing.T) {
 	monitor, _, cleanup := setupMonitoringTest(t)
 	defer cleanup()
-	
+
 	ctx := context.Background()
-	
+
 	// Note: Creating actual lock contention in tests is complex and may be flaky
 	// This test primarily verifies the query executes without error
-	
+
 	t.Run("retrieve locking queries", func(t *testing.T) {
 		locks, err := monitor.GetLockingQueries(ctx)
-		
+
 		// Query should execute without error
 		assert.NoError(t, err)
 		assert.NotNil(t, locks)
-		
+
 		// In normal test conditions, there shouldn't be blocking locks
 		assert.Empty(t, locks)
 	})
@@ -319,9 +319,9 @@ func TestMonitor_GetLockingQueries(t *testing.T) {
 func TestMonitor_RunHealthCheck(t *testing.T) {
 	monitor, pool, cleanup := setupMonitoringTest(t)
 	defer cleanup()
-	
+
 	ctx := context.Background()
-	
+
 	// Create some test data for health check
 	_, err := pool.GetPrimary().Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS health_test (
@@ -335,26 +335,26 @@ func TestMonitor_RunHealthCheck(t *testing.T) {
 		FROM generate_series(1, 100);
 	`)
 	require.NoError(t, err)
-	
+
 	defer pool.GetPrimary().Exec(ctx, "DROP TABLE IF EXISTS health_test")
-	
+
 	t.Run("comprehensive health check", func(t *testing.T) {
 		results, err := monitor.RunHealthCheck(ctx)
-		
+
 		assert.NoError(t, err)
 		assert.NotNil(t, results)
-		
+
 		// Check basic connectivity
 		ping, ok := results["ping"].(bool)
 		assert.True(t, ok)
 		assert.True(t, ping)
-		
+
 		// Check overall health
 		overallHealthy, ok := results["overall_healthy"].(bool)
 		assert.True(t, ok)
 		// Should be healthy in test environment
 		assert.True(t, overallHealthy)
-		
+
 		// Check specific metrics exist
 		assert.Contains(t, results, "connection_saturation")
 		assert.Contains(t, results, "connection_healthy")
@@ -368,9 +368,9 @@ func TestMonitor_RunHealthCheck(t *testing.T) {
 func TestMonitor_GeneratePerformanceReport(t *testing.T) {
 	monitor, pool, cleanup := setupMonitoringTest(t)
 	defer cleanup()
-	
+
 	ctx := context.Background()
-	
+
 	// Create some test data
 	_, err := pool.GetPrimary().Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS perf_test (
@@ -382,20 +382,20 @@ func TestMonitor_GeneratePerformanceReport(t *testing.T) {
 		SELECT i FROM generate_series(1, 100) i;
 	`)
 	require.NoError(t, err)
-	
+
 	defer pool.GetPrimary().Exec(ctx, "DROP TABLE IF EXISTS perf_test")
-	
+
 	t.Run("generate performance report", func(t *testing.T) {
 		report, err := monitor.GeneratePerformanceReport(ctx)
-		
+
 		assert.NoError(t, err)
 		assert.NotEmpty(t, report)
-		
+
 		// Verify report structure
 		assert.Contains(t, report, "DATABASE PERFORMANCE REPORT")
 		assert.Contains(t, report, "Generated at:")
 		assert.Contains(t, report, "HEALTH CHECK")
-		
+
 		// Report should contain various sections
 		reportLower := strings.ToLower(report)
 		assert.Contains(t, reportLower, "connection")
@@ -406,26 +406,26 @@ func TestMonitor_GeneratePerformanceReport(t *testing.T) {
 func TestMonitor_GetSlowQueries(t *testing.T) {
 	monitor, pool, cleanup := setupMonitoringTest(t)
 	defer cleanup()
-	
+
 	ctx := context.Background()
-	
+
 	// Enable pg_stat_statements if possible
 	_, _ = pool.GetPrimary().Exec(ctx, "CREATE EXTENSION IF NOT EXISTS pg_stat_statements")
-	
+
 	t.Run("retrieve slow queries", func(t *testing.T) {
 		queries, err := monitor.GetSlowQueries(ctx, 10)
-		
+
 		// This may fail if pg_stat_statements is not available
 		if err != nil {
 			if strings.Contains(err.Error(), "pg_stat_statements") ||
-			   strings.Contains(err.Error(), "does not exist") {
+				strings.Contains(err.Error(), "does not exist") {
 				t.Skip("pg_stat_statements extension not available")
 			}
 		}
-		
+
 		assert.NoError(t, err)
 		assert.NotNil(t, queries)
-		
+
 		// Verify structure of returned queries
 		for _, query := range queries {
 			assert.NotEmpty(t, query.QueryID)
@@ -440,9 +440,9 @@ func TestMonitor_GetSlowQueries(t *testing.T) {
 func BenchmarkMonitor_GetConnectionStats(b *testing.B) {
 	monitor, _, cleanup := setupMonitoringTest(&testing.T{})
 	defer cleanup()
-	
+
 	ctx := context.Background()
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, err := monitor.GetConnectionStats(ctx)
@@ -455,9 +455,9 @@ func BenchmarkMonitor_GetConnectionStats(b *testing.B) {
 func BenchmarkMonitor_RunHealthCheck(b *testing.B) {
 	monitor, _, cleanup := setupMonitoringTest(&testing.T{})
 	defer cleanup()
-	
+
 	ctx := context.Background()
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, err := monitor.RunHealthCheck(ctx)

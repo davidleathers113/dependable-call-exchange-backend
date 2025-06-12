@@ -11,7 +11,7 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
-	
+
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/infrastructure/config"
 )
 
@@ -222,7 +222,7 @@ func (m *Migrator) Status(ctx context.Context) error {
 
 	fmt.Printf("Applied migrations: %d\n", len(applied))
 	for _, migration := range applied {
-		fmt.Printf("  %s - %s (applied at %s)\n", 
+		fmt.Printf("  %s - %s (applied at %s)\n",
 			migration.ID, migration.Filename, migration.AppliedAt.Format(time.RFC3339))
 	}
 
@@ -295,7 +295,7 @@ func (m *Migrator) rollbackMigration(ctx context.Context, migration Migration) e
 		return fmt.Errorf("failed to remove migration record: %w", err)
 	}
 
-	slog.Warn("migration rolled back - manual cleanup may be required", 
+	slog.Warn("migration rolled back - manual cleanup may be required",
 		"migration", migration.Filename)
 	return nil
 }

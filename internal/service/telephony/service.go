@@ -72,11 +72,11 @@ func (s *service) InitiateCall(ctx context.Context, req *InitiateCallRequest) (*
 		// Update call status to failed
 		c.UpdateStatus(call.StatusFailed)
 		_ = s.callRepo.Update(ctx, c)
-		
+
 		if s.metrics != nil {
 			s.metrics.RecordCallFailed(ctx, err.Error())
 		}
-		
+
 		return nil, errors.NewExternalError("telephony provider", "failed to initiate call").
 			WithCause(err)
 	}
@@ -140,7 +140,7 @@ func (s *service) TerminateCall(ctx context.Context, callID uuid.UUID) error {
 
 	// Check if call is in a terminable state
 	if !isTerminableStatus(c.Status) {
-		return errors.NewBusinessError("INVALID_STATE", 
+		return errors.NewBusinessError("INVALID_STATE",
 			fmt.Sprintf("call cannot be terminated in status: %s", c.Status))
 	}
 
@@ -221,7 +221,13 @@ func (s *service) GetCallStatus(ctx context.Context, callID uuid.UUID) (*CallSta
 		Duration:  c.Duration,
 		StartTime: c.StartTime,
 		EndTime:   c.EndTime,
-		Cost:      func() *float64 { if c.Cost != nil { v := c.Cost.ToFloat64(); return &v }; return nil }(),
+		Cost: func() *float64 {
+			if c.Cost != nil {
+				v := c.Cost.ToFloat64()
+				return &v
+			}
+			return nil
+		}(),
 	}, nil
 }
 
@@ -285,7 +291,7 @@ func (s *service) RecordCall(ctx context.Context, callID uuid.UUID, record bool)
 		if !record {
 			eventType = "call.recording.stopped"
 		}
-		
+
 		event := &CallEvent{
 			EventID:   uuid.New(),
 			CallID:    callID,
@@ -376,7 +382,7 @@ func (s *service) HandleWebhook(ctx context.Context, provider string, data inter
 	// 2. Update call status based on webhook events
 	// 3. Handle recording completions, call completions, etc.
 	// 4. Publish appropriate events
-	
+
 	// For now, we'll just return success
 	return nil
 }

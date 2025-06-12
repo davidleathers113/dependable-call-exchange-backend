@@ -182,10 +182,10 @@ func (cm *CacheManager) GetStats(ctx context.Context) (map[string]interface{}, e
 // StartBackgroundCleanup starts background cleanup routines for sessions and rate limits
 func (cm *CacheManager) StartBackgroundCleanup(ctx context.Context, interval time.Duration) {
 	ticker := time.NewTicker(interval)
-	
+
 	go func() {
 		defer ticker.Stop()
-		
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -196,7 +196,7 @@ func (cm *CacheManager) StartBackgroundCleanup(ctx context.Context, interval tim
 			}
 		}
 	}()
-	
+
 	cm.logger.Info("background cleanup started", zap.Duration("interval", interval))
 }
 

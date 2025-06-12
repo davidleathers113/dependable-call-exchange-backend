@@ -3,10 +3,10 @@ package fixtures
 import (
 	"testing"
 	"time"
-	
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	
+
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/compliance"
 )
 
@@ -35,7 +35,7 @@ func NewComplianceRuleBuilder(t *testing.T) *ComplianceRuleBuilder {
 	require.NoError(t, err)
 	createdBy, err := uuid.NewRandom()
 	require.NoError(t, err)
-	
+
 	now := time.Now().UTC()
 	return &ComplianceRuleBuilder{
 		t:           t,
@@ -180,7 +180,7 @@ func NewConsentRecordBuilder(t *testing.T) *ConsentRecordBuilder {
 	t.Helper()
 	id, err := uuid.NewRandom()
 	require.NoError(t, err)
-	
+
 	now := time.Now().UTC()
 	return &ConsentRecordBuilder{
 		t:              t,

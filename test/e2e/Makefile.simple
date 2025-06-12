@@ -1,0 +1,74 @@
+# Simplified E2E Testing with Docker Compose
+
+# Default compose file
+COMPOSE_FILE ?= docker-compose.test.yml
+
+# Run all E2E tests
+.PHONY: test
+test:
+	@echo "Running E2E tests..."
+	@go test -tags=e2e -timeout=10m -v .
+
+# Run specific test
+.PHONY: test-run
+test-run:
+	@echo "Running specific test: $(TEST)"
+	@go test -tags=e2e -timeout=10m -v -run $(TEST) .
+
+# Run tests in parallel
+.PHONY: test-parallel
+test-parallel:
+	@echo "Running E2E tests in parallel..."
+	@go test -tags=e2e -timeout=10m -v -parallel 4 .
+
+# Run with coverage
+.PHONY: test-coverage
+test-coverage:
+	@echo "Running E2E tests with coverage..."
+	@go test -tags=e2e -timeout=10m -v -coverprofile=coverage.out .
+	@go tool cover -html=coverage.out -o coverage.html
+
+# Just build the containers (useful for debugging)
+.PHONY: build
+build:
+	@echo "Building test containers..."
+	@docker compose -f $(COMPOSE_FILE) build
+
+# Start containers manually (for development)
+.PHONY: up
+up:
+	@echo "Starting test environment..."
+	@docker compose -f $(COMPOSE_FILE) up -d
+	@docker compose -f $(COMPOSE_FILE) ps
+
+# Stop containers
+.PHONY: down
+down:
+	@echo "Stopping test environment..."
+	@docker compose -f $(COMPOSE_FILE) down -v
+
+# View logs
+.PHONY: logs
+logs:
+	@docker compose -f $(COMPOSE_FILE) logs -f
+
+# Clean everything
+.PHONY: clean
+clean:
+	@echo "Cleaning up test artifacts..."
+	@docker compose -f $(COMPOSE_FILE) down -v --remove-orphans
+	@rm -f coverage.out coverage.html
+
+# Help
+.PHONY: help
+help:
+	@echo "E2E Test Commands:"
+	@echo "  make test          - Run all E2E tests"
+	@echo "  make test-run TEST=TestName - Run specific test"
+	@echo "  make test-parallel - Run tests in parallel"
+	@echo "  make test-coverage - Run with coverage report"
+	@echo "  make build         - Build test containers"
+	@echo "  make up            - Start test environment"
+	@echo "  make down          - Stop test environment"
+	@echo "  make logs          - View container logs"
+	@echo "  make clean         - Clean up everything"

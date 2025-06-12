@@ -60,6 +60,30 @@ test-synctest: ## Run tests with Go 1.24 synctest (requires GOEXPERIMENT=synctes
 test-integration: ## Run integration tests
 	$(GOTEST) -tags=integration -v ./test/...
 
+test-contract: ## Run contract tests
+	@echo "Running OpenAPI contract validation tests..."
+	$(GOTEST) -v -tags=contract ./internal/api/rest/ -run TestContract
+	$(GOTEST) -v -tags=contract ./test/contract/ -run TestAPIContractCompliance
+
+test-contract-validate: ## Validate OpenAPI specification
+	@echo "Validating OpenAPI specification..."
+	@if [ -f "api/openapi.yaml" ]; then \
+		echo "OpenAPI spec found, validating..."; \
+		if command -v swagger-codegen >/dev/null 2>&1; then \
+			swagger-codegen validate -i api/openapi.yaml; \
+		elif [ -f "swagger-codegen-cli.jar" ]; then \
+			java -jar swagger-codegen-cli.jar validate -i api/openapi.yaml; \
+		else \
+			echo "Installing swagger-codegen-cli for validation..."; \
+			wget -q https://repo1.maven.org/maven2/io/swagger/codegen/v3/swagger-codegen-cli/3.0.46/swagger-codegen-cli-3.0.46.jar -O swagger-codegen-cli.jar; \
+			java -jar swagger-codegen-cli.jar validate -i api/openapi.yaml; \
+		fi; \
+	else \
+		echo "Warning: OpenAPI specification not found at api/openapi.yaml"; \
+	fi
+
+test-contract-full: test-contract-validate test-contract ## Run full contract testing suite
+
 test-property: ## Run property-based tests  
 	$(GOTEST) -v -run="Property" ./...
 
@@ -92,6 +116,83 @@ coverage-detailed: ## Generate detailed coverage with function-level analysis
 coverage-merge: ## Merge coverage from multiple test runs (Go 1.24)
 	@echo "Merging coverage data..."
 	$(GOTOOL) covdata textfmt -i=coverage -o coverage-merged.out 2>/dev/null || echo "No coverage data to merge"
+
+# E2E Testing with Testcontainers
+test-e2e: ## Run E2E tests with Testcontainers
+	@echo "Running E2E tests with Testcontainers..."
+	$(GOTEST) -tags=e2e -timeout=20m -v ./test/e2e/...
+
+test-e2e-short: ## Run E2E tests excluding performance tests
+	@echo "Running E2E tests (short mode)..."
+	$(GOTEST) -tags=e2e -short -timeout=10m -v ./test/e2e/...
+
+test-e2e-parallel: ## Run E2E tests in parallel
+	@echo "Running E2E tests in parallel..."
+	$(GOTEST) -tags=e2e -timeout=20m -v -p 4 ./test/e2e/...
+
+test-e2e-coverage: ## Run E2E tests with coverage
+	@echo "Running E2E tests with coverage..."
+	$(GOTEST) -tags=e2e -timeout=20m -v -coverprofile=coverage-e2e.out -covermode=atomic ./test/e2e/...
+	$(GOTOOL) cover -html=coverage-e2e.out -o coverage-e2e.html
+	@echo "Coverage report generated: coverage-e2e.html"
+
+test-e2e-deps: ## Install E2E test dependencies
+	@echo "Installing E2E test dependencies..."
+	$(GOCMD) get github.com/testcontainers/testcontainers-go
+	$(GOCMD) get github.com/testcontainers/testcontainers-go/modules/postgres
+	$(GOCMD) get github.com/testcontainers/testcontainers-go/modules/redis
+	$(GOCMD) get github.com/docker/go-connections/nat
+	$(GOMOD) tidy
+
+test-e2e-auth: ## Run only auth E2E tests
+	@echo "Running auth E2E tests..."
+	$(GOTEST) -tags=e2e -timeout=5m -v -run TestAuth ./test/e2e/
+
+test-e2e-flow: ## Run only call flow E2E tests
+	@echo "Running call flow E2E tests..."
+	$(GOTEST) -tags=e2e -timeout=10m -v -run TestCallExchangeFlow ./test/e2e/
+
+test-e2e-financial: ## Run only financial E2E tests
+	@echo "Running financial E2E tests..."
+	$(GOTEST) -tags=e2e -timeout=10m -v -run TestFinancial ./test/e2e/
+
+test-e2e-performance: ## Run only performance E2E tests
+	@echo "Running performance E2E tests..."
+	$(GOTEST) -tags=e2e -timeout=30m -v -run TestPerformance ./test/e2e/
+
+test-e2e-realtime: ## Run only real-time E2E tests
+	@echo "Running real-time E2E tests..."
+	$(GOTEST) -tags=e2e -timeout=10m -v -run TestRealTimeEvents ./test/e2e/
+
+test-security: ## Run security tests (authentication, authorization, input validation, rate limiting)
+	@echo "Running security tests..."
+	$(GOTEST) -tags=security -timeout=15m -v ./test/security/...
+
+test-security-auth: ## Run only authentication/authorization security tests
+	@echo "Running authentication and authorization security tests..."
+	$(GOTEST) -tags=security -timeout=5m -v -run TestSecurity_Authentication ./test/security/
+
+test-security-input: ## Run only input validation security tests
+	@echo "Running input validation security tests..."
+	$(GOTEST) -tags=security -timeout=5m -v -run TestSecurity_InputValidation ./test/security/
+
+test-security-rate: ## Run only rate limiting security tests
+	@echo "Running rate limiting security tests..."
+	$(GOTEST) -tags=security -timeout=5m -v -run TestSecurity_RateLimiting ./test/security/
+
+test-security-data: ## Run only data protection security tests
+	@echo "Running data protection security tests..."
+	$(GOTEST) -tags=security -timeout=5m -v -run TestSecurity_DataProtection ./test/security/
+
+test-security-suite: ## Run complete security test suite
+	@echo "Running complete security test suite..."
+	$(GOTEST) -tags=security -timeout=20m -v -run TestSecuritySuite ./test/security/
+
+docker-clean: ## Clean up test containers and volumes
+	@echo "Cleaning up Docker containers..."
+	@docker ps -a | grep "dce-test" | awk '{print $$1}' | xargs -r docker rm -f || true
+	@docker volume ls | grep "dce-test" | awk '{print $$2}' | xargs -r docker volume rm || true
+	@docker network ls | grep "dce-test" | awk '{print $$1}' | xargs -r docker network rm || true
 
 bench: ## Run benchmarks
 	$(GOTEST) -bench=. -benchmem ./...
@@ -186,6 +287,84 @@ security-sarif: ## Generate SARIF security report (2025 CI/CD integration)
 vuln-json: ## Generate JSON vulnerability report (2025 automation)
 	$(GOVULN) -json ./... > vuln-report.json
 
+# Code Quality & Smell Testing Targets
+.PHONY: smell-test smell-test-full smell-test-quick smell-test-report smell-test-fix smell-test-baseline smell-test-diff
+
+smell-test: smell-test-full ## Run complete code smell analysis
+
+smell-test-quick: ## Quick smell test (pre-commit)
+	@echo "=== Running quick smell test ==="
+	@golangci-lint run --fast
+	@if command -v gocyclo &> /dev/null; then \
+		gocyclo -over 15 -avg ./...; \
+	else \
+		echo "⚠️  gocyclo not installed, skipping complexity check"; \
+	fi
+
+smell-test-full: ## Full smell test with all tools
+	@echo "=== Running full smell test ==="
+	@mkdir -p analysis/reports
+	@golangci-lint run --out-format json > analysis/reports/golangci-$(shell date +%Y%m%d-%H%M%S).json || true
+	@if command -v staticcheck &> /dev/null; then \
+		staticcheck -f json ./... > analysis/reports/staticcheck-$(shell date +%Y%m%d-%H%M%S).json 2>&1 || true; \
+	fi
+	@if command -v gosec &> /dev/null; then \
+		gosec -fmt json -out analysis/reports/gosec-$(shell date +%Y%m%d-%H%M%S).json ./... || true; \
+	fi
+	@go test ./test/architecture/... -v || true
+
+smell-test-report: smell-test-full ## Generate HTML report
+	@if [ -f scripts/generate-report/generate-report.go ]; then \
+		go run scripts/generate-report/generate-report.go; \
+		echo "Report generated at: analysis/reports/code-smell-report.html"; \
+	else \
+		echo "Report generator not found"; \
+	fi
+
+smell-test-fix: ## Auto-fix what can be fixed
+	@golangci-lint run --fix
+	@goimports -w .
+	@gofmt -w .
+
+smell-test-baseline: ## Create baseline for incremental analysis
+	@mkdir -p analysis/baseline
+	@golangci-lint run --out-format json > analysis/baseline/golangci.json
+	@echo "Baseline created at: analysis/baseline/"
+
+smell-test-diff: ## Compare against baseline
+	@golangci-lint run --new-from-rev=HEAD~1
+
+smell-test-antipatterns: ## Detect Go anti-patterns
+	@echo "=== Detecting Go Anti-Patterns ==="
+	@if [ -x scripts/detect-antipatterns.sh ]; then \
+		./scripts/detect-antipatterns.sh; \
+	else \
+		echo "Anti-pattern detection script not found"; \
+	fi
+
+smell-test-ddd: ## Detect DDD smells
+	@echo "=== Detecting DDD Smells ==="
+	@if [ -f scripts/detect-ddd-smells/detect-ddd-smells.go ]; then \
+		go run scripts/detect-ddd-smells/detect-ddd-smells.go > analysis/ddd-smells.txt; \
+	else \
+		echo "DDD smell detection script not found"; \
+	fi
+
+smell-test-boundaries: ## Check domain boundaries
+	@echo "=== Checking Domain Boundaries ==="
+	@if [ -x scripts/check-domain-boundaries.sh ]; then \
+		./scripts/check-domain-boundaries.sh; \
+	else \
+		echo "Domain boundary check script not found"; \
+	fi
+
+smell-test-ci: ## Run smell tests for CI/CD
+	@if [ -x scripts/ci-check.sh ]; then \
+		./scripts/ci-check.sh; \
+	else \
+		echo "CI check script not found"; \
+	fi
+
 docker-build: ## Build docker image
 	docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
 
@@ -211,13 +390,18 @@ install-tools: ## Install development tools
 	$(GOCMD) install github.com/securego/gosec/v2/cmd/gosec@latest
 	$(GOCMD) install golang.org/x/vuln/cmd/govulncheck@latest
 	$(GOCMD) install github.com/sonatype-nexus-community/nancy@latest
+	@if [ -x scripts/install-smell-tools.sh ]; then \
+		./scripts/install-smell-tools.sh; \
+	fi
 	$(MAKE) install-semgrep
 	@echo "Note: Trivy must be installed separately. See: https://aquasecurity.github.io/trivy/latest/getting-started/installation/"
 	@echo "  macOS: brew install trivy"
 	@echo "  Linux: curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin"
 	@echo "  Docker: docker run aquasec/trivy"
 
-ci: deps fmt vet lint security test ## Run CI pipeline
+ci: deps fmt vet lint security test test-contract ## Run CI pipeline
+
+ci-contract: deps fmt vet lint security test test-contract-full ## Run CI pipeline with full contract validation
 
 ci-fast: deps fmt vet lint security-sarif security-deps-ci semgrep-ci test-parallel ## Fast CI pipeline (2025 optimization)
 

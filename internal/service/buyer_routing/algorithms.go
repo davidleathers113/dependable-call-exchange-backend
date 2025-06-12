@@ -94,7 +94,7 @@ func (r *SkillBasedBuyerRouter) Route(ctx context.Context, sellerCall *call.Call
 	}
 
 	scoredBids := make([]scoredBid, 0, len(activeBids))
-	
+
 	for _, b := range activeBids {
 		score := r.calculateSkillScore(sellerCall, b)
 		scoredBids = append(scoredBids, scoredBid{bid: b, score: score})
@@ -107,7 +107,7 @@ func (r *SkillBasedBuyerRouter) Route(ctx context.Context, sellerCall *call.Call
 
 	// Select the best match
 	best := scoredBids[0]
-	
+
 	return &BuyerRoutingDecision{
 		CallID:    sellerCall.ID,
 		BidID:     best.bid.ID,
@@ -133,7 +133,7 @@ func (r *SkillBasedBuyerRouter) calculateSkillScore(c *call.Call, b *bid.Bid) fl
 	if c.Direction == call.DirectionOutbound {
 		callType = "outbound"
 	}
-	
+
 	// Check if bid accepts this call type
 	acceptsCallType := false
 	for _, ct := range b.Criteria.CallType {
@@ -142,16 +142,16 @@ func (r *SkillBasedBuyerRouter) calculateSkillScore(c *call.Call, b *bid.Bid) fl
 			break
 		}
 	}
-	
+
 	if !acceptsCallType {
 		return 0.0
 	}
 
 	// Base score on quality metrics
-	score = b.Quality.ConversionRate * 2.0 // Weight conversion rate heavily
-	score += (1.0 - b.Quality.FraudScore) // Lower fraud is better
+	score = b.Quality.ConversionRate * 2.0    // Weight conversion rate heavily
+	score += (1.0 - b.Quality.FraudScore)     // Lower fraud is better
 	score += b.Quality.HistoricalRating / 5.0 // Normalize rating to 0-1
-	
+
 	// Check geographic match if location is available
 	if c.Location != nil && len(b.Criteria.Geography.States) > 0 {
 		for _, state := range b.Criteria.Geography.States {
@@ -210,30 +210,30 @@ func (r *CostBasedBuyerRouter) Route(ctx context.Context, sellerCall *call.Call,
 
 	// Calculate composite score for each bid
 	type scoredBid struct {
-		bid            *bid.Bid
-		score          float64
-		qualityScore   float64
-		priceScore     float64
-		capacityScore  float64
+		bid           *bid.Bid
+		score         float64
+		qualityScore  float64
+		priceScore    float64
+		capacityScore float64
 	}
 
 	scoredBids := make([]scoredBid, 0, len(activeBids))
-	
+
 	// Find min/max values for normalization
 	minPrice, maxPrice := findPriceRange(activeBids)
-	
+
 	for _, b := range activeBids {
 		// Calculate quality score from quality metrics
-		quality := (b.Quality.ConversionRate + 
-			(1.0 - b.Quality.FraudScore) + 
+		quality := (b.Quality.ConversionRate +
+			(1.0 - b.Quality.FraudScore) +
 			b.Quality.HistoricalRating/5.0) / 3.0
 		price := normalizePriceScore(b.Amount.ToFloat64(), minPrice, maxPrice)
 		capacity := calculateCapacityScore(b)
-		
-		totalScore := r.qualityWeight*quality + 
-			r.priceWeight*price + 
+
+		totalScore := r.qualityWeight*quality +
+			r.priceWeight*price +
 			r.capacityWeight*capacity
-		
+
 		scoredBids = append(scoredBids, scoredBid{
 			bid:           b,
 			score:         totalScore,
@@ -249,7 +249,7 @@ func (r *CostBasedBuyerRouter) Route(ctx context.Context, sellerCall *call.Call,
 	})
 
 	best := scoredBids[0]
-	
+
 	return &BuyerRoutingDecision{
 		CallID:    sellerCall.ID,
 		BidID:     best.bid.ID,
@@ -294,10 +294,10 @@ func findPriceRange(bids []*bid.Bid) (float64, float64) {
 	if len(bids) == 0 {
 		return 0, 0
 	}
-	
+
 	min := bids[0].Amount.ToFloat64()
 	max := bids[0].Amount.ToFloat64()
-	
+
 	for _, b := range bids[1:] {
 		amount := b.Amount.ToFloat64()
 		if amount < min {
@@ -307,7 +307,7 @@ func findPriceRange(bids []*bid.Bid) (float64, float64) {
 			max = amount
 		}
 	}
-	
+
 	return min, max
 }
 
@@ -325,11 +325,11 @@ func calculateCapacityScore(b *bid.Bid) float64 {
 	if b.Quality.AverageCallTime == 0 {
 		return 0.5
 	}
-	
+
 	// Assume optimal call time is 180 seconds (3 minutes)
 	optimalTime := 180.0
 	difference := math.Abs(float64(b.Quality.AverageCallTime) - optimalTime)
-	
+
 	// Closer to optimal time = higher score
 	score := 1.0 - (difference / optimalTime)
 	return math.Max(0, math.Min(score, 1.0))

@@ -145,3 +145,10 @@ docs/generated/
 repomix-output*.md
 repomix-output*.xml
 repomix-archive/
+
+# Code smell analysis outputs
+analysis/phase*/
+analysis/reports/*.json
+analysis/reports/*.html
+analysis/ci/
+analysis/baseline/

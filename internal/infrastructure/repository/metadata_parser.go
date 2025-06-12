@@ -45,7 +45,7 @@ func (cl *CallLocation) ToCallLocation() *call.Location {
 	if cl == nil {
 		return nil
 	}
-	
+
 	return &call.Location{
 		Country:   cl.Country,
 		State:     cl.State,

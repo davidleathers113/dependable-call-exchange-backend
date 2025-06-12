@@ -3,11 +3,11 @@ package account_test
 import (
 	"testing"
 	"time"
-	
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	
+
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil"
@@ -82,7 +82,7 @@ func TestNewAccount(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a, err := account.NewAccount(tt.email, tt.userName, tt.accountType)
@@ -95,12 +95,12 @@ func TestNewAccount(t *testing.T) {
 
 func TestAccount_UpdateBalance(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
-	
+
 	tests := []struct {
-		name           string
-		setup          func() *account.Account
-		amount         values.Money
-		expectedError  error
+		name            string
+		setup           func() *account.Account
+		amount          values.Money
+		expectedError   error
 		expectedBalance float64
 	}{
 		{
@@ -161,15 +161,15 @@ func TestAccount_UpdateBalance(t *testing.T) {
 			expectedBalance: 100.00,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := tt.setup()
 			oldUpdatedAt := a.UpdatedAt
-			
+
 			time.Sleep(10 * time.Millisecond)
 			err := a.UpdateBalance(tt.amount)
-			
+
 			if tt.expectedError != nil {
 				assert.ErrorIs(t, err, tt.expectedError)
 			} else {
@@ -183,7 +183,7 @@ func TestAccount_UpdateBalance(t *testing.T) {
 
 func TestAccount_IsSuspended(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
-	
+
 	tests := []struct {
 		name     string
 		status   account.Status
@@ -195,13 +195,13 @@ func TestAccount_IsSuspended(t *testing.T) {
 		{"banned account", account.StatusBanned, true},
 		{"closed account", account.StatusClosed, false},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := fixtures.NewAccountBuilder(testDB).
 				WithStatus(tt.status).
 				Build(t)
-			
+
 			assert.Equal(t, tt.expected, a.IsSuspended())
 		})
 	}
@@ -209,11 +209,11 @@ func TestAccount_IsSuspended(t *testing.T) {
 
 func TestAccount_CanMakeCalls(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
-	
+
 	tests := []struct {
-		name        string
-		setup       func() *account.Account
-		expected    bool
+		name     string
+		setup    func() *account.Account
+		expected bool
 	}{
 		{
 			name: "active account with TCPA consent",
@@ -256,7 +256,7 @@ func TestAccount_CanMakeCalls(t *testing.T) {
 			expected: false,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := tt.setup()
@@ -275,7 +275,7 @@ func TestAccountType_String(t *testing.T) {
 		{account.TypeAdmin, "admin"},
 		{account.AccountType(999), "unknown"},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.accountType.String())
@@ -295,7 +295,7 @@ func TestStatus_String(t *testing.T) {
 		{account.StatusClosed, "closed"},
 		{account.Status(999), "unknown"},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.status.String())
@@ -306,7 +306,7 @@ func TestStatus_String(t *testing.T) {
 func TestAccount_Scenarios(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
 	scenarios := fixtures.NewAccountScenarios(t, testDB)
-	
+
 	t.Run("buyer account", func(t *testing.T) {
 		a := scenarios.BuyerAccount()
 		assert.Equal(t, account.TypeBuyer, a.Type)
@@ -315,7 +315,7 @@ func TestAccount_Scenarios(t *testing.T) {
 		assert.Greater(t, a.Balance.ToFloat64(), 0.0)
 		assert.Greater(t, a.CreditLimit.ToFloat64(), a.Balance.ToFloat64())
 	})
-	
+
 	t.Run("seller account", func(t *testing.T) {
 		a := scenarios.SellerAccount()
 		assert.Equal(t, account.TypeSeller, a.Type)
@@ -323,7 +323,7 @@ func TestAccount_Scenarios(t *testing.T) {
 		assert.Greater(t, a.Settings.MaxConcurrentCalls, 100)
 		assert.Greater(t, a.QualityMetrics.QualityScore, 5.0)
 	})
-	
+
 	t.Run("suspended account", func(t *testing.T) {
 		a := scenarios.SuspendedAccount()
 		assert.Equal(t, account.StatusSuspended, a.Status)
@@ -334,7 +334,7 @@ func TestAccount_Scenarios(t *testing.T) {
 		assert.True(t, a.IsSuspended())
 		assert.False(t, a.CanMakeCalls())
 	})
-	
+
 	t.Run("premium account", func(t *testing.T) {
 		a := scenarios.PremiumAccount()
 		assert.Greater(t, a.Balance.ToFloat64(), 10000.0)
@@ -345,7 +345,7 @@ func TestAccount_Scenarios(t *testing.T) {
 		assert.Equal(t, 24, len(a.Settings.AllowedCallingHours)) // 24/7
 		assert.Equal(t, 5000, a.Settings.MaxConcurrentCalls)
 	})
-	
+
 	t.Run("new account", func(t *testing.T) {
 		a := scenarios.NewAccount()
 		assert.Equal(t, account.StatusPending, a.Status)
@@ -360,7 +360,7 @@ func TestAccount_Scenarios(t *testing.T) {
 
 func TestAccount_Address(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
-	
+
 	t.Run("complete address", func(t *testing.T) {
 		a := fixtures.NewAccountBuilder(testDB).
 			WithAddress(account.Address{
@@ -371,7 +371,7 @@ func TestAccount_Address(t *testing.T) {
 				Country: "US",
 			}).
 			Build(t)
-		
+
 		assert.Equal(t, "123 Main St", a.Address.Street)
 		assert.Equal(t, "Los Angeles", a.Address.City)
 		assert.Equal(t, "CA", a.Address.State)
@@ -382,24 +382,24 @@ func TestAccount_Address(t *testing.T) {
 
 func TestAccount_ComplianceFlags(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
-	
+
 	t.Run("TCPA and GDPR consent", func(t *testing.T) {
 		a := fixtures.NewAccountBuilder(testDB).
 			WithTCPAConsent(true).
 			WithGDPRConsent(true).
 			Build(t)
-		
+
 		assert.True(t, a.TCPAConsent)
 		assert.True(t, a.GDPRConsent)
 		assert.Empty(t, a.ComplianceFlags)
 	})
-	
+
 	t.Run("no consent given", func(t *testing.T) {
 		a := fixtures.NewAccountBuilder(testDB).
 			WithTCPAConsent(false).
 			WithGDPRConsent(false).
 			Build(t)
-		
+
 		assert.False(t, a.TCPAConsent)
 		assert.False(t, a.GDPRConsent)
 		assert.False(t, a.CanMakeCalls())
@@ -408,7 +408,7 @@ func TestAccount_ComplianceFlags(t *testing.T) {
 
 func TestAccount_Settings(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
-	
+
 	t.Run("business hours only", func(t *testing.T) {
 		a := fixtures.NewAccountBuilder(testDB).
 			WithSettings(account.AccountSettings{
@@ -417,12 +417,12 @@ func TestAccount_Settings(t *testing.T) {
 				MaxConcurrentCalls:  50,
 			}).
 			Build(t)
-		
+
 		assert.Equal(t, "America/New_York", a.Settings.Timezone)
 		assert.Equal(t, 9, len(a.Settings.AllowedCallingHours))
 		assert.Equal(t, 50, a.Settings.MaxConcurrentCalls)
 	})
-	
+
 	t.Run("auto bidding settings", func(t *testing.T) {
 		a := fixtures.NewAccountBuilder(testDB).
 			WithSettings(account.AccountSettings{
@@ -430,18 +430,18 @@ func TestAccount_Settings(t *testing.T) {
 				MaxBidAmount: values.MustNewMoneyFromFloat(75.00, "USD"),
 			}).
 			Build(t)
-		
+
 		assert.True(t, a.Settings.AutoBidding)
 		assert.Equal(t, 75.00, a.Settings.MaxBidAmount.ToFloat64())
 	})
-	
+
 	t.Run("blocked area codes", func(t *testing.T) {
 		a := fixtures.NewAccountBuilder(testDB).
 			WithSettings(account.AccountSettings{
 				BlockedAreaCodes: []string{"900", "976", "555"},
 			}).
 			Build(t)
-		
+
 		assert.Len(t, a.Settings.BlockedAreaCodes, 3)
 		assert.Contains(t, a.Settings.BlockedAreaCodes, "900")
 		assert.Contains(t, a.Settings.BlockedAreaCodes, "976")
@@ -451,53 +451,53 @@ func TestAccount_Settings(t *testing.T) {
 
 func TestAccount_EdgeCases(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
-	
+
 	t.Run("very large balance", func(t *testing.T) {
 		a := fixtures.NewAccountBuilder(testDB).
 			WithBalance(999999999.99).
 			Build(t)
-		
+
 		assert.Equal(t, 999999999.99, a.Balance.ToFloat64())
 	})
-	
+
 	t.Run("deeply negative balance", func(t *testing.T) {
 		a := fixtures.NewAccountBuilder(testDB).
 			WithBalance(-10000.00).
 			WithCreditLimit(15000.00).
 			Build(t)
-		
+
 		assert.Equal(t, -10000.00, a.Balance.ToFloat64())
-		
+
 		// Can still spend within credit limit
 		err := a.UpdateBalance(values.MustNewMoneyFromFloat(-4999.00, "USD"))
 		assert.NoError(t, err)
 		assert.Equal(t, -14999.00, a.Balance.ToFloat64())
-		
+
 		// But not beyond credit limit
 		err = a.UpdateBalance(values.MustNewMoneyFromFloat(-2.00, "USD"))
 		assert.ErrorIs(t, err, account.ErrInsufficientFunds)
 	})
-	
+
 	t.Run("concurrent balance updates", func(t *testing.T) {
 		a := fixtures.NewAccountBuilder(testDB).
 			WithBalance(1000.00).
 			Build(t)
-		
+
 		done := make(chan bool, 2)
-		
+
 		go func() {
 			a.UpdateBalance(values.MustNewMoneyFromFloat(100.00, "USD"))
 			done <- true
 		}()
-		
+
 		go func() {
 			a.UpdateBalance(values.MustNewMoneyFromFloat(-50.00, "USD"))
 			done <- true
 		}()
-		
+
 		<-done
 		<-done
-		
+
 		// One of these should be true
 		validBalances := []float64{1050.00, 1100.00, 950.00}
 		assert.Contains(t, validBalances, a.Balance.ToFloat64())
@@ -506,35 +506,35 @@ func TestAccount_EdgeCases(t *testing.T) {
 
 func TestAccount_Performance(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
-	
+
 	t.Run("account creation performance", func(t *testing.T) {
 		start := time.Now()
 		count := 10000
-		
+
 		for i := 0; i < count; i++ {
 			_, _ = account.NewAccount("test@example.com", "Test User", account.TypeBuyer)
 		}
-		
+
 		elapsed := time.Since(start)
 		perAccount := elapsed / time.Duration(count)
-		
+
 		assert.Less(t, perAccount, 2*time.Millisecond,
 			"Account creation took %v per account, expected < 2ms", perAccount)
 	})
-	
+
 	t.Run("balance update performance", func(t *testing.T) {
 		a := fixtures.NewAccountBuilder(testDB).Build(t)
-		
+
 		start := time.Now()
 		count := 10000
-		
+
 		for i := 0; i < count; i++ {
 			_ = a.UpdateBalance(values.MustNewMoneyFromFloat(1.00, "USD"))
 		}
-		
+
 		elapsed := time.Since(start)
 		perUpdate := elapsed / time.Duration(count)
-		
+
 		assert.Less(t, perUpdate, 10*time.Microsecond,
 			"Balance update took %v per update, expected < 10µs", perUpdate)
 	})
@@ -542,14 +542,14 @@ func TestAccount_Performance(t *testing.T) {
 
 func TestAccount_TableDriven(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
-	
+
 	type testCase struct {
 		name     string
 		setup    func() *account.Account
 		action   func(*account.Account) error
 		validate func(*testing.T, *account.Account, error)
 	}
-	
+
 	tests := []testCase{
 		{
 			name: "successful payment",
@@ -601,7 +601,7 @@ func TestAccount_TableDriven(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			a := tc.setup()

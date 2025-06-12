@@ -29,7 +29,7 @@ func NewMoney(amount decimal.Decimal, currency string) (Money, error) {
 	if err := validateCurrency(currency); err != nil {
 		return Money{}, err
 	}
-	
+
 	return Money{
 		amount:   amount,
 		currency: currency,
@@ -42,7 +42,7 @@ func NewMoneyFromString(amount, currency string) (Money, error) {
 	if err != nil {
 		return Money{}, fmt.Errorf("invalid amount: %w", err)
 	}
-	
+
 	return NewMoney(dec, currency)
 }
 
@@ -137,7 +137,7 @@ func (m Money) Add(other Money) (Money, error) {
 	if m.currency != other.currency {
 		return Money{}, fmt.Errorf("cannot add different currencies: %s and %s", m.currency, other.currency)
 	}
-	
+
 	return Money{
 		amount:   m.amount.Add(other.amount),
 		currency: m.currency,
@@ -149,7 +149,7 @@ func (m Money) Sub(other Money) (Money, error) {
 	if m.currency != other.currency {
 		return Money{}, fmt.Errorf("cannot subtract different currencies: %s and %s", m.currency, other.currency)
 	}
-	
+
 	return Money{
 		amount:   m.amount.Sub(other.amount),
 		currency: m.currency,
@@ -169,7 +169,7 @@ func (m Money) Div(factor decimal.Decimal) (Money, error) {
 	if factor.IsZero() {
 		return Money{}, fmt.Errorf("division by zero")
 	}
-	
+
 	return Money{
 		amount:   m.amount.Div(factor),
 		currency: m.currency,
@@ -211,7 +211,7 @@ func (m Money) MarshalJSON() ([]byte, error) {
 		Amount   string `json:"amount"`
 		Currency string `json:"currency"`
 	}{
-		Amount:   m.amount.String(),
+		Amount:   m.amount.StringFixed(2), // Always use 2 decimal places for consistency
 		Currency: m.currency,
 	}
 	return json.Marshal(data)
@@ -223,49 +223,48 @@ func (m *Money) UnmarshalJSON(data []byte) error {
 		Amount   string `json:"amount"`
 		Currency string `json:"currency"`
 	}
-	
+
 	if err := json.Unmarshal(data, &temp); err != nil {
 		return err
 	}
-	
+
 	amount, err := decimal.NewFromString(temp.Amount)
 	if err != nil {
 		return fmt.Errorf("invalid amount: %w", err)
 	}
-	
+
 	money, err := NewMoney(amount, temp.Currency)
 	if err != nil {
 		return err
 	}
-	
+
 	*m = money
 	return nil
 }
 
-// Database scanning (implements sql.Scanner)
+// Value implements driver.Valuer for database storage
+func (m Money) Value() (driver.Value, error) {
+	// Store as JSON in database
+	return m.MarshalJSON()
+}
+
+// Scan implements sql.Scanner for database retrieval
 func (m *Money) Scan(value interface{}) error {
 	if value == nil {
 		*m = Money{}
 		return nil
 	}
-	
-	switch v := value.(type) {
-	case []byte:
-		return m.scanFromString(string(v))
-	case string:
-		return m.scanFromString(v)
-	default:
-		return fmt.Errorf("cannot scan %T into Money", value)
-	}
-}
 
-// Database value (implements driver.Valuer)
-func (m Money) Value() (driver.Value, error) {
-	if m.amount.IsZero() && m.currency == "" {
-		return nil, nil
+	bytes, ok := value.([]byte)
+	if !ok {
+		str, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("cannot scan %T into Money", value)
+		}
+		bytes = []byte(str)
 	}
-	// Store as JSON for PostgreSQL JSONB compatibility
-	return m.MarshalJSON()
+
+	return m.UnmarshalJSON(bytes)
 }
 
 // Helper functions
@@ -274,24 +273,24 @@ func validateCurrency(currency string) error {
 	if currency == "" {
 		return fmt.Errorf("currency cannot be empty")
 	}
-	
+
 	currency = strings.ToUpper(currency)
-	
+
 	// Basic ISO 4217 format validation
 	if len(currency) != 3 {
 		return fmt.Errorf("currency code must be 3 characters")
 	}
-	
+
 	// Check against common currencies (can be extended)
 	validCurrencies := map[string]bool{
 		USD: true, EUR: true, GBP: true, JPY: true, CAD: true,
 		"AUD": true, "CHF": true, "CNY": true, "SEK": true, "NZD": true,
 	}
-	
+
 	if !validCurrencies[currency] {
 		return fmt.Errorf("unsupported currency: %s", currency)
 	}
-	
+
 	return nil
 }
 
@@ -303,30 +302,9 @@ func getCurrencySymbol(currency string) string {
 		JPY: "¥",
 		CAD: "C$",
 	}
-	
+
 	if symbol, ok := symbols[currency]; ok {
 		return symbol
 	}
 	return currency + " "
-}
-
-func (m *Money) scanFromString(s string) error {
-	// Try to parse as JSON first
-	if strings.HasPrefix(s, "{") {
-		return m.UnmarshalJSON([]byte(s))
-	}
-	
-	// Fall back to simple decimal parsing (assume USD)
-	amount, err := decimal.NewFromString(s)
-	if err != nil {
-		return fmt.Errorf("invalid money format: %w", err)
-	}
-	
-	money, err := NewMoney(amount, USD)
-	if err != nil {
-		return err
-	}
-	
-	*m = money
-	return nil
 }

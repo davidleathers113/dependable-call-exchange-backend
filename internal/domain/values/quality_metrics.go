@@ -1,7 +1,6 @@
 package values
 
 import (
-	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -13,11 +12,11 @@ type QualityMetrics struct {
 	QualityScore     float64 `json:"quality_score"`
 	FraudScore       float64 `json:"fraud_score"`
 	HistoricalRating float64 `json:"historical_rating"`
-	
+
 	// Performance Metrics
-	ConversionRate   float64 `json:"conversion_rate"`   // 0.0 - 1.0 (percentage as decimal)
-	AverageCallTime  int     `json:"average_call_time"` // seconds
-	
+	ConversionRate  float64 `json:"conversion_rate"`   // 0.0 - 1.0 (percentage as decimal)
+	AverageCallTime int     `json:"average_call_time"` // seconds
+
 	// Trust and Reliability
 	TrustScore       float64 `json:"trust_score"`       // 0.0 - 10.0
 	ReliabilityScore float64 `json:"reliability_score"` // 0.0 - 10.0
@@ -41,12 +40,12 @@ func NewQualityMetrics(qualityScore, fraudScore, historicalRating, conversionRat
 	if err := validateScore(reliabilityScore, "reliability_score", 0.0, 10.0); err != nil {
 		return QualityMetrics{}, err
 	}
-	
+
 	// Validate conversion rate (0.0 - 1.0)
 	if err := validateScore(conversionRate, "conversion_rate", 0.0, 1.0); err != nil {
 		return QualityMetrics{}, err
 	}
-	
+
 	// Validate average call time
 	if averageCallTime < 0 {
 		return QualityMetrics{}, fmt.Errorf("average_call_time cannot be negative")
@@ -54,7 +53,7 @@ func NewQualityMetrics(qualityScore, fraudScore, historicalRating, conversionRat
 	if averageCallTime > 86400 { // Max 24 hours
 		return QualityMetrics{}, fmt.Errorf("average_call_time too long (max 24 hours)")
 	}
-	
+
 	return QualityMetrics{
 		QualityScore:     qualityScore,
 		FraudScore:       fraudScore,
@@ -69,13 +68,13 @@ func NewQualityMetrics(qualityScore, fraudScore, historicalRating, conversionRat
 // NewDefaultQualityMetrics creates quality metrics with safe default values
 func NewDefaultQualityMetrics() QualityMetrics {
 	return QualityMetrics{
-		QualityScore:     5.0,  // Neutral score
-		FraudScore:       0.0,  // No fraud detected
-		HistoricalRating: 5.0,  // Neutral rating
-		ConversionRate:   0.0,  // No conversions yet
-		AverageCallTime:  0,    // No calls yet
-		TrustScore:       5.0,  // Neutral trust
-		ReliabilityScore: 5.0,  // Neutral reliability
+		QualityScore:     5.0, // Neutral score
+		FraudScore:       0.0, // No fraud detected
+		HistoricalRating: 5.0, // Neutral rating
+		ConversionRate:   0.0, // No conversions yet
+		AverageCallTime:  0,   // No calls yet
+		TrustScore:       5.0, // Neutral trust
+		ReliabilityScore: 5.0, // Neutral reliability
 	}
 }
 
@@ -99,14 +98,14 @@ func (q QualityMetrics) OverallScore() float64 {
 		"trust":       0.20,
 		"reliability": 0.15,
 	}
-	
+
 	score := (q.QualityScore * weights["quality"]) +
 		(q.FraudScore * weights["fraud"]) +
 		(q.HistoricalRating * weights["historical"]) +
 		(q.ConversionRate * 10.0 * weights["conversion"]) + // Convert to 0-10 scale
 		(q.TrustScore * weights["trust"]) +
 		(q.ReliabilityScore * weights["reliability"])
-	
+
 	// Ensure score stays within bounds
 	if score < 0.0 {
 		return 0.0
@@ -114,7 +113,7 @@ func (q QualityMetrics) OverallScore() float64 {
 	if score > 10.0 {
 		return 10.0
 	}
-	
+
 	return score
 }
 
@@ -144,7 +143,7 @@ func (q QualityMetrics) UpdateConversionRate(newRate float64) (QualityMetrics, e
 	if err := validateScore(newRate, "conversion_rate", 0.0, 1.0); err != nil {
 		return QualityMetrics{}, err
 	}
-	
+
 	return QualityMetrics{
 		QualityScore:     q.QualityScore,
 		FraudScore:       q.FraudScore,
@@ -164,7 +163,7 @@ func (q QualityMetrics) UpdateAverageCallTime(newTime int) (QualityMetrics, erro
 	if newTime > 86400 {
 		return QualityMetrics{}, fmt.Errorf("average_call_time too long (max 24 hours)")
 	}
-	
+
 	return QualityMetrics{
 		QualityScore:     q.QualityScore,
 		FraudScore:       q.FraudScore,
@@ -189,7 +188,7 @@ func (q QualityMetrics) Equal(other QualityMetrics) bool {
 
 // String returns a string representation of the quality metrics
 func (q QualityMetrics) String() string {
-	return fmt.Sprintf("QualityMetrics{Overall: %.2f, Quality: %.2f, Fraud: %.2f, Trust: %.2f}", 
+	return fmt.Sprintf("QualityMetrics{Overall: %.2f, Quality: %.2f, Fraud: %.2f, Trust: %.2f}",
 		q.OverallScore(), q.QualityScore, q.FraudScore, q.TrustScore)
 }
 
@@ -227,11 +226,11 @@ func (q *QualityMetrics) UnmarshalJSON(data []byte) error {
 		TrustScore       float64 `json:"trust_score"`
 		ReliabilityScore float64 `json:"reliability_score"`
 	}
-	
+
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	
+
 	metrics, err := NewQualityMetrics(
 		raw.QualityScore,
 		raw.FraudScore,
@@ -244,34 +243,9 @@ func (q *QualityMetrics) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	
+
 	*q = metrics
 	return nil
-}
-
-// Scan implements sql.Scanner for database scanning
-func (q *QualityMetrics) Scan(value interface{}) error {
-	if value == nil {
-		*q = NewDefaultQualityMetrics()
-		return nil
-	}
-	
-	var jsonData []byte
-	switch v := value.(type) {
-	case []byte:
-		jsonData = v
-	case string:
-		jsonData = []byte(v)
-	default:
-		return fmt.Errorf("cannot scan %T into QualityMetrics", value)
-	}
-	
-	return q.UnmarshalJSON(jsonData)
-}
-
-// Value implements driver.Valuer for database storage
-func (q QualityMetrics) Value() (driver.Value, error) {
-	return q.MarshalJSON()
 }
 
 // Helper function to validate score ranges

@@ -64,43 +64,43 @@ type MetricsCollector interface {
 
 // RoutingDecision represents the result of a routing decision
 type RoutingDecision struct {
-	CallID      uuid.UUID
-	BidID       uuid.UUID
-	BuyerID     uuid.UUID
-	Algorithm   string
-	Score       float64
-	Reason      string
-	Timestamp   time.Time
-	Latency     time.Duration
-	Metadata    map[string]interface{}
+	CallID    uuid.UUID
+	BidID     uuid.UUID
+	BuyerID   uuid.UUID
+	Algorithm string
+	Score     float64
+	Reason    string
+	Timestamp time.Time
+	Latency   time.Duration
+	Metadata  map[string]interface{}
 }
 
 // ActiveRoute represents a currently active call route
 type ActiveRoute struct {
-	CallID      uuid.UUID
-	BuyerID     uuid.UUID
-	StartTime   time.Time
-	Duration    time.Duration
-	Status      string
+	CallID    uuid.UUID
+	BuyerID   uuid.UUID
+	StartTime time.Time
+	Duration  time.Duration
+	Status    string
 }
 
 // RoutingRules defines routing configuration
 type RoutingRules struct {
-	Algorithm           string
-	PriorityThreshold   float64
-	QualityWeight       float64
-	PriceWeight         float64
-	CapacityWeight      float64
-	GeographicRules     map[string][]string
-	TimeBasedRules      []TimeRule
-	SkillRequirements   map[string][]string
+	Algorithm         string
+	PriorityThreshold float64
+	QualityWeight     float64
+	PriceWeight       float64
+	CapacityWeight    float64
+	GeographicRules   map[string][]string
+	TimeBasedRules    []TimeRule
+	SkillRequirements map[string][]string
 }
 
 // TimeRule defines time-based routing rules
 type TimeRule struct {
-	StartTime   string
-	EndTime     string
-	DaysOfWeek  []string
-	Algorithm   string
-	Modifiers   map[string]float64
+	StartTime  string
+	EndTime    string
+	DaysOfWeek []string
+	Algorithm  string
+	Modifiers  map[string]float64
 }

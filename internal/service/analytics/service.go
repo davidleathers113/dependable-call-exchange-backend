@@ -571,15 +571,15 @@ func calculateGrowthRate(data []*TimeseriesPoint) float64 {
 	if len(data) < 2 {
 		return 0
 	}
-	
+
 	// Calculate growth rate between first and last period
 	firstValue := data[0].Value
 	lastValue := data[len(data)-1].Value
-	
+
 	if firstValue == 0 {
 		return 0
 	}
-	
+
 	return (lastValue - firstValue) / firstValue
 }
 
@@ -587,15 +587,15 @@ func calculateRevenueGrowth(data []*RevenuePoint) float64 {
 	if len(data) < 2 {
 		return 0
 	}
-	
+
 	// Calculate growth rate between first and last period
 	firstValue := data[0].Amount
 	lastValue := data[len(data)-1].Amount
-	
+
 	if firstValue == 0 {
 		return 0
 	}
-	
+
 	return (lastValue - firstValue) / firstValue
 }
 
@@ -603,11 +603,11 @@ func generateRevenueProjections(data []*RevenuePoint) *RevenueProjections {
 	if len(data) == 0 {
 		return &RevenueProjections{}
 	}
-	
+
 	// Simplified projection based on recent trend
 	recentRevenue := data[len(data)-1].Amount
 	growthRate := calculateRevenueGrowth(data)
-	
+
 	return &RevenueProjections{
 		NextMonth:   recentRevenue * (1 + growthRate/12),
 		NextQuarter: recentRevenue * (1 + growthRate/4),

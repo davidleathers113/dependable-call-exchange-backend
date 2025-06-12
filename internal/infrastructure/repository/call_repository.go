@@ -7,17 +7,17 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
+	"github.com/google/uuid"
 )
 
 // callRepository implements CallRepository using PostgreSQL
 type callRepository struct {
 	db interface {
-		ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-		QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-		QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+		ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+		QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+		QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 	}
 }
 
@@ -37,21 +37,18 @@ func (r *callRepository) Create(ctx context.Context, c *call.Call) error {
 	if c.FromNumber.IsEmpty() || c.ToNumber.IsEmpty() {
 		return errors.New("from_number cannot be empty")
 	}
-	
+
 	// Note: BuyerID can be nil for marketplace calls awaiting routing
 
-	// Convert call type based on direction
-	callType := "inbound"
-	if c.Direction == call.DirectionOutbound {
-		callType = "outbound"
-	}
+	// Convert direction to string
+	directionStr := c.Direction.String()
 
 	// Map status to database enum
 	statusStr := mapStatusToEnum(c.Status)
 
 	query := `
 		INSERT INTO calls (
-			id, from_number, to_number, status, type,
+			id, from_number, to_number, status, direction,
 			buyer_id, seller_id, started_at, ended_at,
 			duration, cost, metadata, created_at, updated_at
 		) VALUES (
@@ -67,19 +64,19 @@ func (r *callRepository) Create(ctx context.Context, c *call.Call) error {
 	}
 
 	// Handle nil buyer ID for marketplace calls
-	var buyerID interface{} = c.BuyerID
+	var buyerID any = c.BuyerID
 	if c.BuyerID == uuid.Nil {
 		buyerID = nil
 	}
 
 	// Handle cost conversion
-	var cost interface{}
+	var cost any
 	if c.Cost != nil {
 		cost = c.Cost.ToFloat64()
 	}
 
 	_, err = r.db.ExecContext(ctx, query,
-		c.ID, c.FromNumber.String(), c.ToNumber.String(), statusStr, callType,
+		c.ID, c.FromNumber.String(), c.ToNumber.String(), statusStr, directionStr,
 		buyerID, c.SellerID, c.StartTime, c.EndTime,
 		c.Duration, cost, metadataJSON, c.CreatedAt, c.UpdatedAt,
 	)
@@ -98,7 +95,7 @@ func (r *callRepository) Create(ctx context.Context, c *call.Call) error {
 func (r *callRepository) GetByID(ctx context.Context, id uuid.UUID) (*call.Call, error) {
 	query := `
 		SELECT 
-			id, from_number, to_number, status, type,
+			id, from_number, to_number, status, direction,
 			buyer_id, seller_id, started_at, ended_at,
 			duration, cost, metadata, created_at, updated_at
 		FROM calls
@@ -106,7 +103,7 @@ func (r *callRepository) GetByID(ctx context.Context, id uuid.UUID) (*call.Call,
 	`
 
 	var c call.Call
-	var statusStr, callType string
+	var statusStr, directionStr string
 	var metadata []byte
 	var buyerIDStr sql.NullString
 	var sellerID sql.NullString
@@ -116,13 +113,16 @@ func (r *callRepository) GetByID(ctx context.Context, id uuid.UUID) (*call.Call,
 	var fromNumberStr, toNumberStr string
 
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&c.ID, &fromNumberStr, &toNumberStr, &statusStr, &callType,
+		&c.ID, &fromNumberStr, &toNumberStr, &statusStr, &directionStr,
 		&buyerIDStr, &sellerID, &c.StartTime, &endTime,
 		&duration, &cost, &metadata, &c.CreatedAt, &c.UpdatedAt,
 	)
 
 	if err != nil {
-		return nil, err
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("call not found: %w", err)
+		}
+		return nil, fmt.Errorf("failed to get call: %w", err)
 	}
 
 	// Convert phone numbers to value objects
@@ -140,9 +140,98 @@ func (r *callRepository) GetByID(ctx context.Context, id uuid.UUID) (*call.Call,
 
 	// Convert database values
 	c.Status = mapEnumToStatus(statusStr)
-	c.Direction = mapTypeToDirection(callType)
+	c.Direction = mapTypeToDirection(directionStr)
 
 	// Handle nullable buyer ID (marketplace calls may not have a buyer yet)
+	if buyerIDStr.Valid {
+		id, _ := uuid.Parse(buyerIDStr.String)
+		c.BuyerID = id
+	} else {
+		c.BuyerID = uuid.Nil
+	}
+
+	if sellerID.Valid {
+		id, _ := uuid.Parse(sellerID.String)
+		c.SellerID = &id
+	}
+
+	if endTime.Valid {
+		c.EndTime = &endTime.Time
+	}
+
+	if duration.Valid {
+		d := int(duration.Int32)
+		c.Duration = &d
+	}
+
+	if cost.Valid {
+		money, _ := values.NewMoneyFromFloat(cost.Float64, "USD")
+		c.Cost = &money
+	}
+
+	// Parse metadata
+	parsedMetadata, err := ParseCallMetadata(metadata)
+	if err == nil {
+		parsedMetadata.ApplyToCall(&c)
+	}
+
+	return &c, nil
+}
+
+// GetByCallSID retrieves a call by its provider call SID
+func (r *callRepository) GetByCallSID(ctx context.Context, callSID string) (*call.Call, error) {
+	// For now, we'll search in the metadata for the call_sid
+	// In a production system, you might want to add a dedicated call_sid column
+	query := `
+		SELECT 
+			id, from_number, to_number, status, direction,
+			buyer_id, seller_id, started_at, ended_at,
+			duration, cost, metadata, created_at, updated_at
+		FROM calls
+		WHERE metadata::jsonb ->> 'call_sid' = $1
+	`
+
+	var c call.Call
+	var statusStr, directionStr string
+	var metadata []byte
+	var buyerIDStr sql.NullString
+	var sellerID sql.NullString
+	var fromNumberStr, toNumberStr string
+	var endTime sql.NullTime
+	var duration sql.NullInt32
+	var cost sql.NullFloat64
+
+	err := r.db.QueryRowContext(ctx, query, callSID).Scan(
+		&c.ID, &fromNumberStr, &toNumberStr, &statusStr, &directionStr,
+		&buyerIDStr, &sellerID, &c.StartTime, &endTime,
+		&duration, &cost, &metadata, &c.CreatedAt, &c.UpdatedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("call not found with SID %s: %w", callSID, err)
+		}
+		return nil, fmt.Errorf("failed to get call by SID: %w", err)
+	}
+
+	// Convert phone numbers to value objects
+	fromPhone, err := values.NewPhoneNumber(fromNumberStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid from_number from database: %w", err)
+	}
+	c.FromNumber = fromPhone
+
+	toPhone, err := values.NewPhoneNumber(toNumberStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid to_number from database: %w", err)
+	}
+	c.ToNumber = toPhone
+
+	// Convert database values
+	c.Status = mapEnumToStatus(statusStr)
+	c.Direction = mapTypeToDirection(directionStr)
+
+	// Handle nullable buyer ID
 	if buyerIDStr.Valid {
 		id, _ := uuid.Parse(buyerIDStr.String)
 		c.BuyerID = id
@@ -192,13 +281,19 @@ func (r *callRepository) UpdateWithStatusCheck(ctx context.Context, c *call.Call
 	}
 
 	// Handle nil buyer ID for marketplace calls
-	var buyerID interface{} = c.BuyerID
+	var buyerID any = c.BuyerID
 	if c.BuyerID == uuid.Nil {
 		buyerID = nil
 	}
 
+	// Handle seller ID
+	var sellerID any
+	if c.SellerID != nil {
+		sellerID = *c.SellerID
+	}
+
 	// Handle cost conversion
-	var cost interface{}
+	var cost any
 	if c.Cost != nil {
 		cost = c.Cost.ToFloat64()
 	}
@@ -208,16 +303,17 @@ func (r *callRepository) UpdateWithStatusCheck(ctx context.Context, c *call.Call
 		SET 
 			status = $2,
 			buyer_id = $3,
-			ended_at = $4,
-			duration = $5,
-			cost = $6,
-			metadata = $7,
-			updated_at = $8
-		WHERE id = $1 AND status = $9
+			seller_id = $4,
+			ended_at = $5,
+			duration = $6,
+			cost = $7,
+			metadata = $8,
+			updated_at = $9
+		WHERE id = $1 AND status = $10
 	`
 
 	result, err := r.db.ExecContext(ctx, query,
-		c.ID, statusStr, buyerID, c.EndTime, c.Duration, cost,
+		c.ID, statusStr, buyerID, sellerID, c.EndTime, c.Duration, cost,
 		metadataJSON, c.UpdatedAt, expectedStatusStr,
 	)
 
@@ -250,13 +346,19 @@ func (r *callRepository) Update(ctx context.Context, c *call.Call) error {
 	}
 
 	// Handle nil buyer ID for marketplace calls
-	var buyerID interface{} = c.BuyerID
+	var buyerID any = c.BuyerID
 	if c.BuyerID == uuid.Nil {
 		buyerID = nil
 	}
 
+	// Handle seller ID
+	var sellerID any
+	if c.SellerID != nil {
+		sellerID = *c.SellerID
+	}
+
 	// Handle cost conversion
-	var cost interface{}
+	var cost any
 	if c.Cost != nil {
 		cost = c.Cost.ToFloat64()
 	}
@@ -266,16 +368,17 @@ func (r *callRepository) Update(ctx context.Context, c *call.Call) error {
 		SET 
 			status = $2,
 			buyer_id = $3,
-			ended_at = $4,
-			duration = $5,
-			cost = $6,
-			metadata = $7,
-			updated_at = $8
+			seller_id = $4,
+			ended_at = $5,
+			duration = $6,
+			cost = $7,
+			metadata = $8,
+			updated_at = $9
 		WHERE id = $1
 	`
 
 	result, err := r.db.ExecContext(ctx, query,
-		c.ID, statusStr, buyerID, c.EndTime, c.Duration, cost,
+		c.ID, statusStr, buyerID, sellerID, c.EndTime, c.Duration, cost,
 		metadataJSON, c.UpdatedAt,
 	)
 
@@ -298,19 +401,19 @@ func (r *callRepository) Update(ctx context.Context, c *call.Call) error {
 // Delete removes a call from the database
 func (r *callRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	query := `DELETE FROM calls WHERE id = $1`
-	
+
 	_, err := r.db.ExecContext(ctx, query, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete call: %w", err)
 	}
-	
+
 	return nil
 }
 
 // List returns a list of calls based on filter criteria
 func (r *callRepository) List(ctx context.Context, filter CallFilter) ([]*call.Call, error) {
 	var conditions []string
-	var args []interface{}
+	var args []any
 	argCount := 0
 
 	// Build WHERE conditions
@@ -319,25 +422,25 @@ func (r *callRepository) List(ctx context.Context, filter CallFilter) ([]*call.C
 		conditions = append(conditions, fmt.Sprintf("status = $%d", argCount))
 		args = append(args, mapStatusToEnum(*filter.Status))
 	}
-	
+
 	if filter.BuyerID != nil {
 		argCount++
 		conditions = append(conditions, fmt.Sprintf("buyer_id = $%d", argCount))
 		args = append(args, *filter.BuyerID)
 	}
-	
+
 	if filter.SellerID != nil {
 		argCount++
 		conditions = append(conditions, fmt.Sprintf("seller_id = $%d", argCount))
 		args = append(args, *filter.SellerID)
 	}
-	
+
 	if filter.StartTimeFrom != nil {
 		argCount++
 		conditions = append(conditions, fmt.Sprintf("started_at >= $%d", argCount))
 		args = append(args, *filter.StartTimeFrom)
 	}
-	
+
 	if filter.StartTimeTo != nil {
 		argCount++
 		conditions = append(conditions, fmt.Sprintf("started_at <= $%d", argCount))
@@ -347,27 +450,27 @@ func (r *callRepository) List(ctx context.Context, filter CallFilter) ([]*call.C
 	// Build query
 	query := `
 		SELECT 
-			id, from_number, to_number, status, type,
+			id, from_number, to_number, status, direction,
 			buyer_id, seller_id, started_at, ended_at,
 			duration, cost, metadata, created_at, updated_at
 		FROM calls
 	`
-	
+
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
-	
+
 	// Add ordering with SQL injection protection
 	orderByClause := sanitizeOrderBy(filter.OrderBy)
 	query += " ORDER BY " + orderByClause
-	
+
 	// Add pagination
 	if filter.Limit > 0 {
 		argCount++
 		query += fmt.Sprintf(" LIMIT $%d", argCount)
 		args = append(args, filter.Limit)
 	}
-	
+
 	if filter.Offset > 0 {
 		argCount++
 		query += fmt.Sprintf(" OFFSET $%d", argCount)
@@ -414,11 +517,11 @@ func (r *callRepository) CountByStatus(ctx context.Context) (map[call.Status]int
 	for rows.Next() {
 		var statusStr string
 		var count int
-		
+
 		if err := rows.Scan(&statusStr, &count); err != nil {
 			return nil, fmt.Errorf("failed to scan count: %w", err)
 		}
-		
+
 		status := mapEnumToStatus(statusStr)
 		counts[status] = count
 	}
@@ -433,7 +536,7 @@ func (r *callRepository) CountByStatus(ctx context.Context) (map[call.Status]int
 // scanCall scans a database row into a Call struct
 func scanCall(rows *sql.Rows) (*call.Call, error) {
 	var c call.Call
-	var statusStr, callType string
+	var statusStr, directionStr string
 	var metadata []byte
 	var buyerIDStr sql.NullString
 	var sellerID sql.NullString
@@ -442,7 +545,7 @@ func scanCall(rows *sql.Rows) (*call.Call, error) {
 	var cost sql.NullFloat64
 
 	err := rows.Scan(
-		&c.ID, &c.FromNumber, &c.ToNumber, &statusStr, &callType,
+		&c.ID, &c.FromNumber, &c.ToNumber, &statusStr, &directionStr,
 		&buyerIDStr, &sellerID, &c.StartTime, &endTime,
 		&duration, &cost, &metadata, &c.CreatedAt, &c.UpdatedAt,
 	)
@@ -453,7 +556,7 @@ func scanCall(rows *sql.Rows) (*call.Call, error) {
 
 	// Convert database values
 	c.Status = mapEnumToStatus(statusStr)
-	c.Direction = mapTypeToDirection(callType)
+	c.Direction = mapTypeToDirection(directionStr)
 
 	// Handle nullable buyer ID (marketplace calls may not have a buyer yet)
 	if buyerIDStr.Valid {
@@ -539,8 +642,8 @@ func mapEnumToStatus(enum string) call.Status {
 	}
 }
 
-func mapTypeToDirection(callType string) call.Direction {
-	if callType == "outbound" {
+func mapTypeToDirection(directionStr string) call.Direction {
+	if directionStr == "outbound" {
 		return call.DirectionOutbound
 	}
 	return call.DirectionInbound
@@ -550,12 +653,12 @@ func mapTypeToDirection(callType string) call.Direction {
 func sanitizeOrderBy(orderBy string) string {
 	// Default order
 	const defaultOrder = "created_at DESC"
-	
+
 	// Allowed columns that can be used in ORDER BY
 	allowedColumns := map[string]bool{
 		"id":         true,
 		"status":     true,
-		"type":       true,
+		"direction":  true,
 		"buyer_id":   true,
 		"seller_id":  true,
 		"started_at": true,
@@ -565,7 +668,7 @@ func sanitizeOrderBy(orderBy string) string {
 		"created_at": true,
 		"updated_at": true,
 	}
-	
+
 	// Allowed sort directions
 	allowedDirections := map[string]bool{
 		"ASC":  true,
@@ -573,35 +676,35 @@ func sanitizeOrderBy(orderBy string) string {
 		"asc":  true,
 		"desc": true,
 	}
-	
+
 	if orderBy == "" {
 		return defaultOrder
 	}
-	
+
 	// Split the order by clause (e.g., "created_at DESC" -> ["created_at", "DESC"])
 	parts := strings.Fields(strings.TrimSpace(orderBy))
-	
+
 	if len(parts) == 0 {
 		return defaultOrder
 	}
-	
+
 	// Validate column name
 	column := parts[0]
 	if !allowedColumns[column] {
 		return defaultOrder
 	}
-	
+
 	// If only column is specified, default to DESC
 	if len(parts) == 1 {
 		return column + " DESC"
 	}
-	
+
 	// Validate sort direction
 	direction := parts[1]
 	if !allowedDirections[direction] {
 		return column + " DESC"
 	}
-	
+
 	// Return sanitized ORDER BY clause
 	return column + " " + strings.ToUpper(direction)
 }
@@ -614,7 +717,7 @@ func (r *callRepository) GetActiveCallsForSeller(ctx context.Context, sellerID u
 		OrderBy:  "created_at DESC",
 		Limit:    100,
 	}
-	
+
 	// Use the existing List method with seller filter
 	return r.List(ctx, filter)
 }
@@ -627,7 +730,7 @@ func (r *callRepository) GetActiveCallsForBuyer(ctx context.Context, buyerID uui
 		OrderBy: "created_at DESC",
 		Limit:   100,
 	}
-	
+
 	// Use the existing List method with buyer filter
 	return r.List(ctx, filter)
 }
@@ -636,7 +739,7 @@ func (r *callRepository) GetActiveCallsForBuyer(ctx context.Context, buyerID uui
 func (r *callRepository) GetPendingSellerCalls(ctx context.Context, limit int) ([]*call.Call, error) {
 	query := `
 		SELECT 
-			id, from_number, to_number, status, type,
+			id, from_number, to_number, status, direction,
 			buyer_id, seller_id, started_at, ended_at,
 			duration, cost, metadata, created_at, updated_at
 		FROM calls 
@@ -645,13 +748,13 @@ func (r *callRepository) GetPendingSellerCalls(ctx context.Context, limit int) (
 		ORDER BY created_at ASC
 		LIMIT $1
 	`
-	
+
 	rows, err := r.db.QueryContext(ctx, query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query pending seller calls: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var calls []*call.Call
 	for rows.Next() {
 		c, err := scanCall(rows)
@@ -660,11 +763,11 @@ func (r *callRepository) GetPendingSellerCalls(ctx context.Context, limit int) (
 		}
 		calls = append(calls, c)
 	}
-	
+
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to iterate rows: %w", err)
 	}
-	
+
 	return calls, nil
 }
 
@@ -672,7 +775,7 @@ func (r *callRepository) GetPendingSellerCalls(ctx context.Context, limit int) (
 func (r *callRepository) GetIncomingCalls(ctx context.Context, limit int) ([]*call.Call, error) {
 	query := `
 		SELECT 
-			id, from_number, to_number, status, type,
+			id, from_number, to_number, status, direction,
 			buyer_id, seller_id, started_at, ended_at,
 			duration, cost, metadata, created_at, updated_at
 		FROM calls 
@@ -681,13 +784,13 @@ func (r *callRepository) GetIncomingCalls(ctx context.Context, limit int) ([]*ca
 		ORDER BY created_at ASC
 		LIMIT $1
 	`
-	
+
 	rows, err := r.db.QueryContext(ctx, query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query incoming calls: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var calls []*call.Call
 	for rows.Next() {
 		c, err := scanCall(rows)
@@ -696,10 +799,10 @@ func (r *callRepository) GetIncomingCalls(ctx context.Context, limit int) ([]*ca
 		}
 		calls = append(calls, c)
 	}
-	
+
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to iterate rows: %w", err)
 	}
-	
+
 	return calls, nil
 }

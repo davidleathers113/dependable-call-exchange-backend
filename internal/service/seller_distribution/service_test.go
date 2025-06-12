@@ -51,7 +51,7 @@ func (m *mockCallRepository) GetIncomingCalls(ctx context.Context, limit int) ([
 }
 
 type mockAccountRepository struct {
-	accounts  map[uuid.UUID]*account.Account
+	accounts   map[uuid.UUID]*account.Account
 	capacities map[uuid.UUID]*SellerCapacity
 }
 
@@ -87,7 +87,7 @@ func (m *mockAccountRepository) GetSellerCapacity(ctx context.Context, sellerID 
 	if capacity, exists := m.capacities[sellerID]; exists {
 		return capacity, nil
 	}
-	
+
 	// Return default capacity if not found
 	return &SellerCapacity{
 		SellerID:           sellerID,
@@ -138,14 +138,14 @@ func (m *mockNotificationService) NotifyAuctionStarted(ctx context.Context, sell
 func createTestSeller(id uuid.UUID, qualityScore float64) *account.Account {
 	qualityMetrics := values.MustNewQualityMetrics(
 		qualityScore, // quality score
-		0.0,         // fraud score
+		0.0,          // fraud score
 		qualityScore, // historical rating
-		0.5,         // conversion rate
-		300,         // average call time
+		0.5,          // conversion rate
+		300,          // average call time
 		qualityScore, // trust score
 		qualityScore, // reliability score
 	)
-	
+
 	return &account.Account{
 		ID:             id,
 		Type:           account.TypeSeller,
@@ -162,7 +162,7 @@ func TestService_DistributeCall_BroadcastAlgorithm(t *testing.T) {
 	accountRepo := newMockAccountRepository()
 	notificationSvc := newMockNotificationService()
 	metrics := NewNoopMetrics()
-	
+
 	// Create test data
 	callID := uuid.New()
 	testCall := &call.Call{
@@ -171,16 +171,16 @@ func TestService_DistributeCall_BroadcastAlgorithm(t *testing.T) {
 		Direction: call.DirectionInbound,
 	}
 	callRepo.calls[callID] = testCall
-	
+
 	// Create test sellers with quality metrics
 	seller1ID := uuid.New()
 	seller1 := createTestSeller(seller1ID, 9.0)
 	accountRepo.accounts[seller1ID] = seller1
-	
+
 	seller2ID := uuid.New()
 	seller2 := createTestSeller(seller2ID, 8.0)
 	accountRepo.accounts[seller2ID] = seller2
-	
+
 	// Setup rules
 	rules := &SellerDistributionRules{
 		Algorithm:       "broadcast",
@@ -188,30 +188,30 @@ func TestService_DistributeCall_BroadcastAlgorithm(t *testing.T) {
 		MinQualityScore: 7.0,
 		AuctionDuration: 5 * time.Minute,
 	}
-	
+
 	// Create service
 	service := NewService(callRepo, accountRepo, notificationSvc, metrics, rules)
-	
+
 	// Test distribution
 	ctx := context.Background()
 	decision, err := service.DistributeCall(ctx, callID)
-	
+
 	// Assertions
 	require.NoError(t, err)
 	require.NotNil(t, decision)
-	
+
 	assert.Equal(t, callID, decision.CallID)
 	assert.Equal(t, "broadcast", decision.Algorithm)
 	assert.Len(t, decision.SelectedSellers, 2)
 	assert.Equal(t, 2, decision.NotifiedCount)
 	assert.Contains(t, decision.SelectedSellers, seller1ID)
 	assert.Contains(t, decision.SelectedSellers, seller2ID)
-	
+
 	// Verify call status was updated
 	updatedCall, err := callRepo.GetByID(ctx, callID)
 	require.NoError(t, err)
 	assert.Equal(t, call.StatusQueued, updatedCall.Status)
-	
+
 	// Verify notifications were sent (2 individual + 2 auction started)
 	assert.Len(t, notificationSvc.notifications, 4)
 }
@@ -222,7 +222,7 @@ func TestService_DistributeCall_NoSellersAvailable(t *testing.T) {
 	accountRepo := newMockAccountRepository()
 	notificationSvc := newMockNotificationService()
 	metrics := NewNoopMetrics()
-	
+
 	// Create test call
 	callID := uuid.New()
 	testCall := &call.Call{
@@ -231,7 +231,7 @@ func TestService_DistributeCall_NoSellersAvailable(t *testing.T) {
 		Direction: call.DirectionInbound,
 	}
 	callRepo.calls[callID] = testCall
-	
+
 	// Setup rules
 	rules := &SellerDistributionRules{
 		Algorithm:       "broadcast",
@@ -239,14 +239,14 @@ func TestService_DistributeCall_NoSellersAvailable(t *testing.T) {
 		MinQualityScore: 7.0,
 		AuctionDuration: 5 * time.Minute,
 	}
-	
+
 	// Create service
 	service := NewService(callRepo, accountRepo, notificationSvc, metrics, rules)
-	
+
 	// Test distribution
 	ctx := context.Background()
 	decision, err := service.DistributeCall(ctx, callID)
-	
+
 	// Assertions
 	require.Error(t, err)
 	assert.Nil(t, decision)
@@ -259,7 +259,7 @@ func TestService_DistributeCall_InvalidCallStatus(t *testing.T) {
 	accountRepo := newMockAccountRepository()
 	notificationSvc := newMockNotificationService()
 	metrics := NewNoopMetrics()
-	
+
 	// Create test call with invalid status
 	callID := uuid.New()
 	testCall := &call.Call{
@@ -268,7 +268,7 @@ func TestService_DistributeCall_InvalidCallStatus(t *testing.T) {
 		Direction: call.DirectionInbound,
 	}
 	callRepo.calls[callID] = testCall
-	
+
 	// Setup rules
 	rules := &SellerDistributionRules{
 		Algorithm:       "broadcast",
@@ -276,14 +276,14 @@ func TestService_DistributeCall_InvalidCallStatus(t *testing.T) {
 		MinQualityScore: 7.0,
 		AuctionDuration: 5 * time.Minute,
 	}
-	
+
 	// Create service
 	service := NewService(callRepo, accountRepo, notificationSvc, metrics, rules)
-	
+
 	// Test distribution
 	ctx := context.Background()
 	decision, err := service.DistributeCall(ctx, callID)
-	
+
 	// Assertions
 	require.Error(t, err)
 	assert.Nil(t, decision)
@@ -296,16 +296,16 @@ func TestService_GetAvailableSellers(t *testing.T) {
 	accountRepo := newMockAccountRepository()
 	notificationSvc := newMockNotificationService()
 	metrics := NewNoopMetrics()
-	
+
 	// Create test sellers with different quality scores
 	seller1ID := uuid.New()
 	seller1 := createTestSeller(seller1ID, 9.0) // High quality
 	accountRepo.accounts[seller1ID] = seller1
-	
+
 	seller2ID := uuid.New()
 	seller2 := createTestSeller(seller2ID, 6.0) // Below min quality
 	accountRepo.accounts[seller2ID] = seller2
-	
+
 	// Setup rules
 	rules := &SellerDistributionRules{
 		Algorithm:       "broadcast",
@@ -313,19 +313,19 @@ func TestService_GetAvailableSellers(t *testing.T) {
 		MinQualityScore: 7.0,
 		AuctionDuration: 5 * time.Minute,
 	}
-	
+
 	// Create service
 	service := NewService(callRepo, accountRepo, notificationSvc, metrics, rules)
-	
+
 	// Test getting available sellers
 	ctx := context.Background()
 	criteria := &SellerCriteria{
 		MinQuality:   7.0,
 		AvailableNow: true,
 	}
-	
+
 	sellers, err := service.GetAvailableSellers(ctx, criteria)
-	
+
 	// Assertions
 	require.NoError(t, err)
 	assert.Len(t, sellers, 1) // Only seller1 meets quality requirement

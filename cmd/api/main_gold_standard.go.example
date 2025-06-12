@@ -1,0 +1,167 @@
+package main
+
+import (
+	"context"
+	"log"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/api/rest"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/infrastructure/config"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/infrastructure/database"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/infrastructure/repository"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/service/analytics"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/service/bidding"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/service/callrouting"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/service/fraud"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/service/telephony"
+)
+
+// This file demonstrates how to use the 11/10 Gold Standard API implementation
+
+func main() {
+	// Initialize structured logging
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Connect to database
+	db, err := database.Connect(cfg.Database.URL)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer db.Close()
+
+	// Initialize repositories
+	repos := repository.NewRepositories(db)
+
+	// Initialize services
+	callRoutingService := callrouting.NewService(
+		repos.CallRepository,
+		repos.BidRepository,
+		// Add other dependencies
+	)
+
+	biddingService := bidding.NewService(
+		repos.BidRepository,
+		// Add other dependencies
+	)
+
+	fraudService := fraud.NewService(
+		// Add dependencies
+	)
+
+	telephonyService := telephony.NewService(
+		// Add dependencies
+	)
+
+	analyticsService := analytics.NewService(
+		repos,
+		// Add other dependencies
+	)
+
+	// Create the gold standard services
+	services := &rest.GoldStandardServices{
+		Analytics:   analyticsService,
+		Bidding:     biddingService,
+		CallRouting: callRoutingService,
+		Fraud:       fraudService,
+		Telephony:   telephonyService,
+	}
+
+	// Configure the API
+	apiConfig := &rest.Config{
+		Version:               "v1",
+		BaseURL:               cfg.Server.BaseURL,
+		EnableMetrics:         true,
+		EnableTracing:         true,
+		EnableCompression:     true,
+		CompressionMinSize:    1024,      // 1KB
+		EnableRateLimiting:    true,
+		PublicRateLimit:       10,        // 10 requests per second
+		PublicRateBurst:       20,
+		AuthRateLimit:         100,       // 100 requests per second for authenticated users
+		AuthRateBurst:         200,
+		EnableCircuitBreaker:  true,
+		CircuitBreakerTimeout: 30 * time.Second,
+		CacheDuration:         5 * time.Minute,
+		EnableWebSocket:       true,
+		EnableGraphQL:         false,     // Coming soon
+		Logger:                logger,
+	}
+
+	// Create the server
+	server := rest.NewServer(apiConfig)
+
+	// Start the server in a goroutine
+	go func() {
+		logger.Info("Starting Gold Standard API server", "address", cfg.Server.Address)
+		if err := server.Start(cfg.Server.Address); err != nil {
+			logger.Error("Server failed to start", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	// Wait for interrupt signal to gracefully shutdown the server
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+
+	logger.Info("Shutting down server...")
+
+	// Create a deadline for shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Attempt graceful shutdown
+	if err := server.Shutdown(ctx); err != nil {
+		logger.Error("Server forced to shutdown", "error", err)
+	}
+
+	logger.Info("Server exited")
+}
+
+// Alternative: Use the simplified ListenAndServe method
+func mainSimplified() {
+	// ... initialization code ...
+
+	// Create the gold standard API
+	api := rest.CreateGoldStandardAPI(services)
+
+	// Create HTTP server with the gold standard handler
+	server := &http.Server{
+		Addr:         ":8080",
+		Handler:      api,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
+	// Start server (blocks until shutdown)
+	log.Fatal(server.ListenAndServe())
+}
+
+// Migration path from existing code
+func migrateFromExisting(existingHandler *rest.Handler) {
+	// Convert existing handler to gold standard
+	goldStandardAPI := rest.MigrateFromBasicHandlers(existingHandler)
+
+	// Use the new API
+	server := &http.Server{
+		Addr:    ":8080",
+		Handler: goldStandardAPI,
+	}
+
+	log.Fatal(server.ListenAndServe())
+}

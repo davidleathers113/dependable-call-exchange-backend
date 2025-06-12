@@ -149,6 +149,7 @@ linters-settings:
             desc: "Use os or io package instead"
         files:
           - "!**/internal/infrastructure/**"
+          - "!**/*_test.go"
         allow:
           - $gostd
           - github.com/google/uuid
@@ -156,6 +157,26 @@ linters-settings:
           - go.uber.org/zap
           - github.com/lib/pq
           - github.com/jackc/pgx
+          - github.com/shopspring/decimal
+          - github.com/gorilla/mux
+          - github.com/go-chi/chi
+          - google.golang.org/grpc
+      
+      domain:
+        files:
+          - "**/internal/domain/**"
+          - "!**/internal/domain/**/*_test.go"
+        deny:
+          - pkg: "database/sql"
+            desc: "Domain should not depend on infrastructure"
+          - pkg: "github.com/lib/pq"
+            desc: "Domain should not depend on infrastructure"
+          - pkg: "github.com/jackc/pgx"
+            desc: "Domain should not depend on infrastructure"
+          - pkg: "net/http"
+            desc: "Domain should not depend on infrastructure"
+          - pkg: "google.golang.org/grpc"
+            desc: "Domain should not depend on infrastructure"
 
 issues:
   exclude-rules:

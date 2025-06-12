@@ -22,7 +22,7 @@ func TestService_PlaceBid(t *testing.T) {
 	// Create shared IDs for tests
 	callID := uuid.New()
 	buyerID := uuid.New()
-	
+
 	tests := []struct {
 		name          string
 		setupMocks    func(*mocks.CallRepository, *mocks.BidRepository, *mocks.AccountRepository, *mockFraudChecker)
@@ -38,25 +38,25 @@ func TestService_PlaceBid(t *testing.T) {
 					ID:     callID,
 					Status: call.StatusPending,
 				}
-				
+
 				buyer := &account.Account{
-					ID:           buyerID,
-					Status:       account.StatusActive,
+					ID:     buyerID,
+					Status: account.StatusActive,
 					QualityMetrics: values.QualityMetrics{
 						QualityScore: 85.5,
 					},
 				}
-				
+
 				cr.On("GetByID", ctx, callID).Return(testCall, nil)
 				ar.On("GetByID", ctx, buyerID).Return(buyer, nil)
 				ar.On("GetBalance", ctx, buyerID).Return(100.0, nil)
-				
+
 				fc.On("CheckBid", ctx, mock.AnythingOfType("*bid.Bid"), buyer).Return(&FraudCheckResult{
 					Approved:  true,
 					RiskScore: 0.1,
 					Flags:     []string{},
 				}, nil)
-				
+
 				br.On("Create", ctx, mock.AnythingOfType("*bid.Bid")).Return(nil)
 				br.On("GetActiveBidsForCall", ctx, callID).Return([]*bid.Bid{}, nil)
 			},
@@ -81,23 +81,23 @@ func TestService_PlaceBid(t *testing.T) {
 					ID:     callID,
 					Status: call.StatusQueued,
 				}
-				
+
 				buyer := &account.Account{
-					ID:           buyerID,
-					Status:       account.StatusActive,
+					ID:     buyerID,
+					Status: account.StatusActive,
 					QualityMetrics: values.QualityMetrics{
 						QualityScore: 90.0,
 					},
 				}
-				
+
 				cr.On("GetByID", ctx, callID).Return(testCall, nil)
 				ar.On("GetByID", ctx, buyerID).Return(buyer, nil)
 				ar.On("GetBalance", ctx, buyerID).Return(100.0, nil)
-				
+
 				fc.On("CheckBid", ctx, mock.AnythingOfType("*bid.Bid"), buyer).Return(&FraudCheckResult{
 					Approved: true,
 				}, nil)
-				
+
 				br.On("Create", ctx, mock.AnythingOfType("*bid.Bid")).Return(nil)
 				br.On("GetActiveBidsForCall", ctx, callID).Return([]*bid.Bid{}, nil)
 			},
@@ -105,7 +105,7 @@ func TestService_PlaceBid(t *testing.T) {
 				CallID:  callID,
 				BuyerID: buyerID,
 				Amount:  7.25,
-				Criteria: map[string]interface{}{
+				Criteria: map[string]any{
 					"location": "US",
 					"language": "en",
 				},
@@ -116,7 +116,7 @@ func TestService_PlaceBid(t *testing.T) {
 			validate: func(t *testing.T, b *bid.Bid) {
 				assert.NotNil(t, b)
 				assert.Equal(t, values.MustNewMoneyFromFloat(7.25, values.USD), b.Amount)
-				// TODO: Criteria conversion from map[string]interface{} to bid.BidCriteria not yet implemented
+				// TODO: Criteria conversion from map[string]any to bid.BidCriteria not yet implemented
 				// assert.Contains(t, b.Criteria.Geography.Countries, "US")
 			},
 		},
@@ -140,7 +140,7 @@ func TestService_PlaceBid(t *testing.T) {
 					ID:     callID,
 					Status: call.StatusCompleted,
 				}
-				
+
 				cr.On("GetByID", ctx, callID).Return(testCall, nil)
 			},
 			request: &PlaceBidRequest{
@@ -158,7 +158,7 @@ func TestService_PlaceBid(t *testing.T) {
 					ID:     callID,
 					Status: call.StatusPending,
 				}
-				
+
 				cr.On("GetByID", ctx, callID).Return(testCall, nil)
 				ar.On("GetByID", ctx, buyerID).Return(nil, assert.AnError)
 			},
@@ -177,12 +177,12 @@ func TestService_PlaceBid(t *testing.T) {
 					ID:     callID,
 					Status: call.StatusPending,
 				}
-				
+
 				buyer := &account.Account{
 					ID:     buyerID,
 					Status: account.StatusSuspended,
 				}
-				
+
 				cr.On("GetByID", ctx, callID).Return(testCall, nil)
 				ar.On("GetByID", ctx, buyerID).Return(buyer, nil)
 			},
@@ -201,12 +201,12 @@ func TestService_PlaceBid(t *testing.T) {
 					ID:     callID,
 					Status: call.StatusPending,
 				}
-				
+
 				buyer := &account.Account{
 					ID:     buyerID,
 					Status: account.StatusActive,
 				}
-				
+
 				cr.On("GetByID", ctx, callID).Return(testCall, nil)
 				ar.On("GetByID", ctx, buyerID).Return(buyer, nil)
 				ar.On("GetBalance", ctx, buyerID).Return(3.0, nil) // Less than bid amount
@@ -226,19 +226,19 @@ func TestService_PlaceBid(t *testing.T) {
 					ID:     callID,
 					Status: call.StatusPending,
 				}
-				
+
 				buyer := &account.Account{
-					ID:           buyerID,
-					Status:       account.StatusActive,
+					ID:     buyerID,
+					Status: account.StatusActive,
 					QualityMetrics: values.QualityMetrics{
 						QualityScore: 40.0,
 					},
 				}
-				
+
 				cr.On("GetByID", ctx, callID).Return(testCall, nil)
 				ar.On("GetByID", ctx, buyerID).Return(buyer, nil)
 				ar.On("GetBalance", ctx, buyerID).Return(100.0, nil)
-				
+
 				fc.On("CheckBid", ctx, mock.AnythingOfType("*bid.Bid"), buyer).Return(&FraudCheckResult{
 					Approved: false,
 					Reasons:  []string{"Low quality score", "Suspicious activity"},
@@ -283,12 +283,12 @@ func TestService_PlaceBid(t *testing.T) {
 			fraudChecker := new(mockFraudChecker)
 			notifier := new(mocks.NotificationService)
 			metrics := new(mocks.MetricsCollector)
-			
+
 			// Setup mocks if provided
 			if tt.setupMocks != nil {
 				tt.setupMocks(callRepo, bidRepo, accountRepo, fraudChecker)
 			}
-			
+
 			// Setup metrics expectations for successful cases
 			if !tt.expectedError {
 				metrics.On("RecordBidPlaced", ctx, mock.AnythingOfType("*bid.Bid")).Return()
@@ -296,13 +296,13 @@ func TestService_PlaceBid(t *testing.T) {
 				// NotifyBidPlaced is called in a goroutine with background context
 				notifier.On("NotifyBidPlaced", mock.Anything, mock.AnythingOfType("*bid.Bid")).Return(nil).Maybe()
 			}
-			
+
 			// Create service
 			svc := NewService(bidRepo, callRepo, accountRepo, fraudChecker, notifier, metrics)
-			
+
 			// Execute
 			result, err := svc.PlaceBid(ctx, tt.request)
-			
+
 			// Validate
 			if tt.expectedError {
 				require.Error(t, err)
@@ -313,7 +313,7 @@ func TestService_PlaceBid(t *testing.T) {
 					tt.validate(t, result)
 				}
 			}
-			
+
 			// Assert expectations
 			callRepo.AssertExpectations(t)
 			bidRepo.AssertExpectations(t)
@@ -343,7 +343,7 @@ func TestService_UpdateBid(t *testing.T) {
 					Amount: values.MustNewMoneyFromFloat(5.0, "USD"),
 					Status: bid.StatusActive,
 				}
-				
+
 				br.On("GetByID", ctx, bidID).Return(existingBid, nil)
 				br.On("Update", ctx, mock.MatchedBy(func(b *bid.Bid) bool {
 					expectedAmount := values.MustNewMoneyFromFloat(7.5, "USD")
@@ -368,7 +368,7 @@ func TestService_UpdateBid(t *testing.T) {
 					Status:    bid.StatusActive,
 					ExpiresAt: originalExpiry,
 				}
-				
+
 				br.On("GetByID", ctx, bidID).Return(existingBid, nil)
 				br.On("Update", ctx, mock.MatchedBy(func(b *bid.Bid) bool {
 					return b.ExpiresAt.After(originalExpiry)
@@ -384,16 +384,16 @@ func TestService_UpdateBid(t *testing.T) {
 			name: "update criteria and metadata",
 			setupMocks: func(br *mocks.BidRepository, bidID uuid.UUID) {
 				existingBid := &bid.Bid{
-					ID:       bidID,
-					Status:   bid.StatusActive,
+					ID:     bidID,
+					Status: bid.StatusActive,
 				}
-				
+
 				br.On("GetByID", ctx, bidID).Return(existingBid, nil)
 				br.On("Update", ctx, mock.AnythingOfType("*bid.Bid")).Return(nil)
 			},
 			bidID: uuid.New(),
 			updates: &BidUpdate{
-				Criteria: map[string]interface{}{
+				Criteria: map[string]any{
 					"new_criteria": "value",
 				},
 				AutoRenew: ptr(true),
@@ -435,20 +435,20 @@ func TestService_UpdateBid(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create mocks
 			bidRepo := new(mocks.BidRepository)
-			
+
 			// Setup mocks
 			tt.setupMocks(bidRepo, tt.bidID)
-			
+
 			// Create service
 			svc := &service{
 				bidRepo:      bidRepo,
 				minBidAmount: 0.01,
 				maxBidAmount: 1000.0,
 			}
-			
+
 			// Execute
 			result, err := svc.UpdateBid(ctx, tt.bidID, tt.updates)
-			
+
 			// Validate
 			if tt.expectedError {
 				require.Error(t, err)
@@ -459,7 +459,7 @@ func TestService_UpdateBid(t *testing.T) {
 					tt.validate(t, result)
 				}
 			}
-			
+
 			// Assert expectations
 			bidRepo.AssertExpectations(t)
 		})
@@ -472,49 +472,49 @@ func TestService_ProcessExpiredBids(t *testing.T) {
 	t.Run("process expired bids", func(t *testing.T) {
 		bidRepo := new(mocks.BidRepository)
 		notifier := new(mocks.NotificationService)
-		
+
 		// Create expired bids
 		expiredBid1 := &bid.Bid{
 			ID:        uuid.New(),
 			Status:    bid.StatusActive,
 			ExpiresAt: time.Now().Add(-1 * time.Minute),
 		}
-		
+
 		expiredBid2 := &bid.Bid{
 			ID:        uuid.New(),
 			Status:    bid.StatusActive,
 			ExpiresAt: time.Now().Add(-1 * time.Minute),
 		}
-		
+
 		bidRepo.On("GetExpiredBids", ctx, mock.AnythingOfType("time.Time")).Return([]*bid.Bid{
 			expiredBid1,
 			expiredBid2,
 		}, nil)
-		
+
 		// Both bids should be expired (auto-renew not implemented yet)
 		bidRepo.On("Update", ctx, mock.MatchedBy(func(b *bid.Bid) bool {
 			return b.ID == expiredBid1.ID && b.Status == bid.StatusExpired
 		})).Return(nil)
-		
+
 		bidRepo.On("Update", ctx, mock.MatchedBy(func(b *bid.Bid) bool {
 			return b.ID == expiredBid2.ID && b.Status == bid.StatusExpired
 		})).Return(nil)
-		
+
 		// Notifications for both expired bids (called in goroutines)
 		notifier.On("NotifyBidExpired", mock.Anything, expiredBid1).Return(nil).Maybe()
 		notifier.On("NotifyBidExpired", mock.Anything, expiredBid2).Return(nil).Maybe()
-		
+
 		// Create service
 		svc := &service{
 			bidRepo:         bidRepo,
 			notifier:        notifier,
 			defaultDuration: 5 * time.Minute,
 		}
-		
+
 		// Execute
 		err := svc.ProcessExpiredBids(ctx)
 		require.NoError(t, err)
-		
+
 		// Assert expectations
 		bidRepo.AssertExpectations(t)
 	})
@@ -522,31 +522,31 @@ func TestService_ProcessExpiredBids(t *testing.T) {
 
 func TestService_ConcurrentBidding(t *testing.T) {
 	ctx := context.Background()
-	
+
 	// Setup
 	callRepo := new(mocks.CallRepository)
 	bidRepo := new(mocks.BidRepository)
 	accountRepo := new(mocks.AccountRepository)
 	fraudChecker := new(mockFraudChecker)
-	
+
 	callID := uuid.New()
 	testCall := &call.Call{
 		ID:     callID,
 		Status: call.StatusPending,
 	}
-	
+
 	// Create multiple buyers
 	numBuyers := 10
 	buyers := make([]*account.Account, numBuyers)
 	for i := 0; i < numBuyers; i++ {
 		buyers[i] = &account.Account{
-			ID:           uuid.New(),
-			Status:       account.StatusActive,
+			ID:     uuid.New(),
+			Status: account.StatusActive,
 			QualityMetrics: values.QualityMetrics{
 				QualityScore: 70.0 + float64(i),
 			},
 		}
-		
+
 		// Setup expectations for each buyer
 		callRepo.On("GetByID", ctx, callID).Return(testCall, nil)
 		accountRepo.On("GetByID", ctx, buyers[i].ID).Return(buyers[i], nil)
@@ -556,13 +556,13 @@ func TestService_ConcurrentBidding(t *testing.T) {
 		}, nil)
 		bidRepo.On("Create", ctx, mock.AnythingOfType("*bid.Bid")).Return(nil)
 	}
-	
+
 	// GetActiveBidsForCall will be called by auction engine
 	bidRepo.On("GetActiveBidsForCall", ctx, callID).Return([]*bid.Bid{}, nil).Maybe()
-	
+
 	// Create service
 	svc := NewService(bidRepo, callRepo, accountRepo, fraudChecker, nil, nil)
-	
+
 	// Place bids concurrently
 	errors := make(chan error, numBuyers)
 	for i := 0; i < numBuyers; i++ {
@@ -575,13 +575,13 @@ func TestService_ConcurrentBidding(t *testing.T) {
 			errors <- err
 		}(i)
 	}
-	
+
 	// Collect results
 	for i := 0; i < numBuyers; i++ {
 		err := <-errors
 		require.NoError(t, err)
 	}
-	
+
 	// Verify all bids were placed
 	callRepo.AssertExpectations(t)
 	bidRepo.AssertExpectations(t)

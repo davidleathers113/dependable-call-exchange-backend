@@ -13,16 +13,23 @@ import (
 	"github.com/google/uuid"
 )
 
-// auctionOrchestrationService manages auction lifecycle
+// auctionOrchestrationService manages the complete auction lifecycle for calls.
+//
+// As an orchestrator service, it coordinates bid collection, winner selection,
+// and notification dispatch. It maintains 5 dependencies (allowed up to 8 per ADR-001):
+//
+// - bidRepo: Access to bid data
+// - callRepo: Access to call data
+// - infrastructure: Combined notifier + metrics facade
+// - mu & auctions: Internal state management
 type auctionOrchestrationService struct {
-	bidRepo      BidRepository
-	callRepo     CallRepository
-	notifier     NotificationService
-	metrics      MetricsCollector
-	
+	bidRepo        BidRepository
+	callRepo       CallRepository
+	infrastructure InfrastructureServices
+
 	// Active auctions tracking
-	mu        sync.RWMutex
-	auctions  map[uuid.UUID]*orchestratedAuction
+	mu       sync.RWMutex
+	auctions map[uuid.UUID]*orchestratedAuction
 }
 
 // orchestratedAuction represents an ongoing auction with full state
@@ -40,15 +47,13 @@ type orchestratedAuction struct {
 func NewAuctionOrchestrationService(
 	bidRepo BidRepository,
 	callRepo CallRepository,
-	notifier NotificationService,
-	metrics MetricsCollector,
+	infrastructure InfrastructureServices,
 ) AuctionOrchestrationService {
 	return &auctionOrchestrationService{
-		bidRepo:   bidRepo,
-		callRepo:  callRepo,
-		notifier:  notifier,
-		metrics:   metrics,
-		auctions:  make(map[uuid.UUID]*orchestratedAuction),
+		bidRepo:        bidRepo,
+		callRepo:       callRepo,
+		infrastructure: infrastructure,
+		auctions:       make(map[uuid.UUID]*orchestratedAuction),
 	}
 }
 
@@ -59,12 +64,12 @@ func (s *auctionOrchestrationService) RunAuction(ctx context.Context, callID uui
 	if err != nil {
 		return nil, errors.NewNotFoundError("call").WithCause(err)
 	}
-	
+
 	if c.Status != call.StatusPending && c.Status != call.StatusQueued {
-		return nil, errors.NewValidationError("INVALID_CALL_STATUS", 
+		return nil, errors.NewValidationError("INVALID_CALL_STATUS",
 			fmt.Sprintf("call must be in pending or queued status, got %s", c.Status))
 	}
-	
+
 	// Get or create auction
 	s.mu.Lock()
 	auction, exists := s.auctions[callID]
@@ -79,34 +84,34 @@ func (s *auctionOrchestrationService) RunAuction(ctx context.Context, callID uui
 		s.auctions[callID] = auction
 	}
 	s.mu.Unlock()
-	
+
 	// Get active bids for the call
 	bids, err := s.bidRepo.GetActiveBidsForCall(ctx, callID)
 	if err != nil {
 		return nil, errors.NewInternalError("failed to get bids").WithCause(err)
 	}
-	
+
 	if len(bids) == 0 {
 		return nil, errors.NewBusinessError("NO_BIDS", "no active bids for call")
 	}
-	
+
 	// Update auction with current bids
 	auction.mu.Lock()
 	auction.bids = bids
 	auction.mu.Unlock()
-	
+
 	// Determine winner based on bid amount and quality
 	winner := s.selectWinner(bids)
 	if winner == nil {
 		return nil, errors.NewBusinessError("NO_WINNER", "could not determine auction winner")
 	}
-	
+
 	// Mark winning bid
 	winner.Status = bid.StatusWon
 	if err := s.bidRepo.Update(ctx, winner); err != nil {
 		return nil, errors.NewInternalError("failed to update winning bid").WithCause(err)
 	}
-	
+
 	// Mark losing bids
 	for _, b := range bids {
 		if b.ID != winner.ID {
@@ -116,7 +121,7 @@ func (s *auctionOrchestrationService) RunAuction(ctx context.Context, callID uui
 			}
 		}
 	}
-	
+
 	// Create result
 	result := &AuctionResult{
 		CallID:       callID,
@@ -127,37 +132,37 @@ func (s *auctionOrchestrationService) RunAuction(ctx context.Context, callID uui
 		EndTime:      time.Now(),
 		Participants: len(bids),
 	}
-	
+
 	// Collect runner-up IDs
 	for _, b := range bids {
 		if b.ID != winner.ID {
 			result.RunnerUpBids = append(result.RunnerUpBids, b.ID)
 		}
 	}
-	
+
 	// Close auction
 	auction.mu.Lock()
 	auction.status = "closed"
 	auction.winningBidID = winner.ID
 	auction.mu.Unlock()
-	
+
 	// Send notifications
-	if s.notifier != nil {
-		go s.notifier.NotifyBidWon(context.Background(), winner)
+	if s.infrastructure != nil {
+		go s.infrastructure.NotifyBidWon(context.Background(), winner)
 		for _, b := range bids {
 			if b.ID != winner.ID {
-				go s.notifier.NotifyBidLost(context.Background(), b)
+				go s.infrastructure.NotifyBidLost(context.Background(), b)
 			}
 		}
 	}
-	
+
 	// Record metrics
-	if s.metrics != nil {
+	if s.infrastructure != nil {
 		duration := result.EndTime.Sub(result.StartTime)
-		s.metrics.RecordAuctionDuration(ctx, callID, duration)
-		s.metrics.RecordBidAmount(ctx, winner.Amount.ToFloat64())
+		s.infrastructure.RecordAuctionDuration(ctx, callID, duration)
+		s.infrastructure.RecordBidAmount(ctx, winner.Amount.ToFloat64())
 	}
-	
+
 	// Clean up auction after delay
 	go func() {
 		time.Sleep(5 * time.Minute)
@@ -165,7 +170,7 @@ func (s *auctionOrchestrationService) RunAuction(ctx context.Context, callID uui
 		delete(s.auctions, callID)
 		s.mu.Unlock()
 	}()
-	
+
 	return result, nil
 }
 
@@ -174,14 +179,14 @@ func (s *auctionOrchestrationService) GetAuctionStatus(ctx context.Context, call
 	s.mu.RLock()
 	auction, exists := s.auctions[callID]
 	s.mu.RUnlock()
-	
+
 	if !exists {
 		return nil, errors.NewNotFoundError("auction not found")
 	}
-	
+
 	auction.mu.RLock()
 	defer auction.mu.RUnlock()
-	
+
 	// Calculate top bid
 	topBidAmount := 0.0
 	if len(auction.bids) > 0 {
@@ -193,13 +198,13 @@ func (s *auctionOrchestrationService) GetAuctionStatus(ctx context.Context, call
 		})
 		topBidAmount = sorted[0].Amount.ToFloat64()
 	}
-	
+
 	// Calculate time left
 	timeLeft := auction.endTime.Sub(time.Now())
 	if timeLeft < 0 {
 		timeLeft = 0
 	}
-	
+
 	return &AuctionStatus{
 		CallID:       callID,
 		Status:       auction.status,
@@ -215,21 +220,21 @@ func (s *auctionOrchestrationService) CloseAuction(ctx context.Context, callID u
 	s.mu.RLock()
 	auction, exists := s.auctions[callID]
 	s.mu.RUnlock()
-	
+
 	if !exists {
 		return errors.NewNotFoundError("auction not found")
 	}
-	
+
 	auction.mu.Lock()
 	defer auction.mu.Unlock()
-	
+
 	if auction.status == "closed" {
 		return errors.NewValidationError("ALREADY_CLOSED", "auction is already closed")
 	}
-	
+
 	auction.status = "closed"
 	auction.endTime = time.Now()
-	
+
 	return nil
 }
 
@@ -250,30 +255,30 @@ func (s *auctionOrchestrationService) HandleNewBid(ctx context.Context, b *bid.B
 		s.auctions[b.CallID] = auction
 	}
 	s.mu.Unlock()
-	
+
 	// Add bid to auction
 	auction.mu.Lock()
 	defer auction.mu.Unlock()
-	
+
 	if auction.status == "closed" {
 		return errors.NewValidationError("AUCTION_CLOSED", "auction is closed")
 	}
-	
+
 	// Check if bid already exists
 	for _, existingBid := range auction.bids {
 		if existingBid.ID == b.ID {
 			return nil // Already added
 		}
 	}
-	
+
 	auction.bids = append(auction.bids, b)
-	
+
 	// Extend auction if near end
 	timeLeft := auction.endTime.Sub(time.Now())
 	if timeLeft < 10*time.Second {
 		auction.endTime = time.Now().Add(15 * time.Second)
 	}
-	
+
 	return nil
 }
 
@@ -282,37 +287,37 @@ func (s *auctionOrchestrationService) GetWinningBid(ctx context.Context, callID 
 	s.mu.RLock()
 	auction, exists := s.auctions[callID]
 	s.mu.RUnlock()
-	
+
 	if !exists {
 		// Check if there's a won bid in the database
 		bids, err := s.bidRepo.GetActiveBidsForCall(ctx, callID)
 		if err != nil {
 			return nil, errors.NewInternalError("failed to get bids").WithCause(err)
 		}
-		
+
 		for _, b := range bids {
 			if b.Status == bid.StatusWon {
 				return b, nil
 			}
 		}
-		
+
 		return nil, errors.NewNotFoundError("no winning bid found")
 	}
-	
+
 	auction.mu.RLock()
 	defer auction.mu.RUnlock()
-	
+
 	if auction.winningBidID == uuid.Nil {
 		return nil, errors.NewNotFoundError("no winning bid determined yet")
 	}
-	
+
 	// Find winning bid
 	for _, b := range auction.bids {
 		if b.ID == auction.winningBidID {
 			return b, nil
 		}
 	}
-	
+
 	return nil, errors.NewNotFoundError("winning bid not found in auction")
 }
 
@@ -321,35 +326,35 @@ func (s *auctionOrchestrationService) selectWinner(bids []*bid.Bid) *bid.Bid {
 	if len(bids) == 0 {
 		return nil
 	}
-	
+
 	// Sort bids by score (combination of amount and quality)
 	scored := make([]struct {
 		bid   *bid.Bid
 		score float64
 	}, len(bids))
-	
+
 	for i, b := range bids {
 		// Calculate score: 70% amount, 30% quality
 		amountScore := b.Amount.ToFloat64()
 		qualityScore := b.Quality.HistoricalRating * 10 // Convert 0-1 to 0-10
 		score := (amountScore * 0.7) + (qualityScore * 0.3)
-		
+
 		// Apply fraud penalty
 		if b.Quality.FraudScore > 0.5 {
 			score *= (1 - b.Quality.FraudScore)
 		}
-		
+
 		scored[i] = struct {
 			bid   *bid.Bid
 			score float64
 		}{bid: b, score: score}
 	}
-	
+
 	// Sort by score descending
 	sort.Slice(scored, func(i, j int) bool {
 		return scored[i].score > scored[j].score
 	})
-	
+
 	return scored[0].bid
 }
 
@@ -357,13 +362,13 @@ func (s *auctionOrchestrationService) selectWinner(bids []*bid.Bid) *bid.Bid {
 func (s *auctionOrchestrationService) cleanupExpiredAuctions() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	now := time.Now()
 	for callID, auction := range s.auctions {
 		auction.mu.RLock()
 		expired := auction.status == "closed" && now.Sub(auction.endTime) > 5*time.Minute
 		auction.mu.RUnlock()
-		
+
 		if expired {
 			delete(s.auctions, callID)
 		}

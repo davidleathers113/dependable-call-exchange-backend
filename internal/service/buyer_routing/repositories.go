@@ -2,12 +2,12 @@ package buyer_routing
 
 import (
 	"context"
-	
-	"github.com/google/uuid"
+
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
+	"github.com/google/uuid"
 )
 
 // CallRepository provides access to seller calls for routing

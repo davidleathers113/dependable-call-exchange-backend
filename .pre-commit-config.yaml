@@ -1,0 +1,72 @@
+repos:
+  - repo: local
+    hooks:
+      - id: go-fmt
+        name: go fmt
+        entry: gofmt -l
+        language: system
+        files: \.go$
+        
+      - id: go-imports
+        name: goimports
+        entry: goimports -l
+        language: system
+        files: \.go$
+        
+      - id: golangci-lint
+        name: golangci-lint
+        entry: golangci-lint run --fix
+        language: system
+        files: \.go$
+        pass_filenames: false
+        
+      - id: go-mod-tidy
+        name: go mod tidy
+        entry: go mod tidy
+        language: system
+        pass_filenames: false
+        
+      - id: smell-test-quick
+        name: Quick smell test
+        entry: make smell-test-quick
+        language: system
+        pass_filenames: false
+        files: \.go$
+
+      - id: openapi-validation
+        name: Validate OpenAPI Specification
+        entry: sh -c
+        args:
+          - |
+            if [ -f "api/openapi.yaml" ]; then
+              echo "Validating OpenAPI specification..."
+              if [ -f "swagger-codegen-cli.jar" ]; then
+                java -jar swagger-codegen-cli.jar validate -i api/openapi.yaml
+              else
+                echo "Installing swagger-codegen-cli for validation..."
+                wget -q https://repo1.maven.org/maven2/io/swagger/codegen/v3/swagger-codegen-cli/3.0.46/swagger-codegen-cli-3.0.46.jar -O swagger-codegen-cli.jar
+                java -jar swagger-codegen-cli.jar validate -i api/openapi.yaml
+              fi
+              echo "OpenAPI specification validation passed"
+            else
+              echo "Warning: OpenAPI specification not found"
+            fi
+        language: system
+        files: '^api/openapi\.yaml$'
+        pass_filenames: false
+
+      - id: contract-tests-quick
+        name: Quick Contract Tests
+        entry: sh -c
+        args:
+          - |
+            echo "Running quick contract tests..."
+            if go test -tags=contract -run TestContractValidationBasic ./internal/api/rest/ -v; then
+              echo "Quick contract tests passed"
+            else
+              echo "Contract tests failed - run 'make test-contract' for details"
+              exit 1
+            fi
+        language: system
+        files: '^(internal/api/rest/.*|test/contract/.*|api/openapi\.yaml)$'
+        pass_filenames: false

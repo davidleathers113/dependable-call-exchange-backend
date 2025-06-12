@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "tree_sitter": {
+      "command": "uvx",
+      "args": [
+        "--directory",
+        "/Users/davidleathers/projects/DependableCallExchangeBackEnd/",
+        "mcp-server-tree-sitter"
+      ]
+    },
+    "mcp-sequentialthinking-tools": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "mcp-sequentialthinking-tools"
+      ],
+      "env": {}
+    },
+    "godoc-server": {
+      "type": "stdio",
+      "command": "/Users/davidleathers/go/bin/godoc-mcp-server",
+      "args": [],
+      "env": {}
+    }
+  }
+}

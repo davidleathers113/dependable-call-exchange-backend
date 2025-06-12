@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
+	"github.com/google/uuid"
 )
 
 // Examples of how to integrate the QueryBuilder with existing repository patterns
@@ -33,7 +33,7 @@ type ExampleAccountRepository struct {
 func (r *ExampleAccountRepository) GetActiveBuyers(ctx context.Context, limit int) ([]*account.Account, error) {
 	// Old approach: handcrafted SQL
 	// query := `SELECT id, email, name... FROM accounts WHERE type = 'buyer' AND status = 'active' ORDER BY quality_score DESC LIMIT $1`
-	
+
 	// New approach: type-safe QueryBuilder
 	sql, params, err := NewAccountQuery().
 		SelectAccounts().
@@ -41,7 +41,7 @@ func (r *ExampleAccountRepository) GetActiveBuyers(ctx context.Context, limit in
 		OrderByQualityScore(true). // desc = true
 		Limit(limit).
 		ToSQL()
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
@@ -68,7 +68,7 @@ func (r *ExampleAccountRepository) GetHighQualityAccounts(ctx context.Context, q
 		OrderByQualityScore(true).
 		Limit(50).
 		ToSQL()
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
@@ -92,7 +92,7 @@ func (r *ExampleAccountRepository) UpdateAccountStatus(ctx context.Context, acco
 		WhereID(accountID).
 		Returning("id", "updated_at").
 		ToSQL()
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to build update query: %w", err)
 	}
@@ -116,17 +116,17 @@ type ExampleBidRepository struct {
 func (r *ExampleBidRepository) GetActiveBidsForCall(ctx context.Context, callID uuid.UUID) ([]*bid.Bid, error) {
 	// Old approach: handcrafted SQL with manual parameter management
 	// query := `SELECT ... FROM bids WHERE call_id = $1 AND status IN ('active', 'winning') AND expires_at > NOW() ORDER BY amount DESC, placed_at ASC`
-	
+
 	// New approach: type-safe and readable
 	sql, params, err := NewBidQuery().
 		SelectBids().
 		WhereCallID(callID).
 		WhereActiveBids().
 		WhereNotExpired().
-		OrderByAmount(true). // highest first
+		OrderByAmount(true).    // highest first
 		OrderByPlacedAt(false). // earliest first for tie-breaking
 		ToSQL()
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
@@ -149,7 +149,7 @@ func (r *ExampleBidRepository) GetTopBiddersAnalytics(ctx context.Context, days,
 		TopBuyersByVolume(limit).
 		Where("created_at", GreaterThanOrEqual, time.Now().AddDate(0, 0, -days)).
 		ToSQL()
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to build analytics query: %w", err)
 	}
@@ -192,14 +192,14 @@ func (r *ExampleCallRepository) GetPendingSellerCalls(ctx context.Context, limit
 	callQuery := NewCallQuery().
 		SelectCalls().
 		WherePendingCalls().
-		WhereNotNull("seller_id"). // Must have a seller
+		WhereNotNull("seller_id").     // Must have a seller
 		Where("buyer_id", IsNull, nil) // Not yet assigned to buyer
-	
+
 	sql, params, err := callQuery.
-		OrderByStartedAt(false).    // Oldest first (FIFO)
+		OrderByStartedAt(false). // Oldest first (FIFO)
 		Limit(limit).
 		ToSQL()
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
@@ -222,7 +222,7 @@ func (r *ExampleCallRepository) GetCallPerformanceReport(ctx context.Context, se
 		SellerPerformance(days).
 		WhereEqual("seller_id", sellerID).
 		ToSQL()
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to build analytics query: %w", err)
 	}
@@ -236,7 +236,7 @@ func (r *ExampleCallRepository) GetCallPerformanceReport(ctx context.Context, se
 		&report.TotalRevenue,
 		&report.CompletionRate,
 	)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get performance report: %w", err)
 	}
@@ -257,10 +257,10 @@ type CallPerformanceReport struct {
 // Transaction example with QueryBuilder
 func (r *ExampleAccountRepository) TransferBalance(ctx context.Context, fromID, toID uuid.UUID, amount float64) error {
 	// This would typically be wrapped in a transaction
-	
+
 	// Note: In a real implementation, balance updates would need proper Money value object handling
 	// This is simplified for demonstration purposes
-	
+
 	// Debit from source account - simplified approach
 	debitSQL, debitParams, err := New().
 		Update("accounts").
@@ -269,7 +269,7 @@ func (r *ExampleAccountRepository) TransferBalance(ctx context.Context, fromID, 
 		Where("(balance->>'amount')::float", GreaterThanOrEqual, amount). // Ensure sufficient balance
 		Returning("id").
 		ToSQL()
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to build debit query: %w", err)
 	}
@@ -281,7 +281,7 @@ func (r *ExampleAccountRepository) TransferBalance(ctx context.Context, fromID, 
 		WhereID(toID).
 		Returning("id").
 		ToSQL()
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to build credit query: %w", err)
 	}
@@ -292,7 +292,7 @@ func (r *ExampleAccountRepository) TransferBalance(ctx context.Context, fromID, 
 	if err != nil {
 		return fmt.Errorf("failed to debit account: %w", err)
 	}
-	
+
 	err = r.db.QueryRowContext(ctx, creditSQL, creditParams...).Scan(&creditedID)
 	if err != nil {
 		return fmt.Errorf("failed to credit account: %w", err)
@@ -311,7 +311,7 @@ func (r *ExampleBidRepository) MarkExpiredBids(ctx context.Context, cutoffTime t
 		WhereIn("status", []interface{}{"pending", "active", "winning"}).
 		Returning("id").
 		ToSQL()
-	
+
 	if err != nil {
 		return 0, fmt.Errorf("failed to build bulk update query: %w", err)
 	}
@@ -347,7 +347,7 @@ func (r *ExampleBidRepository) GetBidsWithAccountInfo(ctx context.Context, callI
 		WhereEqual("a.status", "active").
 		OrderByDesc("b.amount").
 		ToSQL()
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to build join query: %w", err)
 	}
@@ -391,7 +391,7 @@ type BidWithAccount struct {
 /*
 func (r *oldRepository) getActiveBuyers(ctx context.Context, limit int) ([]*account.Account, error) {
 	query := `
-		SELECT 
+		SELECT
 			id, email, name, company, type, status, phone_number,
 			balance, credit_limit, payment_terms,
 			tcpa_consent, gdpr_consent, compliance_flags,
@@ -402,7 +402,7 @@ func (r *oldRepository) getActiveBuyers(ctx context.Context, limit int) ([]*acco
 		ORDER BY quality_score DESC
 		LIMIT $1
 	`
-	
+
 	rows, err := r.db.QueryContext(ctx, query, limit)
 	// ... error-prone parameter management and scanning
 }
@@ -417,11 +417,11 @@ func (r *newRepository) getActiveBuyers(ctx context.Context, limit int) ([]*acco
 		OrderByQualityScore(true).
 		Limit(limit).
 		ToSQL()
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("query build error: %w", err)
 	}
-	
+
 	rows, err := r.db.QueryContext(ctx, sql, params...)
 	// ... same scanning logic, but with guaranteed parameter safety
 }

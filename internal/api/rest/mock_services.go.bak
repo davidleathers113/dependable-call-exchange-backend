@@ -1,0 +1,114 @@
+package rest
+
+import (
+	"context"
+	"time"
+
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
+	"github.com/google/uuid"
+)
+
+// MockAccountService is a mock implementation of AccountService for testing
+type MockAccountService struct {
+	balances map[uuid.UUID]float64
+}
+
+// NewMockAccountService creates a new mock account service
+func NewMockAccountService() AccountService {
+	return &MockAccountService{
+		balances: make(map[uuid.UUID]float64),
+	}
+}
+
+// GetBalance returns the account balance
+func (m *MockAccountService) GetBalance(ctx context.Context, accountID uuid.UUID) (float64, error) {
+	if balance, ok := m.balances[accountID]; ok {
+		return balance, nil
+	}
+	// Default balance for testing
+	return 1000.00, nil
+}
+
+// UpdateBalance updates the account balance
+func (m *MockAccountService) UpdateBalance(ctx context.Context, accountID uuid.UUID, amount float64) error {
+	m.balances[accountID] = amount
+	return nil
+}
+
+// MockComplianceService is a mock implementation of ComplianceService for testing
+type MockComplianceService struct {
+	dncList    map[string]bool
+	tcpaHours  map[string]string
+}
+
+// NewMockComplianceService creates a new mock compliance service
+func NewMockComplianceService() ComplianceService {
+	return &MockComplianceService{
+		dncList:   make(map[string]bool),
+		tcpaHours: make(map[string]string),
+	}
+}
+
+// CheckDNC checks if a phone number is on the DNC list
+func (m *MockComplianceService) CheckDNC(ctx context.Context, phoneNumber string) (bool, error) {
+	return m.dncList[phoneNumber], nil
+}
+
+// AddToDNC adds a phone number to the DNC list
+func (m *MockComplianceService) AddToDNC(ctx context.Context, phoneNumber string, reason string) error {
+	m.dncList[phoneNumber] = true
+	return nil
+}
+
+// CheckTCPA checks if a call is allowed under TCPA rules
+func (m *MockComplianceService) CheckTCPA(ctx context.Context, phoneNumber string, callTime time.Time) (bool, error) {
+	// For testing, always allow calls between 9 AM and 8 PM
+	hour := callTime.Hour()
+	return hour >= 9 && hour < 20, nil
+}
+
+// SetTCPAHours sets the allowed calling hours
+func (m *MockComplianceService) SetTCPAHours(ctx context.Context, startTime, endTime string, timezone string) error {
+	m.tcpaHours["start"] = startTime
+	m.tcpaHours["end"] = endTime
+	m.tcpaHours["timezone"] = timezone
+	return nil
+}
+
+// MockAuctionService is a mock implementation of AuctionService for testing
+type MockAuctionService struct {
+	auctions map[uuid.UUID]*bid.Auction
+}
+
+// NewMockAuctionService creates a new mock auction service
+func NewMockAuctionService() AuctionService {
+	return &MockAuctionService{
+		auctions: make(map[uuid.UUID]*bid.Auction),
+	}
+}
+
+// CreateAuction creates a new auction
+func (m *MockAuctionService) CreateAuction(ctx context.Context, auction *bid.Auction) error {
+	m.auctions[auction.ID] = auction
+	return nil
+}
+
+// GetAuction retrieves an auction by ID
+func (m *MockAuctionService) GetAuction(ctx context.Context, auctionID uuid.UUID) (*bid.Auction, error) {
+	if auction, ok := m.auctions[auctionID]; ok {
+		return auction, nil
+	}
+	return nil, nil
+}
+
+// CompleteAuction completes an auction and selects a winner
+func (m *MockAuctionService) CompleteAuction(ctx context.Context, auctionID uuid.UUID) (*bid.Auction, error) {
+	if auction, ok := m.auctions[auctionID]; ok {
+		auction.Status = bid.AuctionStatusCompleted
+		// For testing, just set a dummy winning bid
+		winningBidID := uuid.New()
+		auction.WinningBid = &winningBidID
+		return auction, nil
+	}
+	return nil, nil
+}

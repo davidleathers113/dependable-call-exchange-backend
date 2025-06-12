@@ -96,6 +96,27 @@ jobs:
         DCE_REDIS_URL: localhost:6379
       run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
 
+    - name: Run contract tests
+      env:
+        DCE_DATABASE_URL: postgres://postgres:postgres@localhost:5432/dce_test?sslmode=disable
+        DCE_REDIS_URL: localhost:6379
+      run: |
+        echo "Running OpenAPI contract validation tests..."
+        go test -v -tags=contract ./internal/api/rest/ -run TestContract
+        go test -v -tags=contract ./test/contract/ -run TestAPIContractCompliance
+
+    - name: Validate OpenAPI specification
+      run: |
+        if [ -f "api/openapi.yaml" ]; then
+          echo "Validating OpenAPI specification..."
+          # Install swagger-codegen-cli for validation
+          wget https://repo1.maven.org/maven2/io/swagger/codegen/v3/swagger-codegen-cli/3.0.46/swagger-codegen-cli-3.0.46.jar -O swagger-codegen-cli.jar
+          java -jar swagger-codegen-cli.jar validate -i api/openapi.yaml
+          echo "OpenAPI specification is valid"
+        else
+          echo "Warning: OpenAPI specification not found at api/openapi.yaml"
+        fi
+
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:

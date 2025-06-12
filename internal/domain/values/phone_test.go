@@ -52,36 +52,36 @@ func TestNewPhoneNumber(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name:     "empty number",
-			number:   "",
-			wantErr:  true,
+			name:    "empty number",
+			number:  "",
+			wantErr: true,
 		},
 		{
-			name:     "too short",
-			number:   "123",
-			wantErr:  true,
+			name:    "too short",
+			number:  "123",
+			wantErr: true,
 		},
 		{
-			name:     "invalid characters",
-			number:   "abc-def-ghij",
-			wantErr:  true,
+			name:    "invalid characters",
+			number:  "abc-def-ghij",
+			wantErr: true,
 		},
 		{
-			name:     "too long",
-			number:   "+1234567890123456789",
-			wantErr:  true,
+			name:    "too long",
+			number:  "+1234567890123456789",
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			phone, err := NewPhoneNumber(tt.number)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
 			}
-			
+
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, phone.String())
 		})
@@ -119,7 +119,7 @@ func TestNewPhoneNumberE164(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := NewPhoneNumberE164(tt.number)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -149,7 +149,7 @@ func TestPhoneNumber_Properties(t *testing.T) {
 	t.Run("Equal", func(t *testing.T) {
 		phone2 := MustNewPhoneNumber("+15551234567")
 		phone3 := MustNewPhoneNumber("+15559876543")
-		
+
 		assert.True(t, phone.Equal(phone2))
 		assert.False(t, phone.Equal(phone3))
 	})
@@ -168,7 +168,7 @@ func TestPhoneNumber_USProperties(t *testing.T) {
 
 	t.Run("IsUS", func(t *testing.T) {
 		assert.True(t, phone.IsUS())
-		
+
 		ukPhone := MustNewPhoneNumber("+442071234567")
 		assert.False(t, ukPhone.IsUS())
 	})
@@ -188,9 +188,9 @@ func TestPhoneNumber_USProperties(t *testing.T) {
 
 func TestPhoneNumber_Formatting(t *testing.T) {
 	tests := []struct {
-		name     string
-		number   string
-		formatUS string
+		name       string
+		number     string
+		formatUS   string
 		formatIntl string
 	}{
 		{
@@ -210,7 +210,7 @@ func TestPhoneNumber_Formatting(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			phone := MustNewPhoneNumber(tt.number)
-			
+
 			assert.Equal(t, tt.formatUS, phone.FormatUS())
 			assert.Equal(t, tt.formatIntl, phone.FormatInternational())
 		})
@@ -259,34 +259,34 @@ func TestPhoneNumber_JSON(t *testing.T) {
 	t.Run("Marshal", func(t *testing.T) {
 		data, err := json.Marshal(phone)
 		require.NoError(t, err)
-		
+
 		expected := `"+15551234567"`
 		assert.Equal(t, expected, string(data))
 	})
 
 	t.Run("Unmarshal valid", func(t *testing.T) {
 		data := `"+15551234567"`
-		
+
 		var phone PhoneNumber
 		err := json.Unmarshal([]byte(data), &phone)
 		require.NoError(t, err)
-		
+
 		assert.Equal(t, "+15551234567", phone.String())
 	})
 
 	t.Run("Unmarshal US format", func(t *testing.T) {
 		data := `"(555) 123-4567"`
-		
+
 		var phone PhoneNumber
 		err := json.Unmarshal([]byte(data), &phone)
 		require.NoError(t, err)
-		
+
 		assert.Equal(t, "+15551234567", phone.String())
 	})
 
 	t.Run("Unmarshal invalid", func(t *testing.T) {
 		data := `"invalid-phone"`
-		
+
 		var phone PhoneNumber
 		err := json.Unmarshal([]byte(data), &phone)
 		assert.Error(t, err)
@@ -368,7 +368,7 @@ func TestPhoneValidationError(t *testing.T) {
 		Number: "invalid-phone",
 		Reason: "invalid format",
 	}
-	
+
 	expected := "invalid phone number 'invalid-phone': invalid format"
 	assert.Equal(t, expected, err.Error())
 }

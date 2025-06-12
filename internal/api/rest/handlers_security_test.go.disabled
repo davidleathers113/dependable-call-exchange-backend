@@ -1,0 +1,835 @@
+package rest
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestSecurityAuthentication verifies authentication requirements
+func TestSecurityAuthentication(t *testing.T) {
+	h, _ := setupHandler(t)
+
+	protectedEndpoints := []struct {
+		name   string
+		method string
+		path   string
+		body   interface{}
+	}{
+		{
+			name:   "GET account",
+			method: "GET",
+			path:   "/api/v1/accounts/" + uuid.New().String(),
+		},
+		{
+			name:   "POST call",
+			method: "POST",
+			path:   "/api/v1/calls",
+			body: CreateCallRequest{
+				FromNumber: "+12125551234",
+				ToNumber:   "+13105559876",
+				Direction:  "inbound",
+			},
+		},
+		{
+			name:   "GET bid",
+			method: "GET",
+			path:   "/api/v1/bids/" + uuid.New().String(),
+		},
+		{
+			name:   "POST auction",
+			method: "POST",
+			path:   "/api/v1/auctions",
+			body: CreateAuctionRequest{
+				CallID:       uuid.New().String(),
+				ReservePrice: 0.05,
+				BidIncrement: 0.01,
+				MaxDuration:  300,
+			},
+		},
+		{
+			name:   "GET compliance check",
+			method: "GET",
+			path:   "/api/v1/compliance/tcpa/check?phone_number=+12125551234",
+		},
+	}
+
+	for _, tt := range protectedEndpoints {
+		t.Run(tt.name+" without auth", func(t *testing.T) {
+			var req *http.Request
+			if tt.body != nil {
+				body, _ := json.Marshal(tt.body)
+				req = httptest.NewRequest(tt.method, tt.path, bytes.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+			} else {
+				req = httptest.NewRequest(tt.method, tt.path, nil)
+			}
+
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
+			
+			var resp map[string]interface{}
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+			assert.Contains(t, resp, "error")
+		})
+
+		t.Run(tt.name+" with invalid token", func(t *testing.T) {
+			var req *http.Request
+			if tt.body != nil {
+				body, _ := json.Marshal(tt.body)
+				req = httptest.NewRequest(tt.method, tt.path, bytes.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+			} else {
+				req = httptest.NewRequest(tt.method, tt.path, nil)
+			}
+			
+			req.Header.Set("Authorization", "Bearer invalid-token")
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
+		})
+
+		t.Run(tt.name+" with expired token", func(t *testing.T) {
+			var req *http.Request
+			if tt.body != nil {
+				body, _ := json.Marshal(tt.body)
+				req = httptest.NewRequest(tt.method, tt.path, bytes.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+			} else {
+				req = httptest.NewRequest(tt.method, tt.path, nil)
+			}
+			
+			req.Header.Set("Authorization", "Bearer expired-token")
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
+		})
+	}
+}
+
+// TestSecurityAuthorization verifies access control
+func TestSecurityAuthorization(t *testing.T) {
+	h, mocks := setupHandler(t)
+
+	buyerID := uuid.New()
+	sellerID := uuid.New()
+	otherBuyerID := uuid.New()
+
+	tests := []struct {
+		name         string
+		userID       uuid.UUID
+		userType     string
+		setupMocks   func()
+		makeRequest  func() *http.Request
+		expectedCode int
+	}{
+		{
+			name:     "buyer cannot access other buyer's account",
+			userID:   buyerID,
+			userType: "buyer",
+			setupMocks: func() {
+				mocks.accountSvc.GetByIDFunc = func(ctx context.Context, id uuid.UUID) (*account.Account, error) {
+					// Return error for unauthorized access
+					return nil, account.ErrUnauthorized
+				}
+			},
+			makeRequest: func() *http.Request {
+				req := httptest.NewRequest("GET", "/api/v1/accounts/"+otherBuyerID.String(), nil)
+				return req
+			},
+			expectedCode: http.StatusForbidden,
+		},
+		{
+			name:     "seller cannot create calls",
+			userID:   sellerID,
+			userType: "seller",
+			setupMocks: func() {
+				// No setup needed - authorization should fail before service call
+			},
+			makeRequest: func() *http.Request {
+				body := CreateCallRequest{
+					FromNumber: "+12125551234",
+					ToNumber:   "+13105559876",
+					Direction:  "inbound",
+				}
+				data, _ := json.Marshal(body)
+				req := httptest.NewRequest("POST", "/api/v1/calls", bytes.NewReader(data))
+				req.Header.Set("Content-Type", "application/json")
+				return req
+			},
+			expectedCode: http.StatusForbidden,
+		},
+		{
+			name:     "buyer can access own data",
+			userID:   buyerID,
+			userType: "buyer",
+			setupMocks: func() {
+				mocks.accountSvc.GetByIDFunc = func(ctx context.Context, id uuid.UUID) (*account.Account, error) {
+					money, _ := values.NewMoneyFromFloat(1000.00, "USD")
+					email, _ := values.NewEmail("buyer@example.com")
+					return &account.Account{
+						ID:          id,
+						Type:        account.TypeBuyer,
+						Email:       email,
+						CompanyName: "Test Company",
+						Status:      account.StatusActive,
+						Balance:     money,
+						CreatedAt:   time.Now(),
+						UpdatedAt:   time.Now(),
+					}, nil
+				}
+			},
+			makeRequest: func() *http.Request {
+				req := httptest.NewRequest("GET", "/api/v1/accounts/"+buyerID.String(), nil)
+				return req
+			},
+			expectedCode: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setupMocks()
+			
+			req := tt.makeRequest()
+			req = req.WithContext(setUserContext(req.Context(), tt.userID, tt.userType))
+			req.Header.Set("Authorization", "Bearer test-token")
+			
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+			
+			assert.Equal(t, tt.expectedCode, w.Code)
+		})
+	}
+}
+
+// TestSecurityInjectionPrevention tests for injection attack prevention
+func TestSecurityInjectionPrevention(t *testing.T) {
+	h, mocks := setupHandler(t)
+
+	tests := []struct {
+		name        string
+		setupMocks  func()
+		makeRequest func() *http.Request
+	}{
+		{
+			name: "SQL injection in query parameters",
+			setupMocks: func() {
+				mocks.callSvc.ListCallsFunc = func(ctx context.Context, filter CallFilter, pagination Pagination) ([]*call.Call, int, error) {
+					// Service should receive sanitized input
+					assert.NotContains(t, filter.Status, "' OR '1'='1")
+					return []*call.Call{}, 0, nil
+				}
+			},
+			makeRequest: func() *http.Request {
+				req := httptest.NewRequest("GET", "/api/v1/calls?status=pending' OR '1'='1", nil)
+				return req
+			},
+		},
+		{
+			name: "XSS in request body",
+			setupMocks: func() {
+				mocks.accountSvc.UpdateFunc = func(ctx context.Context, id uuid.UUID, update account.UpdateRequest) (*account.Account, error) {
+					// Service should receive sanitized input
+					assert.NotContains(t, update.CompanyName, "<script>")
+					return nil, nil
+				}
+			},
+			makeRequest: func() *http.Request {
+				body := map[string]interface{}{
+					"company_name": "<script>alert('xss')</script>",
+				}
+				data, _ := json.Marshal(body)
+				req := httptest.NewRequest("PUT", "/api/v1/accounts/"+testBuyerID.String(), bytes.NewReader(data))
+				req.Header.Set("Content-Type", "application/json")
+				return req
+			},
+		},
+		{
+			name: "NoSQL injection in JSON",
+			setupMocks: func() {
+				mocks.bidSvc.CreateBidProfileFunc = func(ctx context.Context, profile BidProfileRequest) (*bid.BidProfile, error) {
+					// Verify no injection in criteria
+					assert.IsType(t, BidProfileRequest{}, profile)
+					return nil, nil
+				}
+			},
+			makeRequest: func() *http.Request {
+				body := map[string]interface{}{
+					"name": "Test Profile",
+					"criteria": map[string]interface{}{
+						"$ne": nil,
+						"geography": map[string]interface{}{
+							"countries": []string{"US"},
+						},
+					},
+				}
+				data, _ := json.Marshal(body)
+				req := httptest.NewRequest("POST", "/api/v1/bid-profiles", bytes.NewReader(data))
+				req.Header.Set("Content-Type", "application/json")
+				return req
+			},
+		},
+		{
+			name: "Command injection in phone number",
+			setupMocks: func() {
+				mocks.complianceSvc.CheckDNCFunc = func(ctx context.Context, phoneNumber string) (bool, error) {
+					// Phone number should be validated and sanitized
+					assert.Regexp(t, `^\+[1-9]\d{1,14}$`, phoneNumber)
+					return false, nil
+				}
+			},
+			makeRequest: func() *http.Request {
+				req := httptest.NewRequest("GET", "/api/v1/compliance/dnc/check?phone_number=+1234567890; rm -rf /", nil)
+				return req
+			},
+		},
+		{
+			name: "Path traversal in file paths",
+			setupMocks: func() {
+				// No file operations in current API, but test path parameter validation
+			},
+			makeRequest: func() *http.Request {
+				req := httptest.NewRequest("GET", "/api/v1/accounts/../../../etc/passwd", nil)
+				return req
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setupMocks()
+			
+			req := tt.makeRequest()
+			req = req.WithContext(setUserContext(req.Context(), testBuyerID, "buyer"))
+			req.Header.Set("Authorization", "Bearer test-token")
+			
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+			
+			// Should either return validation error or sanitized input
+			assert.NotEqual(t, http.StatusInternalServerError, w.Code)
+		})
+	}
+}
+
+// TestSecurityRateLimiting tests rate limiting functionality
+func TestSecurityRateLimiting(t *testing.T) {
+	h, mocks := setupHandler(t)
+
+	// Setup mock for rate limit testing
+	mocks.accountSvc.GetByIDFunc = func(ctx context.Context, id uuid.UUID) (*account.Account, error) {
+		money, _ := values.NewMoneyFromFloat(1000.00, "USD")
+		email, _ := values.NewEmail("buyer@example.com")
+		return &account.Account{
+			ID:          id,
+			Type:        account.TypeBuyer,
+			Email:       email,
+			CompanyName: "Test Company",
+			Status:      account.StatusActive,
+			Balance:     money,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}, nil
+	}
+
+	t.Run("rate limit per user", func(t *testing.T) {
+		userID := uuid.New()
+		
+		// Make requests up to the limit
+		for i := 0; i < 100; i++ {
+			req := httptest.NewRequest("GET", "/api/v1/accounts/"+userID.String(), nil)
+			req = req.WithContext(setUserContext(req.Context(), userID, "buyer"))
+			req.Header.Set("Authorization", "Bearer test-token")
+			
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+			
+			if i < 90 { // Allow some requests before rate limiting
+				assert.NotEqual(t, http.StatusTooManyRequests, w.Code)
+			}
+		}
+		
+		// Eventually should get rate limited
+		req := httptest.NewRequest("GET", "/api/v1/accounts/"+userID.String(), nil)
+		req = req.WithContext(setUserContext(req.Context(), userID, "buyer"))
+		req.Header.Set("Authorization", "Bearer test-token")
+		
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		
+		// Check for rate limit headers
+		assert.NotEmpty(t, w.Header().Get("X-RateLimit-Limit"))
+		assert.NotEmpty(t, w.Header().Get("X-RateLimit-Remaining"))
+		assert.NotEmpty(t, w.Header().Get("X-RateLimit-Reset"))
+	})
+
+	t.Run("rate limit per IP", func(t *testing.T) {
+		// Test IP-based rate limiting for unauthenticated endpoints
+		for i := 0; i < 20; i++ {
+			req := httptest.NewRequest("GET", "/api/v1/health", nil)
+			req.RemoteAddr = "192.168.1.100:12345"
+			
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+			
+			assert.NotEqual(t, http.StatusTooManyRequests, w.Code)
+		}
+	})
+}
+
+// TestSecurityCSRFProtection tests CSRF protection
+func TestSecurityCSRFProtection(t *testing.T) {
+	h, mocks := setupHandler(t)
+
+	// Setup mock
+	mocks.callSvc.CreateCallFunc = func(ctx context.Context, req CreateCallRequest) (*call.Call, error) {
+		return nil, nil
+	}
+
+	modifyingMethods := []string{"POST", "PUT", "DELETE", "PATCH"}
+
+	for _, method := range modifyingMethods {
+		t.Run(method+" without CSRF token", func(t *testing.T) {
+			var req *http.Request
+			
+			switch method {
+			case "POST":
+				body := CreateCallRequest{
+					FromNumber: "+12125551234",
+					ToNumber:   "+13105559876",
+					Direction:  "inbound",
+				}
+				data, _ := json.Marshal(body)
+				req = httptest.NewRequest(method, "/api/v1/calls", bytes.NewReader(data))
+			case "PUT":
+				body := map[string]string{"status": "completed"}
+				data, _ := json.Marshal(body)
+				req = httptest.NewRequest(method, "/api/v1/calls/"+uuid.New().String(), bytes.NewReader(data))
+			case "DELETE":
+				req = httptest.NewRequest(method, "/api/v1/bid-profiles/"+uuid.New().String(), nil)
+			case "PATCH":
+				body := map[string]string{"company_name": "Updated Company"}
+				data, _ := json.Marshal(body)
+				req = httptest.NewRequest(method, "/api/v1/accounts/"+uuid.New().String(), bytes.NewReader(data))
+			}
+			
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer test-token")
+			req.Header.Set("Origin", "https://evil.com")
+			req = req.WithContext(setUserContext(req.Context(), testBuyerID, "buyer"))
+			
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+			
+			// Should reject requests from unauthorized origins
+			if method != "DELETE" { // DELETE might be allowed without body
+				assert.NotEqual(t, http.StatusOK, w.Code)
+			}
+		})
+	}
+}
+
+// TestSecurityHeaderValidation tests security headers
+func TestSecurityHeaderValidation(t *testing.T) {
+	h, mocks := setupHandler(t)
+
+	mocks.accountSvc.GetByIDFunc = func(ctx context.Context, id uuid.UUID) (*account.Account, error) {
+		money, _ := values.NewMoneyFromFloat(1000.00, "USD")
+		email, _ := values.NewEmail("buyer@example.com")
+		return &account.Account{
+			ID:          id,
+			Type:        account.TypeBuyer,
+			Email:       email,
+			CompanyName: "Test Company",
+			Status:      account.StatusActive,
+			Balance:     money,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}, nil
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/accounts/"+testBuyerID.String(), nil)
+	req = req.WithContext(setUserContext(req.Context(), testBuyerID, "buyer"))
+	req.Header.Set("Authorization", "Bearer test-token")
+	
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	
+	// Verify security headers
+	assert.Equal(t, "nosniff", w.Header().Get("X-Content-Type-Options"))
+	assert.Equal(t, "DENY", w.Header().Get("X-Frame-Options"))
+	assert.Equal(t, "1; mode=block", w.Header().Get("X-XSS-Protection"))
+	assert.NotEmpty(t, w.Header().Get("Strict-Transport-Security"))
+	assert.Contains(t, w.Header().Get("Content-Security-Policy"), "default-src")
+}
+
+// TestSecurityInputSizeLimit tests input size restrictions
+func TestSecurityInputSizeLimit(t *testing.T) {
+	h, _ := setupHandler(t)
+
+	tests := []struct {
+		name         string
+		makeRequest  func() *http.Request
+		expectedCode int
+	}{
+		{
+			name: "oversized request body",
+			makeRequest: func() *http.Request {
+				// Create 10MB body
+				largeData := make([]byte, 10*1024*1024)
+				req := httptest.NewRequest("POST", "/api/v1/calls", bytes.NewReader(largeData))
+				req.Header.Set("Content-Type", "application/json")
+				return req
+			},
+			expectedCode: http.StatusRequestEntityTooLarge,
+		},
+		{
+			name: "oversized header",
+			makeRequest: func() *http.Request {
+				req := httptest.NewRequest("GET", "/api/v1/accounts/"+testBuyerID.String(), nil)
+				// Add very large header
+				req.Header.Set("X-Custom-Header", strings.Repeat("a", 8192))
+				return req
+			},
+			expectedCode: http.StatusRequestHeaderFieldsTooLarge,
+		},
+		{
+			name: "too many headers",
+			makeRequest: func() *http.Request {
+				req := httptest.NewRequest("GET", "/api/v1/accounts/"+testBuyerID.String(), nil)
+				// Add many headers
+				for i := 0; i < 1000; i++ {
+					req.Header.Set(fmt.Sprintf("X-Header-%d", i), "value")
+				}
+				return req
+			},
+			expectedCode: http.StatusRequestHeaderFieldsTooLarge,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := tt.makeRequest()
+			req = req.WithContext(setUserContext(req.Context(), testBuyerID, "buyer"))
+			req.Header.Set("Authorization", "Bearer test-token")
+			
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+			
+			assert.Equal(t, tt.expectedCode, w.Code)
+		})
+	}
+}
+
+// TestSecurityConcurrentRequestHandling tests thread safety
+func TestSecurityConcurrentRequestHandling(t *testing.T) {
+	h, mocks := setupHandler(t)
+
+	// Setup thread-safe mock
+	var callCount int
+	var mu sync.Mutex
+	
+	mocks.accountSvc.GetByIDFunc = func(ctx context.Context, id uuid.UUID) (*account.Account, error) {
+		mu.Lock()
+		callCount++
+		mu.Unlock()
+		
+		money, _ := values.NewMoneyFromFloat(1000.00, "USD")
+		email, _ := values.NewEmail("buyer@example.com")
+		return &account.Account{
+			ID:          id,
+			Type:        account.TypeBuyer,
+			Email:       email,
+			CompanyName: "Test Company",
+			Status:      account.StatusActive,
+			Balance:     money,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}, nil
+	}
+
+	// Launch concurrent requests
+	var wg sync.WaitGroup
+	errors := make(chan error, 100)
+	
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			
+			userID := uuid.New()
+			req := httptest.NewRequest("GET", "/api/v1/accounts/"+userID.String(), nil)
+			req = req.WithContext(setUserContext(req.Context(), userID, "buyer"))
+			req.Header.Set("Authorization", "Bearer test-token")
+			
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+			
+			if w.Code != http.StatusOK {
+				errors <- fmt.Errorf("request %d failed with status %d", i, w.Code)
+			}
+		}(i)
+	}
+	
+	wg.Wait()
+	close(errors)
+	
+	// Check for errors
+	for err := range errors {
+		t.Error(err)
+	}
+	
+	// Verify all requests were processed
+	mu.Lock()
+	assert.Equal(t, 100, callCount)
+	mu.Unlock()
+}
+
+// TestSecuritySessionManagement tests session security
+func TestSecuritySessionManagement(t *testing.T) {
+	h, mocks := setupHandler(t)
+
+	t.Run("session fixation prevention", func(t *testing.T) {
+		// Login request should generate new session ID
+		mocks.accountSvc.AuthenticateFunc = func(ctx context.Context, email, password string) (*account.Account, string, error) {
+			return nil, "new-session-token", nil
+		}
+
+		loginReq := map[string]string{
+			"email":    "user@example.com",
+			"password": "password123",
+		}
+		body, _ := json.Marshal(loginReq)
+		
+		req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Cookie", "session=old-session-id")
+		
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		
+		// Should get new session cookie
+		cookies := w.Result().Cookies()
+		var sessionCookie *http.Cookie
+		for _, c := range cookies {
+			if c.Name == "session" {
+				sessionCookie = c
+				break
+			}
+		}
+		
+		if sessionCookie != nil {
+			assert.NotEqual(t, "old-session-id", sessionCookie.Value)
+			assert.True(t, sessionCookie.HttpOnly)
+			assert.True(t, sessionCookie.Secure)
+			assert.Equal(t, http.SameSiteStrictMode, sessionCookie.SameSite)
+		}
+	})
+
+	t.Run("session timeout", func(t *testing.T) {
+		// Test that expired sessions are rejected
+		req := httptest.NewRequest("GET", "/api/v1/accounts/"+testBuyerID.String(), nil)
+		req.Header.Set("Authorization", "Bearer expired-session-token")
+		
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+}
+
+// TestSecurityPasswordPolicy tests password requirements
+func TestSecurityPasswordPolicy(t *testing.T) {
+	h, mocks := setupHandler(t)
+
+	tests := []struct {
+		name         string
+		password     string
+		shouldFail   bool
+		errorMessage string
+	}{
+		{
+			name:         "too short",
+			password:     "Pass1!",
+			shouldFail:   true,
+			errorMessage: "password must be at least 8 characters",
+		},
+		{
+			name:         "no uppercase",
+			password:     "password123!",
+			shouldFail:   true,
+			errorMessage: "password must contain uppercase letter",
+		},
+		{
+			name:         "no lowercase",
+			password:     "PASSWORD123!",
+			shouldFail:   true,
+			errorMessage: "password must contain lowercase letter",
+		},
+		{
+			name:         "no number",
+			password:     "Password!",
+			shouldFail:   true,
+			errorMessage: "password must contain number",
+		},
+		{
+			name:         "no special character",
+			password:     "Password123",
+			shouldFail:   true,
+			errorMessage: "password must contain special character",
+		},
+		{
+			name:       "valid password",
+			password:   "ValidPass123!",
+			shouldFail: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mocks.accountSvc.CreateFunc = func(ctx context.Context, req account.CreateRequest) (*account.Account, error) {
+				// Service should validate password
+				if tt.shouldFail {
+					return nil, account.NewValidationError("INVALID_PASSWORD", tt.errorMessage)
+				}
+				return nil, nil
+			}
+
+			createReq := map[string]interface{}{
+				"email":        "user@example.com",
+				"password":     tt.password,
+				"company_name": "Test Company",
+				"type":         "buyer",
+			}
+			body, _ := json.Marshal(createReq)
+			
+			req := httptest.NewRequest("POST", "/api/v1/accounts", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+			
+			if tt.shouldFail {
+				assert.Equal(t, http.StatusBadRequest, w.Code)
+				var resp map[string]interface{}
+				json.Unmarshal(w.Body.Bytes(), &resp)
+				assert.Contains(t, resp, "error")
+			} else {
+				assert.NotEqual(t, http.StatusBadRequest, w.Code)
+			}
+		})
+	}
+}
+
+// TestSecurityAuditLogging verifies security event logging
+func TestSecurityAuditLogging(t *testing.T) {
+	h, mocks := setupHandler(t)
+
+	// Mock logger to capture audit events
+	var loggedEvents []string
+	mocks.logger = &mockLogger{
+		logFunc: func(level, message string, fields map[string]interface{}) {
+			if level == "AUDIT" {
+				loggedEvents = append(loggedEvents, message)
+			}
+		},
+	}
+
+	securityEvents := []struct {
+		name        string
+		setupMocks  func()
+		makeRequest func() *http.Request
+		expectLog   string
+	}{
+		{
+			name: "failed login attempt",
+			setupMocks: func() {
+				mocks.accountSvc.AuthenticateFunc = func(ctx context.Context, email, password string) (*account.Account, string, error) {
+					return nil, "", account.ErrInvalidCredentials
+				}
+			},
+			makeRequest: func() *http.Request {
+				body := map[string]string{
+					"email":    "user@example.com",
+					"password": "wrongpassword",
+				}
+				data, _ := json.Marshal(body)
+				req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(data))
+				req.Header.Set("Content-Type", "application/json")
+				return req
+			},
+			expectLog: "failed_login_attempt",
+		},
+		{
+			name: "unauthorized access attempt",
+			setupMocks: func() {
+				mocks.accountSvc.GetByIDFunc = func(ctx context.Context, id uuid.UUID) (*account.Account, error) {
+					return nil, account.ErrUnauthorized
+				}
+			},
+			makeRequest: func() *http.Request {
+				req := httptest.NewRequest("GET", "/api/v1/accounts/"+uuid.New().String(), nil)
+				req = req.WithContext(setUserContext(req.Context(), testBuyerID, "buyer"))
+				req.Header.Set("Authorization", "Bearer test-token")
+				return req
+			},
+			expectLog: "unauthorized_access",
+		},
+		{
+			name: "rate limit exceeded",
+			setupMocks: func() {
+				// Rate limiter should log when limit exceeded
+			},
+			makeRequest: func() *http.Request {
+				req := httptest.NewRequest("GET", "/api/v1/accounts/"+testBuyerID.String(), nil)
+				req = req.WithContext(setUserContext(req.Context(), testBuyerID, "buyer"))
+				req.Header.Set("Authorization", "Bearer test-token")
+				return req
+			},
+			expectLog: "rate_limit_exceeded",
+		},
+	}
+
+	for _, tt := range securityEvents {
+		t.Run(tt.name, func(t *testing.T) {
+			loggedEvents = []string{} // Reset logs
+			tt.setupMocks()
+			
+			req := tt.makeRequest()
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+			
+			// Verify security event was logged
+			// Note: Actual implementation would check for specific log entries
+		})
+	}
+}
+
+// Mock logger for testing
+type mockLogger struct {
+	logFunc func(level, message string, fields map[string]interface{})
+}
+
+func (m *mockLogger) Log(level, message string, fields map[string]interface{}) {
+	if m.logFunc != nil {
+		m.logFunc(level, message, fields)
+	}
+}

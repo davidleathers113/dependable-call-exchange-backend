@@ -24,26 +24,26 @@ func NewEmail(address string) (Email, error) {
 	if address == "" {
 		return Email{}, fmt.Errorf("email address cannot be empty")
 	}
-	
+
 	// Normalize the email address
 	normalized := normalizeEmail(address)
-	
+
 	// Validate using Go's mail package (RFC 5322 compliant)
 	parsed, err := mail.ParseAddress(normalized)
 	if err != nil {
 		return Email{}, fmt.Errorf("invalid email format: %w", err)
 	}
-	
+
 	// Additional regex validation for stricter rules
 	if !emailRegex.MatchString(parsed.Address) {
 		return Email{}, fmt.Errorf("email address does not meet format requirements")
 	}
-	
+
 	// Length validation
 	if len(parsed.Address) > 254 {
 		return Email{}, fmt.Errorf("email address too long (max 254 characters)")
 	}
-	
+
 	return Email{address: parsed.Address}, nil
 }
 
@@ -108,18 +108,18 @@ func (e Email) IsDomainAllowed(allowedDomains []string) bool {
 // IsDisposable checks if the email is from a known disposable email provider
 func (e Email) IsDisposable() bool {
 	domain := strings.ToLower(e.Domain())
-	
+
 	// Common disposable email domains
 	disposableDomains := map[string]bool{
-		"10minutemail.com": true,
+		"10minutemail.com":  true,
 		"guerrillamail.com": true,
-		"mailinator.com": true,
-		"tempmail.org": true,
-		"yopmail.com": true,
-		"temp-mail.org": true,
-		"throwaway.email": true,
+		"mailinator.com":    true,
+		"tempmail.org":      true,
+		"yopmail.com":       true,
+		"temp-mail.org":     true,
+		"throwaway.email":   true,
 	}
-	
+
 	return disposableDomains[domain]
 }
 
@@ -134,48 +134,40 @@ func (e *Email) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &address); err != nil {
 		return err
 	}
-	
-	email, err := NewEmail(address)
-	if err != nil {
-		return err
-	}
-	
-	*e = email
-	return nil
-}
 
-// Scan implements sql.Scanner for database scanning
-func (e *Email) Scan(value interface{}) error {
-	if value == nil {
-		*e = Email{}
-		return nil
-	}
-	
-	var address string
-	switch v := value.(type) {
-	case []byte:
-		address = string(v)
-	case string:
-		address = v
-	default:
-		return fmt.Errorf("cannot scan %T into Email", value)
-	}
-	
 	email, err := NewEmail(address)
 	if err != nil {
 		return err
 	}
-	
+
 	*e = email
 	return nil
 }
 
 // Value implements driver.Valuer for database storage
 func (e Email) Value() (driver.Value, error) {
-	if e.IsEmpty() {
-		return nil, nil
-	}
 	return e.address, nil
+}
+
+// Scan implements sql.Scanner for database retrieval
+func (e *Email) Scan(value interface{}) error {
+	if value == nil {
+		*e = Email{}
+		return nil
+	}
+
+	str, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("cannot scan %T into Email", value)
+	}
+
+	email, err := NewEmail(str)
+	if err != nil {
+		return err
+	}
+
+	*e = email
+	return nil
 }
 
 // Helper functions
@@ -201,25 +193,25 @@ func ValidateEmailDomain(domain string) error {
 	if domain == "" {
 		return fmt.Errorf("domain cannot be empty")
 	}
-	
+
 	// Basic domain validation
 	domainRegex := regexp.MustCompile(`^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 	if !domainRegex.MatchString(domain) {
 		return fmt.Errorf("invalid domain format")
 	}
-	
+
 	// Check for blocked domains
 	blockedDomains := []string{
 		"example.com",
 		"test.com",
 		"localhost",
 	}
-	
+
 	for _, blocked := range blockedDomains {
 		if strings.EqualFold(domain, blocked) {
 			return fmt.Errorf("domain '%s' is not allowed", domain)
 		}
 	}
-	
+
 	return nil
 }

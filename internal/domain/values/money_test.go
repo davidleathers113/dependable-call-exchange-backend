@@ -57,12 +57,12 @@ func TestNewMoney(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			money, err := NewMoney(tt.amount, tt.currency)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
 			}
-			
+
 			require.NoError(t, err)
 			assert.True(t, money.Amount().Equal(tt.amount))
 			assert.Equal(t, tt.currency, money.Currency())
@@ -103,12 +103,12 @@ func TestNewMoneyFromString(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			money, err := NewMoneyFromString(tt.amount, tt.currency)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
 			}
-			
+
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, money.Amount().String())
 			assert.Equal(t, tt.currency, money.Currency())
@@ -315,25 +315,25 @@ func TestMoney_JSON(t *testing.T) {
 	t.Run("Marshal", func(t *testing.T) {
 		data, err := json.Marshal(money)
 		require.NoError(t, err)
-		
+
 		expected := `{"amount":"123.45","currency":"USD"}`
 		assert.JSONEq(t, expected, string(data))
 	})
 
 	t.Run("Unmarshal", func(t *testing.T) {
 		data := `{"amount":"123.45","currency":"USD"}`
-		
+
 		var money Money
 		err := json.Unmarshal([]byte(data), &money)
 		require.NoError(t, err)
-		
+
 		assert.Equal(t, "123.45", money.Amount().String())
 		assert.Equal(t, USD, money.Currency())
 	})
 
 	t.Run("Unmarshal invalid amount", func(t *testing.T) {
 		data := `{"amount":"invalid","currency":"USD"}`
-		
+
 		var money Money
 		err := json.Unmarshal([]byte(data), &money)
 		assert.Error(t, err)
@@ -346,7 +346,7 @@ func TestMoney_Database(t *testing.T) {
 	t.Run("Value", func(t *testing.T) {
 		value, err := money.Value()
 		require.NoError(t, err)
-		
+
 		// Should return JSON bytes
 		assert.NotNil(t, value)
 	})
@@ -355,7 +355,7 @@ func TestMoney_Database(t *testing.T) {
 		var money Money
 		err := money.Scan("123.45")
 		require.NoError(t, err)
-		
+
 		assert.Equal(t, "123.45", money.Amount().String())
 		assert.Equal(t, USD, money.Currency()) // Default currency
 	})
@@ -365,7 +365,7 @@ func TestMoney_Database(t *testing.T) {
 		jsonData := `{"amount":"123.45","currency":"EUR"}`
 		err := money.Scan(jsonData)
 		require.NoError(t, err)
-		
+
 		assert.Equal(t, "123.45", money.Amount().String())
 		assert.Equal(t, EUR, money.Currency())
 	})
@@ -374,7 +374,7 @@ func TestMoney_Database(t *testing.T) {
 		var money Money
 		err := money.Scan(nil)
 		require.NoError(t, err)
-		
+
 		assert.True(t, money.IsZero())
 		assert.Equal(t, "", money.Currency())
 	})

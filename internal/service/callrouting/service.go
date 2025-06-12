@@ -32,7 +32,7 @@ func NewService(
 ) Service {
 	// Create router based on initial rules
 	router := createRouter(initialRules)
-	
+
 	return &service{
 		callRepo:    callRepo,
 		bidRepo:     bidRepo,
@@ -46,7 +46,7 @@ func NewService(
 // RouteCall processes a call and returns routing decision
 func (s *service) RouteCall(ctx context.Context, callID uuid.UUID) (*RoutingDecision, error) {
 	start := time.Now()
-	
+
 	// Get the call
 	c, err := s.callRepo.GetByID(ctx, callID)
 	if err != nil {
@@ -57,11 +57,11 @@ func (s *service) RouteCall(ctx context.Context, callID uuid.UUID) (*RoutingDeci
 
 	// Validate call is in correct state
 	if c.Status != call.StatusPending {
-		return nil, errors.NewValidationError("INVALID_CALL_STATE", 
+		return nil, errors.NewValidationError("INVALID_CALL_STATE",
 			fmt.Sprintf("call is not in pending state: %s", c.Status)).
 			WithDetails(map[string]interface{}{
 				"call_id": callID,
-				"status": c.Status.String(),
+				"status":  c.Status.String(),
 			})
 	}
 
@@ -74,7 +74,7 @@ func (s *service) RouteCall(ctx context.Context, callID uuid.UUID) (*RoutingDeci
 	}
 
 	if len(bids) == 0 {
-		return nil, errors.NewBusinessError("NO_BIDS_AVAILABLE", 
+		return nil, errors.NewBusinessError("NO_BIDS_AVAILABLE",
 			"no bids available for call").
 			WithDetails(map[string]interface{}{"call_id": callID})
 	}
@@ -89,7 +89,7 @@ func (s *service) RouteCall(ctx context.Context, callID uuid.UUID) (*RoutingDeci
 		return nil, errors.NewInternalError("routing failed").
 			WithCause(err).
 			WithDetails(map[string]interface{}{
-				"call_id": callID,
+				"call_id":   callID,
 				"algorithm": router.GetAlgorithm(),
 			})
 	}
@@ -101,7 +101,7 @@ func (s *service) RouteCall(ctx context.Context, callID uuid.UUID) (*RoutingDeci
 	c.Status = call.StatusQueued
 	c.RouteID = &decision.BidID
 	c.UpdatedAt = time.Now()
-		
+
 	if err := s.callRepo.Update(ctx, c); err != nil {
 		return nil, errors.NewInternalError("failed to update call").
 			WithCause(err).
@@ -115,7 +115,7 @@ func (s *service) RouteCall(ctx context.Context, callID uuid.UUID) (*RoutingDeci
 			WithCause(err).
 			WithDetails(map[string]interface{}{"bid_id": decision.BidID})
 	}
-	
+
 	winningBid.Accept() // This sets status to "won"
 	if err := s.bidRepo.Update(ctx, winningBid); err != nil {
 		return nil, errors.NewInternalError("failed to update winning bid").

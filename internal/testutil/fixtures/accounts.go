@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"testing"
 	"time"
-	
+
 	"github.com/google/uuid"
-	
+
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil"
@@ -14,30 +14,30 @@ import (
 
 // AccountBuilder builds test Account entities
 type AccountBuilder struct {
-	t               *testing.T
-	id              uuid.UUID
-	email           values.Email
-	name            string
-	company         *string
-	accountType     account.AccountType
-	status          account.Status
-	phoneNumber     values.PhoneNumber
-	address         account.Address
-	balance         values.Money
-	creditLimit     values.Money
-	paymentTerms    int
-	tcpaConsent     bool
-	gdprConsent     bool
-	qualityMetrics  values.QualityMetrics
-	settings        account.AccountSettings
+	t              *testing.T
+	id             uuid.UUID
+	email          values.Email
+	name           string
+	company        *string
+	accountType    account.AccountType
+	status         account.Status
+	phoneNumber    values.PhoneNumber
+	address        account.Address
+	balance        values.Money
+	creditLimit    values.Money
+	paymentTerms   int
+	tcpaConsent    bool
+	gdprConsent    bool
+	qualityMetrics values.QualityMetrics
+	settings       account.AccountSettings
 }
 
 // NewAccountBuilder creates a new AccountBuilder with defaults
 func NewAccountBuilder(testDB *testutil.TestDB) *AccountBuilder {
 	id := uuid.New()
-	
+
 	company := "Test Company Inc"
-	
+
 	// Create value objects with unique email
 	timestamp := time.Now().UnixNano()
 	email := values.MustNewEmail(fmt.Sprintf("test%d@example.com", timestamp))
@@ -45,16 +45,16 @@ func NewAccountBuilder(testDB *testutil.TestDB) *AccountBuilder {
 	balance := values.MustNewMoneyFromFloat(1000.00, values.USD)
 	creditLimit := values.MustNewMoneyFromFloat(5000.00, values.USD)
 	qualityMetrics := values.NewDefaultQualityMetrics()
-	
+
 	return &AccountBuilder{
-		t:               nil, // Will be set when Build is called
-		id:              id,
-		email:           email,
-		name:            "Test User",
-		company:         &company,
-		accountType:     account.TypeBuyer,
-		status:          account.StatusActive,
-		phoneNumber:     phoneNumber,
+		t:           nil, // Will be set when Build is called
+		id:          id,
+		email:       email,
+		name:        "Test User",
+		company:     &company,
+		accountType: account.TypeBuyer,
+		status:      account.StatusActive,
+		phoneNumber: phoneNumber,
 		address: account.Address{
 			Street:  "123 Main St",
 			City:    "Los Angeles",
@@ -62,12 +62,12 @@ func NewAccountBuilder(testDB *testutil.TestDB) *AccountBuilder {
 			ZipCode: "90001",
 			Country: "US",
 		},
-		balance:         balance,
-		creditLimit:     creditLimit,
-		paymentTerms:    30,
-		tcpaConsent:     true,
-		gdprConsent:     true,
-		qualityMetrics:  qualityMetrics,
+		balance:        balance,
+		creditLimit:    creditLimit,
+		paymentTerms:   30,
+		tcpaConsent:    true,
+		gdprConsent:    true,
+		qualityMetrics: qualityMetrics,
 		settings: account.AccountSettings{
 			Timezone:            "America/Los_Angeles",
 			CallNotifications:   true,
@@ -170,13 +170,13 @@ func (b *AccountBuilder) WithGDPRConsent(consent bool) *AccountBuilder {
 func (b *AccountBuilder) WithQualityScore(score float64) *AccountBuilder {
 	// Create new quality metrics with updated quality score
 	b.qualityMetrics = values.MustNewQualityMetrics(
-		score,                               // qualityScore (updated)
-		b.qualityMetrics.FraudScore,        // fraudScore (preserve)
-		b.qualityMetrics.HistoricalRating,  // historicalRating (preserve)
-		b.qualityMetrics.ConversionRate,    // conversionRate (preserve)
-		b.qualityMetrics.AverageCallTime,   // averageCallTime (preserve)
-		b.qualityMetrics.TrustScore,        // trustScore (preserve)
-		b.qualityMetrics.ReliabilityScore,  // reliabilityScore (preserve)
+		score,                             // qualityScore (updated)
+		b.qualityMetrics.FraudScore,       // fraudScore (preserve)
+		b.qualityMetrics.HistoricalRating, // historicalRating (preserve)
+		b.qualityMetrics.ConversionRate,   // conversionRate (preserve)
+		b.qualityMetrics.AverageCallTime,  // averageCallTime (preserve)
+		b.qualityMetrics.TrustScore,       // trustScore (preserve)
+		b.qualityMetrics.ReliabilityScore, // reliabilityScore (preserve)
 	)
 	return b
 }
@@ -185,8 +185,8 @@ func (b *AccountBuilder) WithQualityScore(score float64) *AccountBuilder {
 func (b *AccountBuilder) WithFraudScore(score float64) *AccountBuilder {
 	// Create new quality metrics with updated fraud score
 	b.qualityMetrics = values.MustNewQualityMetrics(
-		b.qualityMetrics.QualityScore,      // qualityScore (preserve)
-		score,                              // fraudScore (updated)
+		b.qualityMetrics.QualityScore,     // qualityScore (preserve)
+		score,                             // fraudScore (updated)
 		b.qualityMetrics.HistoricalRating, // historicalRating (preserve)
 		b.qualityMetrics.ConversionRate,   // conversionRate (preserve)
 		b.qualityMetrics.AverageCallTime,  // averageCallTime (preserve)
@@ -206,7 +206,7 @@ func (b *AccountBuilder) WithSettings(settings account.AccountSettings) *Account
 func (b *AccountBuilder) Build(t *testing.T) *account.Account {
 	t.Helper()
 	b.t = t // Set the testing.T
-	
+
 	now := time.Now().UTC()
 	acc := &account.Account{
 		ID:              b.id,
@@ -228,13 +228,13 @@ func (b *AccountBuilder) Build(t *testing.T) *account.Account {
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
-	
+
 	// Set last login for active accounts
 	if b.status == account.StatusActive {
 		lastLogin := now.Add(-1 * time.Hour)
 		acc.LastLoginAt = &lastLogin
 	}
-	
+
 	return acc
 }
 
@@ -302,9 +302,9 @@ func (as *AccountScenarios) SuspendedAccount() *account.Account {
 	return NewAccountBuilder(as.testDB).
 		WithEmail(GenerateEmail(as.t, "suspended")).
 		WithStatus(account.StatusSuspended).
-		WithBalance(-500.00). // Negative balance
+		WithBalance(-500.00).  // Negative balance
 		WithQualityScore(2.0). // Low quality
-		WithFraudScore(0.75). // High fraud score
+		WithFraudScore(0.75).  // High fraud score
 		WithTCPAConsent(false).
 		Build(as.t)
 }
@@ -341,8 +341,8 @@ func (as *AccountScenarios) NewAccount() *account.Account {
 		WithStatus(account.StatusPending).
 		WithBalance(0.00).
 		WithCreditLimit(100.00). // Low initial limit
-		WithPaymentTerms(7). // Shorter payment terms for new accounts
-		WithQualityScore(5.0). // Neutral starting score
+		WithPaymentTerms(7).     // Shorter payment terms for new accounts
+		WithQualityScore(5.0).   // Neutral starting score
 		WithFraudScore(0.0).
 		WithSettings(account.AccountSettings{
 			Timezone:            "UTC",
@@ -361,7 +361,7 @@ func (as *AccountScenarios) NewAccount() *account.Account {
 // AccountSet creates a set of diverse accounts
 func (as *AccountScenarios) AccountSet(buyers, sellers int) []*account.Account {
 	accounts := make([]*account.Account, 0, buyers+sellers)
-	
+
 	// Create buyers
 	for i := 0; i < buyers; i++ {
 		account := NewAccountBuilder(as.testDB).
@@ -372,7 +372,7 @@ func (as *AccountScenarios) AccountSet(buyers, sellers int) []*account.Account {
 			Build(as.t)
 		accounts = append(accounts, account)
 	}
-	
+
 	// Create sellers
 	for i := 0; i < sellers; i++ {
 		account := NewAccountBuilder(as.testDB).
@@ -383,7 +383,7 @@ func (as *AccountScenarios) AccountSet(buyers, sellers int) []*account.Account {
 			Build(as.t)
 		accounts = append(accounts, account)
 	}
-	
+
 	return accounts
 }
 

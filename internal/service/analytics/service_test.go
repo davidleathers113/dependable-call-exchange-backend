@@ -895,7 +895,7 @@ func BenchmarkService_GetCallMetrics(b *testing.B) {
 
 	// Create mocks
 	callRepo := new(MockCallRepository)
-	
+
 	// Setup mocks to always succeed
 	callStats := &CallStats{
 		Count:           1000,

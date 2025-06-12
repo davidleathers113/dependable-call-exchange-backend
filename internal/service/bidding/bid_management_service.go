@@ -39,7 +39,7 @@ func (s *bidManagementService) GetBidsForCall(ctx context.Context, callID uuid.U
 	if _, err := s.callRepo.GetByID(ctx, callID); err != nil {
 		return nil, errors.NewNotFoundError("call").WithCause(err)
 	}
-	
+
 	return s.bidRepo.GetActiveBidsForCall(ctx, callID)
 }
 
@@ -55,17 +55,17 @@ func (s *bidManagementService) ProcessExpiredBids(ctx context.Context) error {
 	if err != nil {
 		return errors.NewInternalError("failed to get expired bids").WithCause(err)
 	}
-	
+
 	// Process each expired bid
 	for _, b := range expiredBids {
 		// Skip if already expired
 		if b.Status == bid.StatusExpired {
 			continue
 		}
-		
+
 		// Update status to expired
 		b.Status = bid.StatusExpired
-		
+
 		// Update bid
 		if err := s.bidRepo.Update(ctx, b); err != nil {
 			// Log error but continue processing other bids
@@ -73,7 +73,7 @@ func (s *bidManagementService) ProcessExpiredBids(ctx context.Context) error {
 			continue
 		}
 	}
-	
+
 	return nil
 }
 
@@ -86,17 +86,17 @@ func (s *bidManagementService) CreateBid(ctx context.Context, b *bid.Bid) error 
 	if b.BuyerID == uuid.Nil {
 		return errors.NewValidationError("INVALID_BUYER_ID", "buyer ID is required")
 	}
-	
+
 	// Verify call exists
 	if _, err := s.callRepo.GetByID(ctx, b.CallID); err != nil {
 		return errors.NewNotFoundError("call").WithCause(err)
 	}
-	
+
 	// Create bid
 	if err := s.bidRepo.Create(ctx, b); err != nil {
 		return errors.NewInternalError("failed to create bid").WithCause(err)
 	}
-	
+
 	return nil
 }
 
@@ -107,18 +107,18 @@ func (s *bidManagementService) UpdateBid(ctx context.Context, b *bid.Bid) error 
 	if err != nil {
 		return errors.NewNotFoundError("bid").WithCause(err)
 	}
-	
+
 	// Check if bid is modifiable
 	if !s.isBidModifiable(existing) {
-		return errors.NewValidationError("INVALID_BID_STATUS", 
+		return errors.NewValidationError("INVALID_BID_STATUS",
 			fmt.Sprintf("bid cannot be modified in status: %s", existing.Status))
 	}
-	
+
 	// Update bid
 	if err := s.bidRepo.Update(ctx, b); err != nil {
 		return errors.NewInternalError("failed to update bid").WithCause(err)
 	}
-	
+
 	return nil
 }
 
@@ -129,21 +129,21 @@ func (s *bidManagementService) CancelBid(ctx context.Context, bidID uuid.UUID) e
 	if err != nil {
 		return errors.NewNotFoundError("bid").WithCause(err)
 	}
-	
+
 	// Check if bid can be cancelled
 	if !s.isBidCancellable(b) {
-		return errors.NewValidationError("INVALID_BID_STATUS", 
+		return errors.NewValidationError("INVALID_BID_STATUS",
 			fmt.Sprintf("bid cannot be cancelled in status: %s", b.Status))
 	}
-	
+
 	// Update status
 	b.Status = bid.StatusCanceled
-	
+
 	// Save update
 	if err := s.bidRepo.Update(ctx, b); err != nil {
 		return errors.NewInternalError("failed to cancel bid").WithCause(err)
 	}
-	
+
 	return nil
 }
 

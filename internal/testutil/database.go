@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 	"time"
-	
+
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -17,23 +17,23 @@ import (
 
 // TestDB provides test database functionality
 type TestDB struct {
-	t         *testing.T
-	db        *sql.DB
-	dbName    string
-	cleanup   func()
-	container *postgres.PostgresContainer
+	t            *testing.T
+	db           *sql.DB
+	dbName       string
+	cleanup      func()
+	container    *postgres.PostgresContainer
 	useContainer bool
 }
 
 // NewTestDB creates a new test database using testcontainers by default
 func NewTestDB(t *testing.T) *TestDB {
 	t.Helper()
-	
+
 	// Check if we should use legacy approach (for CI, explicit flag, or no Docker)
 	if os.Getenv("USE_DOCKER_COMPOSE") == "true" || os.Getenv("USE_LOCAL_POSTGRES") == "true" {
 		return newLegacyTestDB(t)
 	}
-	
+
 	// Try testcontainers first
 	db, err := tryTestcontainerDB(t)
 	if err != nil {
@@ -42,14 +42,14 @@ func NewTestDB(t *testing.T) *TestDB {
 		os.Setenv("USE_LOCAL_POSTGRES", "true")
 		return newLegacyTestDB(t)
 	}
-	
+
 	return db
 }
 
 // tryTestcontainerDB attempts to create a test database using testcontainers
 func tryTestcontainerDB(t *testing.T) (db *TestDB, err error) {
 	t.Helper()
-	
+
 	// Catch panics and convert to errors
 	defer func() {
 		if r := recover(); r != nil {
@@ -60,16 +60,16 @@ func tryTestcontainerDB(t *testing.T) (db *TestDB, err error) {
 			}
 		}
 	}()
-	
+
 	return newTestcontainerDB(t), nil
 }
 
 // newTestcontainerDB creates a test database using testcontainers
 func newTestcontainerDB(t *testing.T) *TestDB {
 	t.Helper()
-	
+
 	ctx := context.Background()
-	
+
 	// Create PostgreSQL container
 	pgContainer, err := postgres.Run(ctx,
 		"postgres:16-alpine",
@@ -83,24 +83,24 @@ func newTestcontainerDB(t *testing.T) *TestDB {
 		),
 	)
 	require.NoError(t, err)
-	
+
 	// Get connection string
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
 	require.NoError(t, err)
-	
+
 	// Connect to test database
 	testDB, err := sql.Open("postgres", connStr)
 	require.NoError(t, err)
-	
+
 	// Set connection pool settings for tests
 	testDB.SetMaxOpenConns(10)
 	testDB.SetMaxIdleConns(5)
 	testDB.SetConnMaxLifetime(5 * time.Minute)
-	
+
 	// Verify connection
 	err = testDB.Ping()
 	require.NoError(t, err)
-	
+
 	tdb := &TestDB{
 		t:            t,
 		db:           testDB,
@@ -108,7 +108,7 @@ func newTestcontainerDB(t *testing.T) *TestDB {
 		container:    pgContainer,
 		useContainer: true,
 	}
-	
+
 	// Setup cleanup
 	tdb.cleanup = func() {
 		testDB.Close()
@@ -116,20 +116,20 @@ func newTestcontainerDB(t *testing.T) *TestDB {
 			t.Logf("failed to terminate container: %v", err)
 		}
 	}
-	
+
 	// Register cleanup
 	t.Cleanup(tdb.cleanup)
-	
+
 	// Initialize schema
 	tdb.InitSchema()
-	
+
 	return tdb
 }
 
 // newLegacyTestDB creates a test database using docker-compose (legacy)
 func newLegacyTestDB(t *testing.T) *TestDB {
 	t.Helper()
-	
+
 	// Connect to postgres database to create test database
 	// Use localhost:5432 for local PostgreSQL (default Homebrew setup)
 	host := "localhost"
@@ -146,34 +146,34 @@ func newLegacyTestDB(t *testing.T) *TestDB {
 	adminDB, err := sql.Open("postgres", fmt.Sprintf("postgres://postgres:postgres@%s:%s/postgres?sslmode=disable", host, port))
 	require.NoError(t, err)
 	defer adminDB.Close()
-	
+
 	// Generate unique test database name
 	dbName := fmt.Sprintf("test_dce_%d", time.Now().UnixNano())
-	
+
 	// Create test database
 	_, err = adminDB.Exec(fmt.Sprintf("CREATE DATABASE %s", dbName))
 	require.NoError(t, err)
-	
+
 	// Connect to test database
 	testDB, err := sql.Open("postgres", fmt.Sprintf("postgres://postgres:postgres@%s:%s/%s?sslmode=disable", host, port, dbName))
 	require.NoError(t, err)
-	
+
 	// Set connection pool settings for tests
 	testDB.SetMaxOpenConns(10)
 	testDB.SetMaxIdleConns(5)
 	testDB.SetConnMaxLifetime(5 * time.Minute)
-	
+
 	// Verify connection
 	err = testDB.Ping()
 	require.NoError(t, err)
-	
+
 	tdb := &TestDB{
 		t:            t,
 		db:           testDB,
 		dbName:       dbName,
 		useContainer: false,
 	}
-	
+
 	// Setup cleanup
 	tdb.cleanup = func() {
 		testDB.Close()
@@ -181,13 +181,13 @@ func newLegacyTestDB(t *testing.T) *TestDB {
 		defer adminDB.Close()
 		adminDB.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
 	}
-	
+
 	// Register cleanup
 	t.Cleanup(tdb.cleanup)
-	
+
 	// Initialize schema
 	tdb.InitSchema()
-	
+
 	return tdb
 }
 
@@ -206,7 +206,7 @@ func (tdb *TestDB) ConnectionString() string {
 		}
 		return connStr
 	}
-	
+
 	// Legacy path
 	host := "localhost"
 	port := "5432"
@@ -244,13 +244,13 @@ func (tdb *TestDB) DB() *sql.DB {
 // InitSchema initializes the database schema
 func (tdb *TestDB) InitSchema() {
 	tdb.t.Helper()
-	
+
 	ctx := context.Background()
-	
+
 	// Create extensions
 	_, err := tdb.db.ExecContext(ctx, `CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`)
 	require.NoError(tdb.t, err)
-	
+
 	// Create enums
 	tdb.execMulti(ctx, `
 		-- Call status enum
@@ -258,8 +258,8 @@ func (tdb *TestDB) InitSchema() {
 			'pending', 'queued', 'ringing', 'in_progress', 'completed', 'failed', 'no_answer'
 		);
 		
-		-- Call type enum
-		CREATE TYPE call_type AS ENUM (
+		-- Call direction enum
+		CREATE TYPE call_direction AS ENUM (
 			'inbound', 'outbound'
 		);
 		
@@ -293,7 +293,7 @@ func (tdb *TestDB) InitSchema() {
 			'active', 'expired', 'revoked'
 		);
 	`)
-	
+
 	// Create tables
 	tdb.execMulti(ctx, `
 		-- Accounts table
@@ -329,7 +329,7 @@ func (tdb *TestDB) InitSchema() {
 			from_number VARCHAR(20) NOT NULL,
 			to_number VARCHAR(20) NOT NULL,
 			status call_status NOT NULL DEFAULT 'pending',
-			type call_type NOT NULL,
+			direction call_direction NOT NULL,
 			buyer_id UUID REFERENCES accounts(id),
 			seller_id UUID REFERENCES accounts(id),
 			started_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -439,7 +439,7 @@ func (tdb *TestDB) execMulti(ctx context.Context, sql string) {
 // TruncateTables truncates all tables for test isolation
 func (tdb *TestDB) TruncateTables() {
 	tdb.t.Helper()
-	
+
 	ctx := context.Background()
 	tables := []string{
 		"consent_records",
@@ -448,7 +448,7 @@ func (tdb *TestDB) TruncateTables() {
 		"calls",
 		"accounts",
 	}
-	
+
 	for _, table := range tables {
 		_, err := tdb.db.ExecContext(ctx, fmt.Sprintf("TRUNCATE TABLE %s CASCADE", table))
 		require.NoError(tdb.t, err)
@@ -461,7 +461,7 @@ func (tdb *TestDB) Snapshot(name string) error {
 		// Legacy mode doesn't support snapshots, just use TruncateTables
 		return nil
 	}
-	
+
 	// For now, we'll implement a simple snapshot by storing the current state
 	// Real snapshot support requires additional container features
 	return nil
@@ -480,14 +480,14 @@ func (tdb *TestDB) RunInTransaction(fn func(*sql.Tx) error) error {
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
-	
+
 	defer func() {
 		// Always rollback to ensure test isolation
 		if rbErr := tx.Rollback(); rbErr != nil && rbErr != sql.ErrTxDone {
 			tdb.t.Errorf("failed to rollback transaction: %v", rbErr)
 		}
 	}()
-	
+
 	return fn(tx)
 }
 
@@ -504,7 +504,7 @@ type SeedData interface {
 // Seed inserts test data into the database
 func (tdb *TestDB) Seed(data ...SeedData) {
 	tdb.t.Helper()
-	
+
 	ctx := context.Background()
 	for _, d := range data {
 		_, err := tdb.db.ExecContext(ctx, d.InsertQuery(), d.Values()...)
@@ -518,28 +518,28 @@ func (tdb *TestDB) WithTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
-	
+
 	defer func() {
 		if p := recover(); p != nil {
 			tx.Rollback()
 			panic(p)
 		}
 	}()
-	
+
 	if err := fn(tx); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			return fmt.Errorf("rollback failed: %v, original error: %w", rbErr, err)
 		}
 		return err
 	}
-	
+
 	return tx.Commit()
 }
 
 // AssertRowCount asserts the number of rows in a table
 func (tdb *TestDB) AssertRowCount(table string, expected int) {
 	tdb.t.Helper()
-	
+
 	var count int
 	err := tdb.db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", table)).Scan(&count)
 	require.NoError(tdb.t, err)
@@ -549,7 +549,7 @@ func (tdb *TestDB) AssertRowCount(table string, expected int) {
 // GetRowCount returns the number of rows in a table
 func (tdb *TestDB) GetRowCount(t *testing.T, table string) int {
 	t.Helper()
-	
+
 	var count int
 	err := tdb.db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", table)).Scan(&count)
 	require.NoError(t, err, "failed to count rows in %s", table)

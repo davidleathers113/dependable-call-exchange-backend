@@ -49,7 +49,7 @@ func (m *MetricsCollector) RecordDistribution(ctx context.Context, decision *Sel
 	// - Algorithm used
 	// - Success/failure rates
 	// - Geographic distribution
-	
+
 	// For now, this is a placeholder that could be extended with actual metrics collection
 }
 

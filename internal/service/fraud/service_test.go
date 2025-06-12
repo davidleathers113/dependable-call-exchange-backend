@@ -19,9 +19,9 @@ func TestService_CheckCall(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		name          string
-		setupMocks    func(*mockRepo, *mockMLEngine, *mockRuleEngine, *mockVelocityChecker, *mockBlacklistChecker)
-		call          *call.Call
+		name             string
+		setupMocks       func(*mockRepo, *mockMLEngine, *mockRuleEngine, *mockVelocityChecker, *mockBlacklistChecker)
+		call             *call.Call
 		expectedApproved bool
 		expectedMinScore float64
 		expectedFlags    int
@@ -31,23 +31,23 @@ func TestService_CheckCall(t *testing.T) {
 			setupMocks: func(r *mockRepo, ml *mockMLEngine, re *mockRuleEngine, vc *mockVelocityChecker, bc *mockBlacklistChecker) {
 				bc.On("IsBlacklisted", ctx, "+15551234567", "phone").Return(false, "", nil)
 				bc.On("IsBlacklisted", ctx, "+15559876543", "phone").Return(false, "", nil)
-				
+
 				vc.On("CheckVelocity", ctx, mock.AnythingOfType("uuid.UUID"), "call_placement").Return(&VelocityResult{
 					Passed: true,
 					Count:  5,
 					Limit:  100,
 				}, nil)
 				vc.On("RecordAction", ctx, mock.AnythingOfType("uuid.UUID"), "call_placement").Return(nil)
-				
+
 				ml.On("Predict", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&Prediction{
 					FraudProbability: 0.1,
 					Confidence:       0.9,
 				}, nil)
-				
+
 				re.On("Evaluate", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&RuleResult{
 					Matched: false,
 				}, nil)
-				
+
 				r.On("SaveCheckResult", ctx, mock.AnythingOfType("*fraud.FraudCheckResult")).Return(nil)
 				r.On("GetRiskProfile", ctx, mock.AnythingOfType("uuid.UUID")).Return(&RiskProfile{
 					CurrentRiskScore: 0.2,
@@ -69,7 +69,7 @@ func TestService_CheckCall(t *testing.T) {
 			name: "blacklisted phone number blocks call",
 			setupMocks: func(r *mockRepo, ml *mockMLEngine, re *mockRuleEngine, vc *mockVelocityChecker, bc *mockBlacklistChecker) {
 				bc.On("IsBlacklisted", ctx, "+15551234567", "phone").Return(true, "Spam caller", nil)
-				
+
 				// Only SaveCheckResult is called when blacklisted (returns early)
 				r.On("SaveCheckResult", ctx, mock.AnythingOfType("*fraud.FraudCheckResult")).Return(nil)
 			},
@@ -87,7 +87,7 @@ func TestService_CheckCall(t *testing.T) {
 			name: "high velocity triggers flag",
 			setupMocks: func(r *mockRepo, ml *mockMLEngine, re *mockRuleEngine, vc *mockVelocityChecker, bc *mockBlacklistChecker) {
 				bc.On("IsBlacklisted", ctx, mock.Anything, "phone").Return(false, "", nil)
-				
+
 				vc.On("CheckVelocity", ctx, mock.AnythingOfType("uuid.UUID"), "call_placement").Return(&VelocityResult{
 					Passed:     false,
 					Count:      150,
@@ -95,16 +95,16 @@ func TestService_CheckCall(t *testing.T) {
 					TimeWindow: 1 * time.Hour,
 				}, nil)
 				vc.On("RecordAction", ctx, mock.AnythingOfType("uuid.UUID"), "call_placement").Return(nil)
-				
+
 				ml.On("Predict", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&Prediction{
 					FraudProbability: 0.2,
 					Confidence:       0.8,
 				}, nil)
-				
+
 				re.On("Evaluate", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&RuleResult{
 					Matched: false,
 				}, nil)
-				
+
 				r.On("SaveCheckResult", ctx, mock.AnythingOfType("*fraud.FraudCheckResult")).Return(nil)
 				r.On("GetRiskProfile", ctx, mock.AnythingOfType("uuid.UUID")).Return(&RiskProfile{}, nil)
 				r.On("UpdateRiskProfile", ctx, mock.AnythingOfType("*fraud.RiskProfile")).Return(nil)
@@ -124,22 +124,22 @@ func TestService_CheckCall(t *testing.T) {
 			name: "ML anomaly detection",
 			setupMocks: func(r *mockRepo, ml *mockMLEngine, re *mockRuleEngine, vc *mockVelocityChecker, bc *mockBlacklistChecker) {
 				bc.On("IsBlacklisted", ctx, mock.Anything, "phone").Return(false, "", nil)
-				
+
 				vc.On("CheckVelocity", ctx, mock.AnythingOfType("uuid.UUID"), "call_placement").Return(&VelocityResult{
 					Passed: true,
 				}, nil)
 				vc.On("RecordAction", ctx, mock.AnythingOfType("uuid.UUID"), "call_placement").Return(nil)
-				
+
 				ml.On("Predict", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&Prediction{
 					FraudProbability: 0.85,
 					Confidence:       0.95,
 					Explanations:     []string{"Unusual calling pattern", "Time anomaly"},
 				}, nil)
-				
+
 				re.On("Evaluate", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&RuleResult{
 					Matched: false,
 				}, nil)
-				
+
 				r.On("SaveCheckResult", ctx, mock.AnythingOfType("*fraud.FraudCheckResult")).Return(nil)
 				r.On("GetRiskProfile", ctx, mock.AnythingOfType("uuid.UUID")).Return(&RiskProfile{}, nil)
 				r.On("UpdateRiskProfile", ctx, mock.AnythingOfType("*fraud.RiskProfile")).Return(nil)
@@ -159,22 +159,22 @@ func TestService_CheckCall(t *testing.T) {
 			name: "rule engine match",
 			setupMocks: func(r *mockRepo, ml *mockMLEngine, re *mockRuleEngine, vc *mockVelocityChecker, bc *mockBlacklistChecker) {
 				bc.On("IsBlacklisted", ctx, mock.Anything, "phone").Return(false, "", nil)
-				
+
 				vc.On("CheckVelocity", ctx, mock.AnythingOfType("uuid.UUID"), "call_placement").Return(&VelocityResult{
 					Passed: true,
 				}, nil)
 				vc.On("RecordAction", ctx, mock.AnythingOfType("uuid.UUID"), "call_placement").Return(nil)
-				
+
 				ml.On("Predict", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&Prediction{
 					FraudProbability: 0.2,
 				}, nil)
-				
+
 				re.On("Evaluate", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&RuleResult{
 					Matched:      true,
 					MatchedRules: []string{"international_call_spike", "night_time_pattern"},
 					TotalScore:   0.65,
 				}, nil)
-				
+
 				r.On("SaveCheckResult", ctx, mock.AnythingOfType("*fraud.FraudCheckResult")).Return(nil)
 				r.On("GetRiskProfile", ctx, mock.AnythingOfType("uuid.UUID")).Return(&RiskProfile{}, nil)
 				r.On("UpdateRiskProfile", ctx, mock.AnythingOfType("*fraud.RiskProfile")).Return(nil)
@@ -200,22 +200,22 @@ func TestService_CheckCall(t *testing.T) {
 			ruleEngine := new(mockRuleEngine)
 			velocityChecker := new(mockVelocityChecker)
 			blacklistChecker := new(mockBlacklistChecker)
-			
+
 			// Setup mocks
 			tt.setupMocks(repo, mlEngine, ruleEngine, velocityChecker, blacklistChecker)
-			
+
 			// Create service
 			svc := NewService(repo, mlEngine, ruleEngine, velocityChecker, blacklistChecker, nil)
-			
+
 			// Execute
 			result, err := svc.CheckCall(ctx, tt.call)
-			
+
 			// Validate
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedApproved, result.Approved)
 			assert.GreaterOrEqual(t, result.RiskScore, tt.expectedMinScore)
 			assert.Len(t, result.Flags, tt.expectedFlags)
-			
+
 			// Assert expectations
 			repo.AssertExpectations(t)
 			mlEngine.AssertExpectations(t)
@@ -245,24 +245,24 @@ func TestService_CheckBid(t *testing.T) {
 					Passed: true,
 				}, nil)
 				vc.On("RecordAction", ctx, mock.AnythingOfType("uuid.UUID"), "bid_placement").Return(nil)
-				
+
 				ml.On("Predict", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&Prediction{
 					FraudProbability: 0.05,
 					Confidence:       0.95,
 				}, nil)
-				
+
 				r.On("SaveCheckResult", ctx, mock.AnythingOfType("*fraud.FraudCheckResult")).Return(nil)
 			},
 			bid: &bid.Bid{
-				ID:      uuid.New(),
-				BuyerID: uuid.New(),
-				Amount:  values.MustNewMoneyFromFloat(5.50, "USD"),
+				ID:       uuid.New(),
+				BuyerID:  uuid.New(),
+				Amount:   values.MustNewMoneyFromFloat(5.50, "USD"),
 				PlacedAt: time.Now(),
 			},
 			buyer: &account.Account{
-				ID:           uuid.New(),
+				ID:             uuid.New(),
 				QualityMetrics: values.QualityMetrics{QualityScore: 85.0},
-				CreatedAt:    time.Now().Add(-30 * 24 * time.Hour),
+				CreatedAt:      time.Now().Add(-30 * 24 * time.Hour),
 			},
 			expectedApproved: true,
 			expectedMinScore: 0.0,
@@ -275,11 +275,11 @@ func TestService_CheckBid(t *testing.T) {
 					Passed: true,
 				}, nil)
 				vc.On("RecordAction", ctx, mock.AnythingOfType("uuid.UUID"), "bid_placement").Return(nil)
-				
+
 				ml.On("Predict", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&Prediction{
 					FraudProbability: 0.1,
 				}, nil)
-				
+
 				r.On("SaveCheckResult", ctx, mock.AnythingOfType("*fraud.FraudCheckResult")).Return(nil)
 			},
 			bid: &bid.Bid{
@@ -288,7 +288,7 @@ func TestService_CheckBid(t *testing.T) {
 				Amount:  values.MustNewMoneyFromFloat(5.00, "USD"),
 			},
 			buyer: &account.Account{
-				ID:           uuid.New(),
+				ID:             uuid.New(),
 				QualityMetrics: values.QualityMetrics{QualityScore: 35.0}, // Low quality
 			},
 			expectedApproved: true,
@@ -302,11 +302,11 @@ func TestService_CheckBid(t *testing.T) {
 					Passed: true,
 				}, nil)
 				vc.On("RecordAction", ctx, mock.AnythingOfType("uuid.UUID"), "bid_placement").Return(nil)
-				
+
 				ml.On("Predict", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&Prediction{
 					FraudProbability: 0.1,
 				}, nil)
-				
+
 				r.On("SaveCheckResult", ctx, mock.AnythingOfType("*fraud.FraudCheckResult")).Return(nil)
 			},
 			bid: &bid.Bid{
@@ -315,7 +315,7 @@ func TestService_CheckBid(t *testing.T) {
 				Amount:  values.MustNewMoneyFromFloat(99.99, "USD"), // Suspicious test amount
 			},
 			buyer: &account.Account{
-				ID:           uuid.New(),
+				ID:             uuid.New(),
 				QualityMetrics: values.QualityMetrics{QualityScore: 70.0},
 			},
 			expectedApproved: true,
@@ -332,11 +332,11 @@ func TestService_CheckBid(t *testing.T) {
 					TimeWindow: 1 * time.Hour,
 				}, nil)
 				vc.On("RecordAction", ctx, mock.AnythingOfType("uuid.UUID"), "bid_placement").Return(nil)
-				
+
 				ml.On("Predict", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&Prediction{
 					FraudProbability: 0.1,
 				}, nil)
-				
+
 				r.On("SaveCheckResult", ctx, mock.AnythingOfType("*fraud.FraudCheckResult")).Return(nil)
 			},
 			bid: &bid.Bid{
@@ -345,7 +345,7 @@ func TestService_CheckBid(t *testing.T) {
 				Amount:  values.MustNewMoneyFromFloat(5.00, "USD"),
 			},
 			buyer: &account.Account{
-				ID:           uuid.New(),
+				ID:             uuid.New(),
 				QualityMetrics: values.QualityMetrics{QualityScore: 75.0},
 			},
 			expectedApproved: true,
@@ -360,22 +360,22 @@ func TestService_CheckBid(t *testing.T) {
 			repo := new(mockRepo)
 			mlEngine := new(mockMLEngine)
 			velocityChecker := new(mockVelocityChecker)
-			
+
 			// Setup mocks
 			tt.setupMocks(repo, mlEngine, velocityChecker)
-			
+
 			// Create service
 			svc := NewService(repo, mlEngine, nil, velocityChecker, nil, nil)
-			
+
 			// Execute
 			result, err := svc.CheckBid(ctx, tt.bid, tt.buyer)
-			
+
 			// Validate
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedApproved, result.Approved)
 			assert.GreaterOrEqual(t, result.RiskScore, tt.expectedMinScore)
 			assert.Len(t, result.Flags, tt.expectedFlags)
-			
+
 			// Assert expectations
 			repo.AssertExpectations(t)
 			mlEngine.AssertExpectations(t)
@@ -391,15 +391,15 @@ func TestService_CheckAccount(t *testing.T) {
 		repo := new(mockRepo)
 		repo.On("SaveCheckResult", ctx, mock.AnythingOfType("*fraud.FraudCheckResult")).Return(nil)
 		repo.On("GetCheckHistory", ctx, mock.AnythingOfType("uuid.UUID"), 10).Return([]*FraudCheckResult{}, nil)
-		
+
 		svc := NewService(repo, nil, nil, nil, nil, nil)
-		
+
 		acc := &account.Account{
-			ID:    uuid.New(),
-			Email: values.MustNewEmail("test@tempmail.com"), // Suspicious domain
+			ID:          uuid.New(),
+			Email:       values.MustNewEmail("test@tempmail.com"), // Suspicious domain
 			PhoneNumber: values.MustNewPhoneNumber("+15551234567"),
 		}
-		
+
 		result, err := svc.CheckAccount(ctx, acc)
 		require.NoError(t, err)
 		assert.True(t, result.Approved)
@@ -407,21 +407,21 @@ func TestService_CheckAccount(t *testing.T) {
 		assert.Len(t, result.Flags, 1)
 		assert.Equal(t, "Suspicious email domain", result.Flags[0].Description)
 	})
-	
+
 	t.Run("invalid phone format", func(t *testing.T) {
 		t.Skip("Cannot test invalid phone numbers - domain value objects prevent creation of invalid phone numbers")
 		repo := new(mockRepo)
 		repo.On("SaveCheckResult", ctx, mock.AnythingOfType("*fraud.FraudCheckResult")).Return(nil)
 		repo.On("GetCheckHistory", ctx, mock.AnythingOfType("uuid.UUID"), 10).Return([]*FraudCheckResult{}, nil)
-		
+
 		svc := NewService(repo, nil, nil, nil, nil, nil)
-		
+
 		acc := &account.Account{
-			ID:    uuid.New(),
-			Email: values.MustNewEmail("test@example.com"),
+			ID:          uuid.New(),
+			Email:       values.MustNewEmail("test@example.com"),
 			PhoneNumber: values.MustNewPhoneNumber("+11234567890"), // Fixed + prefix
 		}
-		
+
 		result, err := svc.CheckAccount(ctx, acc)
 		require.NoError(t, err)
 		assert.True(t, result.Approved)
@@ -429,10 +429,10 @@ func TestService_CheckAccount(t *testing.T) {
 		assert.Len(t, result.Flags, 1)
 		assert.Equal(t, "Invalid phone number format", result.Flags[0].Description)
 	})
-	
+
 	t.Run("historical fraud indicators", func(t *testing.T) {
 		repo := new(mockRepo)
-		
+
 		// Mock history with high-risk events
 		history := []*FraudCheckResult{
 			{RiskScore: 0.9},
@@ -440,18 +440,18 @@ func TestService_CheckAccount(t *testing.T) {
 			{RiskScore: 0.95},
 			{RiskScore: 0.2},
 		}
-		
+
 		repo.On("GetCheckHistory", ctx, mock.AnythingOfType("uuid.UUID"), 10).Return(history, nil)
 		repo.On("SaveCheckResult", ctx, mock.AnythingOfType("*fraud.FraudCheckResult")).Return(nil)
-		
+
 		svc := NewService(repo, nil, nil, nil, nil, nil)
-		
+
 		acc := &account.Account{
-			ID:    uuid.New(),
-			Email: values.MustNewEmail("test@example.com"),
+			ID:          uuid.New(),
+			Email:       values.MustNewEmail("test@example.com"),
 			PhoneNumber: values.MustNewPhoneNumber("+15551234567"),
 		}
-		
+
 		result, err := svc.CheckAccount(ctx, acc)
 		require.NoError(t, err)
 		assert.False(t, result.Approved) // Should be blocked due to high risk (0.9 == auto-block threshold)
@@ -463,17 +463,17 @@ func TestService_CheckAccount(t *testing.T) {
 
 func TestService_UpdateRules(t *testing.T) {
 	svc := NewService(nil, nil, nil, nil, nil, nil)
-	
+
 	newRules := &FraudRules{
 		MLEnabled:       false,
 		RulesEnabled:    true,
 		RequireMFAScore: 0.8,
 		AutoBlockScore:  0.95,
 	}
-	
+
 	err := svc.UpdateRules(context.Background(), newRules)
 	require.NoError(t, err)
-	
+
 	// Verify rules were updated
 	s := svc.(*service)
 	s.mu.RLock()
@@ -482,7 +482,7 @@ func TestService_UpdateRules(t *testing.T) {
 	assert.Equal(t, 0.8, s.rules.RequireMFAScore)
 	assert.Equal(t, 0.95, s.rules.AutoBlockScore)
 	s.mu.RUnlock()
-	
+
 	// Test nil rules
 	err = svc.UpdateRules(context.Background(), nil)
 	require.Error(t, err)
@@ -490,7 +490,7 @@ func TestService_UpdateRules(t *testing.T) {
 }
 
 func TestService_Thresholds(t *testing.T) {
-	
+
 	tests := []struct {
 		name         string
 		riskScore    float64
@@ -544,21 +544,21 @@ func TestService_Thresholds(t *testing.T) {
 			expectReview: false, // No point in review if blocked
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := &service{
 				rules: tt.rules,
 			}
-			
+
 			result := &FraudCheckResult{
 				RiskScore: tt.riskScore,
 				Approved:  true,
 				Reasons:   []string{},
 			}
-			
+
 			svc.applyThresholds(result)
-			
+
 			assert.Equal(t, tt.expectMFA, result.RequiresMFA)
 			assert.Equal(t, !tt.expectBlock, result.Approved)
 			assert.Equal(t, tt.expectReview, result.RequiresReview)

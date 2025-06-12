@@ -1,0 +1,397 @@
+package mocks
+
+import (
+	"context"
+	"time"
+
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
+	"github.com/google/uuid"
+)
+
+// MockNotificationService implements bidding.NotificationService
+type MockNotificationService struct{}
+
+func NewMockNotificationService() *MockNotificationService {
+	return &MockNotificationService{}
+}
+
+func (m *MockNotificationService) NotifyBidPlaced(ctx context.Context, bid *bid.Bid) error {
+	return nil
+}
+
+func (m *MockNotificationService) NotifyBidWon(ctx context.Context, bid *bid.Bid) error {
+	return nil
+}
+
+func (m *MockNotificationService) NotifyBidLost(ctx context.Context, bid *bid.Bid) error {
+	return nil
+}
+
+func (m *MockNotificationService) NotifyBidExpired(ctx context.Context, bid *bid.Bid) error {
+	return nil
+}
+
+func (m *MockNotificationService) NotifyAuctionStarted(ctx context.Context, callID uuid.UUID) error {
+	return nil
+}
+
+func (m *MockNotificationService) NotifyAuctionClosed(ctx context.Context, result any) error {
+	return nil
+}
+
+// MockMetricsCollector implements bidding.MetricsCollector
+type MockMetricsCollector struct{}
+
+func NewMockMetricsCollector() *MockMetricsCollector {
+	return &MockMetricsCollector{}
+}
+
+func (m *MockMetricsCollector) RecordBidPlaced(ctx context.Context, bid *bid.Bid) {}
+
+func (m *MockMetricsCollector) RecordAuctionDuration(ctx context.Context, callID uuid.UUID, duration time.Duration) {}
+
+func (m *MockMetricsCollector) RecordBidAmount(ctx context.Context, amount float64) {}
+
+func (m *MockMetricsCollector) RecordBidValidation(ctx context.Context, bidID uuid.UUID, valid bool, reason string) {}
+
+func (m *MockMetricsCollector) RecordAuctionParticipants(ctx context.Context, callID uuid.UUID, count int) {}
+
+// MockFraudChecker implements bidding.FraudChecker
+type MockFraudChecker struct{}
+
+func NewMockFraudChecker() *MockFraudChecker {
+	return &MockFraudChecker{}
+}
+
+// FraudCheckResult represents the result of a fraud check
+type FraudCheckResult struct {
+	Approved    bool
+	RiskScore   float64
+	Reasons     []string
+	Flags       []string
+	RequiresMFA bool
+}
+
+func (m *MockFraudChecker) CheckBid(ctx context.Context, bid *bid.Bid, buyer *account.Account) (*FraudCheckResult, error) {
+	return &FraudCheckResult{
+		Approved:    true,
+		RiskScore:   0.1,
+		Reasons:     []string{},
+		Flags:       []string{},
+		RequiresMFA: false,
+	}, nil
+}
+
+func (m *MockFraudChecker) GetRiskScore(ctx context.Context, buyerID uuid.UUID) (float64, error) {
+	return 0.1, nil
+}
+
+// MockRoutingMetricsCollector implements callrouting.MetricsCollector
+type MockRoutingMetricsCollector struct{}
+
+func NewMockRoutingMetricsCollector() *MockRoutingMetricsCollector {
+	return &MockRoutingMetricsCollector{}
+}
+
+func (m *MockRoutingMetricsCollector) RecordRoutingDecision(ctx context.Context, decision *callrouting.RoutingDecision) {}
+
+func (m *MockRoutingMetricsCollector) RecordRoutingLatency(ctx context.Context, algorithm string, latency time.Duration) {}
+
+// MockMLEngine implements fraud.MLEngine
+type MockMLEngine struct{}
+
+func NewMockMLEngine() *MockMLEngine {
+	return &MockMLEngine{}
+}
+
+func (m *MockMLEngine) Predict(ctx context.Context, features map[string]interface{}) (*fraud.Prediction, error) {
+	return &fraud.Prediction{
+		FraudProbability: 0.1,
+		Confidence:       0.8,
+		Features:         map[string]float64{},
+		Explanations:     []string{"Low risk pattern"},
+	}, nil
+}
+
+func (m *MockMLEngine) Train(ctx context.Context, samples []*fraud.TrainingSample) error {
+	return nil
+}
+
+func (m *MockMLEngine) GetModelMetrics(ctx context.Context) (*fraud.ModelMetrics, error) {
+	return &fraud.ModelMetrics{
+		Accuracy:    0.95,
+		Precision:   0.92,
+		Recall:      0.88,
+		F1Score:     0.90,
+		AUC:         0.93,
+		LastTrained: time.Now().Add(-24 * time.Hour),
+		SampleCount: 10000,
+	}, nil
+}
+
+// MockRuleEngine implements fraud.RuleEngine
+type MockRuleEngine struct{}
+
+func NewMockRuleEngine() *MockRuleEngine {
+	return &MockRuleEngine{}
+}
+
+func (m *MockRuleEngine) Evaluate(ctx context.Context, features map[string]interface{}) (*fraud.RuleResult, error) {
+	return &fraud.RuleResult{
+		Matched:      false,
+		MatchedRules: []string{},
+		TotalScore:   0.0,
+		Actions:      []string{},
+	}, nil
+}
+
+func (m *MockRuleEngine) AddRule(rule *fraud.Rule) error {
+	return nil
+}
+
+func (m *MockRuleEngine) RemoveRule(ruleID string) error {
+	return nil
+}
+
+func (m *MockRuleEngine) ListRules() ([]*fraud.Rule, error) {
+	return []*fraud.Rule{}, nil
+}
+
+// MockVelocityChecker implements fraud.VelocityChecker
+type MockVelocityChecker struct{}
+
+func NewMockVelocityChecker() *MockVelocityChecker {
+	return &MockVelocityChecker{}
+}
+
+func (m *MockVelocityChecker) CheckVelocity(ctx context.Context, entityID uuid.UUID, action string) (*fraud.VelocityResult, error) {
+	return &fraud.VelocityResult{
+		Passed:     true,
+		Count:      1,
+		TimeWindow: time.Hour,
+	}, nil
+}
+
+func (m *MockVelocityChecker) RecordAction(ctx context.Context, entityID uuid.UUID, action string) error {
+	return nil
+}
+
+// MockBlacklistChecker implements fraud.BlacklistChecker
+type MockBlacklistChecker struct{}
+
+func NewMockBlacklistChecker() *MockBlacklistChecker {
+	return &MockBlacklistChecker{}
+}
+
+func (m *MockBlacklistChecker) IsBlacklisted(ctx context.Context, identifier, identifierType string) (bool, string, error) {
+	return false, "", nil
+}
+
+func (m *MockBlacklistChecker) AddToBlacklist(ctx context.Context, identifier, identifierType, reason string) error {
+	return nil
+}
+
+func (m *MockBlacklistChecker) RemoveFromBlacklist(ctx context.Context, identifier, identifierType string) error {
+	return nil
+}
+
+// MockTelephonyProvider implements telephony.Provider
+type MockTelephonyProvider struct{}
+
+func NewMockTelephonyProvider() *MockTelephonyProvider {
+	return &MockTelephonyProvider{}
+}
+
+func (m *MockTelephonyProvider) InitiateCall(ctx context.Context, from, to, callbackURL string) (string, error) {
+	return "mock-call-sid-" + uuid.New().String(), nil
+}
+
+func (m *MockTelephonyProvider) TerminateCall(ctx context.Context, callSID string) error {
+	return nil
+}
+
+func (m *MockTelephonyProvider) GetCallStatus(ctx context.Context, callSID string) (*telephony.ProviderCallStatus, error) {
+	return &telephony.ProviderCallStatus{
+		Status:   "in-progress",
+		Duration: 30,
+		Price:    nil,
+	}, nil
+}
+
+func (m *MockTelephonyProvider) TransferCall(ctx context.Context, callSID, toNumber string) error {
+	return nil
+}
+
+func (m *MockTelephonyProvider) SendDTMF(ctx context.Context, callSID, digits string) error {
+	return nil
+}
+
+func (m *MockTelephonyProvider) BridgeCalls(ctx context.Context, callSID1, callSID2 string) error {
+	return nil
+}
+
+func (m *MockTelephonyProvider) GetProviderName() string {
+	return "mock-provider"
+}
+
+// MockEventPublisher implements telephony.EventPublisher
+type MockEventPublisher struct{}
+
+func NewMockEventPublisher() *MockEventPublisher {
+	return &MockEventPublisher{}
+}
+
+func (m *MockEventPublisher) PublishCallEvent(ctx context.Context, event *telephony.CallEvent) error {
+	return nil
+}
+
+// MockTelephonyMetricsCollector implements telephony.MetricsCollector
+type MockTelephonyMetricsCollector struct{}
+
+func NewMockTelephonyMetricsCollector() *MockTelephonyMetricsCollector {
+	return &MockTelephonyMetricsCollector{}
+}
+
+func (m *MockTelephonyMetricsCollector) RecordCallInitiated(ctx context.Context, provider string) {}
+
+func (m *MockTelephonyMetricsCollector) RecordCallCompleted(ctx context.Context, duration time.Duration, cost float64) {}
+
+func (m *MockTelephonyMetricsCollector) RecordCallFailed(ctx context.Context, reason string) {}
+
+func (m *MockTelephonyMetricsCollector) RecordProviderLatency(ctx context.Context, provider, operation string, duration time.Duration) {}
+
+// MockFraudRepository implements fraud.Repository
+type MockFraudRepository struct{}
+
+func NewMockFraudRepository() *MockFraudRepository {
+	return &MockFraudRepository{}
+}
+
+func (m *MockFraudRepository) SaveCheckResult(ctx context.Context, result *fraud.FraudCheckResult) error {
+	return nil
+}
+
+func (m *MockFraudRepository) GetCheckHistory(ctx context.Context, entityID uuid.UUID, limit int) ([]*fraud.FraudCheckResult, error) {
+	return []*fraud.FraudCheckResult{}, nil
+}
+
+func (m *MockFraudRepository) GetRiskProfile(ctx context.Context, entityID uuid.UUID) (*fraud.RiskProfile, error) {
+	return &fraud.RiskProfile{
+		EntityID:         entityID,
+		CurrentRiskScore: 0.1,
+		HistoricalScores: []fraud.RiskScoreEntry{},
+		LastCheckTime:    time.Now(),
+	}, nil
+}
+
+func (m *MockFraudRepository) UpdateRiskProfile(ctx context.Context, profile *fraud.RiskProfile) error {
+	return nil
+}
+
+func (m *MockFraudRepository) SaveFraudReport(ctx context.Context, report *fraud.FraudReport) error {
+	return nil
+}
+
+// MockBidRepository implements bidding.BidRepository
+type MockBidRepository struct{}
+
+func NewMockBidRepository() *MockBidRepository {
+	return &MockBidRepository{}
+}
+
+func (m *MockBidRepository) Create(ctx context.Context, bid *bid.Bid) error {
+	return nil
+}
+
+func (m *MockBidRepository) GetByID(ctx context.Context, id uuid.UUID) (*bid.Bid, error) {
+	return &bid.Bid{ID: id}, nil
+}
+
+func (m *MockBidRepository) Update(ctx context.Context, bid *bid.Bid) error {
+	return nil
+}
+
+func (m *MockBidRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+
+func (m *MockBidRepository) GetActiveBidsForCall(ctx context.Context, callID uuid.UUID) ([]*bid.Bid, error) {
+	return []*bid.Bid{}, nil
+}
+
+func (m *MockBidRepository) GetByBuyer(ctx context.Context, buyerID uuid.UUID) ([]*bid.Bid, error) {
+	return []*bid.Bid{}, nil
+}
+
+func (m *MockBidRepository) GetExpiredBids(ctx context.Context, before time.Time) ([]*bid.Bid, error) {
+	return []*bid.Bid{}, nil
+}
+
+func (m *MockBidRepository) GetBidByID(ctx context.Context, id uuid.UUID) (*bid.Bid, error) {
+	return m.GetByID(ctx, id)
+}
+
+// MockCallRepository implements the call repository interfaces for all services
+type MockCallRepository struct{}
+
+func NewMockCallRepository() *MockCallRepository {
+	return &MockCallRepository{}
+}
+
+func (m *MockCallRepository) GetByID(ctx context.Context, id uuid.UUID) (*call.Call, error) {
+	return nil, nil // Implementation would need call.Call construction
+}
+
+func (m *MockCallRepository) Update(ctx context.Context, call *call.Call) error {
+	return nil
+}
+
+func (m *MockCallRepository) UpdateWithStatusCheck(ctx context.Context, c *call.Call, expectedStatus call.Status) error {
+	return nil
+}
+
+// Additional methods needed for different service interfaces
+func (m *MockCallRepository) GetActiveBidsForCall(ctx context.Context, callID uuid.UUID) ([]*bid.Bid, error) {
+	return []*bid.Bid{}, nil
+}
+
+func (m *MockCallRepository) Create(ctx context.Context, call *call.Call) error {
+	return nil
+}
+
+func (m *MockCallRepository) GetByCallSID(ctx context.Context, callSID string) (*call.Call, error) {
+	return nil, nil
+}
+
+// MockAccountRepository implements account repository interfaces
+type MockAccountRepository struct{}
+
+func NewMockAccountRepository() *MockAccountRepository {
+	return &MockAccountRepository{}
+}
+
+func (m *MockAccountRepository) GetByID(ctx context.Context, id uuid.UUID) (*account.Account, error) {
+	return &account.Account{ID: id}, nil
+}
+
+func (m *MockAccountRepository) UpdateBalance(ctx context.Context, id uuid.UUID, amount float64) error {
+	return nil
+}
+
+func (m *MockAccountRepository) GetBalance(ctx context.Context, id uuid.UUID) (float64, error) {
+	return 1000.0, nil // Mock balance
+}
+
+func (m *MockAccountRepository) GetBuyerQualityMetrics(ctx context.Context, buyerID uuid.UUID) (*values.QualityMetrics, error) {
+	return &values.QualityMetrics{
+		QualityScore: 85.0,
+		FraudScore:   0.1,
+	}, nil
+}
+
+func (m *MockAccountRepository) UpdateQualityScore(ctx context.Context, id uuid.UUID, score float64) error {
+	return nil
+}

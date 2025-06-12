@@ -195,7 +195,7 @@ func TestQueryBuilder_Insert(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			sql, params, err := tt.builder().ToSQL()
 			require.NoError(t, err)
-			
+
 			// Special handling for the ON CONFLICT test due to map ordering
 			if tt.name == "insert with ON CONFLICT DO NOTHING" {
 				assert.Contains(t, sql, "INSERT INTO users")

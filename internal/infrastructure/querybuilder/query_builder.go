@@ -10,20 +10,20 @@ import (
 
 // QueryBuilder provides a fluent interface for building SQL queries with type safety
 type QueryBuilder struct {
-	queryType   QueryType
-	table       string
-	columns     []string
-	values      []interface{}
-	conditions  []Condition
-	joins       []Join
-	orderBy     []OrderBy
-	groupBy     []string
-	having      []Condition
-	limit       *int
-	offset      *int
-	returning   []string
-	setValues   map[string]interface{}
-	onConflict  *ConflictClause
+	queryType  QueryType
+	table      string
+	columns    []string
+	values     []interface{}
+	conditions []Condition
+	joins      []Join
+	orderBy    []OrderBy
+	groupBy    []string
+	having     []Condition
+	limit      *int
+	offset     *int
+	returning  []string
+	setValues  map[string]interface{}
+	onConflict *ConflictClause
 }
 
 // QueryType represents the type of SQL query
@@ -439,7 +439,7 @@ func (qb *QueryBuilder) buildInsert() (string, []interface{}, error) {
 		// Column-value pairs
 		columns := make([]string, 0, len(qb.setValues))
 		placeholders := make([]string, 0, len(qb.setValues))
-		
+
 		for column, value := range qb.setValues {
 			columns = append(columns, column)
 			placeholders = append(placeholders, fmt.Sprintf("$%d", paramIndex))
@@ -473,7 +473,7 @@ func (qb *QueryBuilder) buildInsert() (string, []interface{}, error) {
 		query.WriteString(" ON CONFLICT (")
 		query.WriteString(strings.Join(qb.onConflict.Columns, ", "))
 		query.WriteString(")")
-		
+
 		switch qb.onConflict.Action {
 		case DoNothing:
 			query.WriteString(" DO NOTHING")

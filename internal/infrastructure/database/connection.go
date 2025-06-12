@@ -16,6 +16,37 @@ import (
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/infrastructure/config"
 )
 
+// Connect creates a simple pgx connection pool from a database URL
+// This is a convenience function for basic database connectivity
+func Connect(databaseURL string) (*pgxpool.Pool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	config, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse database URL: %w", err)
+	}
+
+	// Apply basic configuration
+	config.MaxConns = 25
+	config.MinConns = 5
+	config.MaxConnLifetime = 30 * time.Minute
+	config.MaxConnIdleTime = 10 * time.Minute
+	config.HealthCheckPeriod = 1 * time.Minute
+
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create connection pool: %w", err)
+	}
+
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	return pool, nil
+}
+
 // ConnectionPool represents an advanced database connection pool with
 // circuit breaker, health checks, and automatic failover capabilities
 type ConnectionPool struct {
@@ -34,28 +65,28 @@ type ConnectionMetrics struct {
 	mu sync.RWMutex
 
 	// Connection metrics
-	TotalConnections     int64
-	ActiveConnections    int64
-	IdleConnections      int64
-	WaitingConnections   int64
-	MaxLifetimeClosures  int64
-	IdleClosures         int64
+	TotalConnections    int64
+	ActiveConnections   int64
+	IdleConnections     int64
+	WaitingConnections  int64
+	MaxLifetimeClosures int64
+	IdleClosures        int64
 
 	// Query metrics
-	QueriesExecuted      int64
-	QueriesFailed        int64
-	TotalQueryTime       time.Duration
-	SlowestQuery         time.Duration
-	SlowestQuerySQL      string
+	QueriesExecuted int64
+	QueriesFailed   int64
+	TotalQueryTime  time.Duration
+	SlowestQuery    time.Duration
+	SlowestQuerySQL string
 
 	// Transaction metrics
-	TransactionsStarted  int64
-	TransactionsCommitted int64
+	TransactionsStarted    int64
+	TransactionsCommitted  int64
 	TransactionsRolledBack int64
 
 	// Replication lag
-	ReplicationLag       time.Duration
-	LastHealthCheck      time.Time
+	ReplicationLag  time.Duration
+	LastHealthCheck time.Time
 }
 
 // CircuitBreaker implements circuit breaker pattern for database connections
@@ -138,7 +169,7 @@ func NewConnectionPool(cfg *config.DatabaseConfig, logger *zap.Logger) (*Connect
 	for i, replicaURL := range extCfg.ReplicaURLs {
 		replicaConfig, err := pgxpool.ParseConfig(replicaURL)
 		if err != nil {
-			logger.Warn("failed to parse replica URL", 
+			logger.Warn("failed to parse replica URL",
 				zap.Int("replica", i),
 				zap.Error(err))
 			continue
@@ -287,15 +318,15 @@ func (p *ConnectionPool) configurePgxPool(config *pgxpool.Config, extCfg *Extend
 
 	// Runtime parameters
 	config.ConnConfig.RuntimeParams = map[string]string{
-		"application_name":              "dce_backend",
-		"search_path":                   "core,billing,analytics,public",
-		"timezone":                      "UTC",
-		"lock_timeout":                  "10s",
-		"statement_timeout":             "30s",
+		"application_name":                    "dce_backend",
+		"search_path":                         "core,billing,analytics,public",
+		"timezone":                            "UTC",
+		"lock_timeout":                        "10s",
+		"statement_timeout":                   "30s",
 		"idle_in_transaction_session_timeout": "60s",
-		"default_transaction_isolation": "read committed",
-		"synchronous_commit":            "on",
-		"jit":                          "on",
+		"default_transaction_isolation":       "read committed",
+		"synchronous_commit":                  "on",
+		"jit":                                 "on",
 	}
 
 	// Before connect callback for connection initialization
@@ -368,7 +399,7 @@ func (p *ConnectionPool) GetReplica() *pgxpool.Pool {
 	// In production, use more sophisticated load balancing
 	now := time.Now().UnixNano()
 	index := int(now % int64(len(p.replicas)))
-	
+
 	return p.replicas[index]
 }
 
@@ -461,7 +492,7 @@ func (p *ConnectionPool) performHealthCheck() {
 		row := replica.QueryRow(ctx, `
 			SELECT EXTRACT(EPOCH FROM (NOW() - pg_last_xact_replay_timestamp()))::INTEGER
 		`)
-		
+
 		var lagSeconds sql.NullInt64
 		if err := row.Scan(&lagSeconds); err == nil && lagSeconds.Valid {
 			lag = time.Duration(lagSeconds.Int64) * time.Second
@@ -582,7 +613,7 @@ func prepareStatements(ctx context.Context, conn *pgx.Conn) error {
 			WHERE schema_name = 'core'
 		)
 	`).Scan(&schemaExists)
-	
+
 	if err != nil || !schemaExists {
 		// Skip statement preparation if schema doesn't exist (e.g., during tests)
 		return nil

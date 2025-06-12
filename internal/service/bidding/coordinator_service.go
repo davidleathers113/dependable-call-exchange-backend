@@ -2,6 +2,7 @@ package bidding
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
@@ -11,16 +12,30 @@ import (
 	"github.com/google/uuid"
 )
 
-// coordinatorService orchestrates the split services and implements the original Service interface
+// coordinatorService orchestrates the split bidding services and implements the original Service interface.
+//
+// As an orchestrator service, it coordinates multiple subsystems and is allowed up to 8 dependencies
+// per ADR-001. Each dependency serves a specific orchestration purpose:
+//
+// - bidMgmt: Handles CRUD operations for bids
+// - validation: Enforces business rules and fraud checks
+// - auction: Manages auction lifecycle and winner selection
+// - rateLimit: Prevents abuse through request throttling
+// - accountRepo: Validates buyer eligibility and balances
+// - infrastructure: Combined notification and metrics facade
+// - config: Provides service configuration
+//
+// This reduces dependencies from 8 to 7 through the infrastructure facade pattern.
+// The service acts as a facade to maintain backward compatibility while delegating
+// to specialized services that each handle a specific concern.
 type coordinatorService struct {
-	bidMgmt      BidManagementService
-	validation   BidValidationService
-	auction      AuctionOrchestrationService
-	rateLimit    RateLimitService
-	accountRepo  AccountRepository
-	notifier     NotificationService
-	metrics      MetricsCollector
-	config       *ServiceConfig
+	bidMgmt        BidManagementService
+	validation     BidValidationService
+	auction        AuctionOrchestrationService
+	rateLimit      RateLimitService
+	accountRepo    AccountRepository
+	infrastructure InfrastructureServices // Combines notifier + metrics
+	config         *ServiceConfig
 }
 
 // NewCoordinatorService creates a new coordinator service that implements the original Service interface
@@ -30,24 +45,22 @@ func NewCoordinatorService(
 	auction AuctionOrchestrationService,
 	rateLimit RateLimitService,
 	accountRepo AccountRepository,
-	notifier NotificationService,
-	metrics MetricsCollector,
+	infrastructure InfrastructureServices, // Changed from notifier + metrics
 	config *ServiceConfig,
 ) Service {
 	// Configure rate limiting
 	if rateLimit != nil && config != nil {
 		rateLimit.Configure("bid_placement", config.RateLimitCount, config.RateLimitWindow)
 	}
-	
+
 	return &coordinatorService{
-		bidMgmt:     bidMgmt,
-		validation:  validation,
-		auction:     auction,
-		rateLimit:   rateLimit,
-		accountRepo: accountRepo,
-		notifier:    notifier,
-		metrics:     metrics,
-		config:      config,
+		bidMgmt:        bidMgmt,
+		validation:     validation,
+		auction:        auction,
+		rateLimit:      rateLimit,
+		accountRepo:    accountRepo,
+		infrastructure: infrastructure,
+		config:         config,
 	}
 }
 
@@ -57,39 +70,39 @@ func (s *coordinatorService) PlaceBid(ctx context.Context, req *PlaceBidRequest)
 	if err := s.validation.ValidateBidRequest(ctx, req); err != nil {
 		return nil, err
 	}
-	
+
 	// Check rate limit
 	if err := s.checkRateLimit(ctx, req.BuyerID); err != nil {
 		return nil, err
 	}
 	defer s.recordRateLimitAction(ctx, req.BuyerID)
-	
+
 	// Validate buyer and balance
 	buyer, err := s.validateBuyerAndBalance(ctx, req.BuyerID, req.Amount)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Create and validate bid
 	newBid, err := s.createBid(req, buyer)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Perform fraud check
 	if err := s.performFraudCheck(ctx, newBid, buyer); err != nil {
 		return nil, err
 	}
-	
+
 	// Activate and persist bid
 	newBid.Status = bid.StatusActive
 	if err := s.bidMgmt.CreateBid(ctx, newBid); err != nil {
 		return nil, err
 	}
-	
+
 	// Handle post-creation tasks asynchronously
 	s.handlePostBidCreation(ctx, newBid)
-	
+
 	return newBid, nil
 }
 
@@ -100,30 +113,34 @@ func (s *coordinatorService) UpdateBid(ctx context.Context, bidID uuid.UUID, upd
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Validate update
 	if err := s.validation.ValidateBidUpdate(ctx, existingBid, updates); err != nil {
 		return nil, err
 	}
-	
+
 	// Apply updates
 	if updates.Amount != nil {
 		existingBid.Amount, _ = values.NewMoneyFromFloat(*updates.Amount, "USD")
 	}
-	
+
 	if updates.Criteria != nil {
-		// TODO: Implement proper criteria conversion
+		newCriteria, err := bid.NewBidCriteriaFromMap(updates.Criteria)
+		if err != nil {
+			return nil, errors.NewValidationError("INVALID_CRITERIA", "failed to parse criteria: "+err.Error())
+		}
+		existingBid.Criteria = newCriteria
 	}
-	
+
 	if updates.ExtendBy != nil {
 		existingBid.ExpiresAt = existingBid.ExpiresAt.Add(*updates.ExtendBy)
 	}
-	
+
 	// Update bid
 	if err := s.bidMgmt.UpdateBid(ctx, existingBid); err != nil {
 		return nil, err
 	}
-	
+
 	return existingBid, nil
 }
 
@@ -173,22 +190,22 @@ func (s *coordinatorService) validateBuyerAndBalance(ctx context.Context, buyerI
 	if err != nil {
 		return nil, errors.NewNotFoundError("buyer").WithCause(err)
 	}
-	
+
 	// Validate eligibility
 	if err := s.validation.ValidateBuyerEligibility(ctx, buyer); err != nil {
 		return nil, err
 	}
-	
+
 	// Check balance
 	balance, err := s.accountRepo.GetBalance(ctx, buyerID)
 	if err != nil {
 		return nil, errors.NewInternalError("failed to get balance").WithCause(err)
 	}
-	
+
 	if balance < amount {
 		return nil, errors.NewValidationError("INSUFFICIENT_BALANCE", "insufficient balance")
 	}
-	
+
 	return buyer, nil
 }
 
@@ -198,14 +215,14 @@ func (s *coordinatorService) createBid(req *PlaceBidRequest, buyer *account.Acco
 	if duration == 0 && s.config != nil {
 		duration = s.config.DefaultDuration
 	}
-	
+
 	now := time.Now()
 	newBid := &bid.Bid{
-		ID:       uuid.New(),
-		CallID:   req.CallID,
-		BuyerID:  req.BuyerID,
-		Amount:   values.MustNewMoneyFromFloat(req.Amount, "USD"),
-		Status:   bid.StatusPending,
+		ID:      uuid.New(),
+		CallID:  req.CallID,
+		BuyerID: req.BuyerID,
+		Amount:  values.MustNewMoneyFromFloat(req.Amount, "USD"),
+		Status:  bid.StatusPending,
 		Quality: values.QualityMetrics{
 			HistoricalRating: buyer.QualityMetrics.OverallScore(),
 			FraudScore:       buyer.QualityMetrics.FraudScore,
@@ -215,16 +232,27 @@ func (s *coordinatorService) createBid(req *PlaceBidRequest, buyer *account.Acco
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	
+
 	// Convert criteria if provided
 	if req.Criteria != nil {
-		// TODO: Implement proper criteria conversion from map[string]interface{} to bid.BidCriteria
-		// For now, set basic criteria
+		criteria, err := bid.NewBidCriteriaFromMap(req.Criteria)
+		if err != nil {
+			return nil, errors.NewValidationError("INVALID_CRITERIA", "failed to parse criteria: "+err.Error())
+		}
+
+		// Set max budget from request if not already set in criteria
+		if criteria.MaxBudget.IsZero() && req.MaxAmount > 0 {
+			criteria.MaxBudget = values.MustNewMoneyFromFloat(req.MaxAmount, "USD")
+		}
+
+		newBid.Criteria = criteria
+	} else if req.MaxAmount > 0 {
+		// Set basic criteria with max budget only
 		newBid.Criteria = bid.BidCriteria{
 			MaxBudget: values.MustNewMoneyFromFloat(req.MaxAmount, "USD"),
 		}
 	}
-	
+
 	return newBid, nil
 }
 
@@ -233,11 +261,11 @@ func (s *coordinatorService) performFraudCheck(ctx context.Context, b *bid.Bid, 
 	if err != nil {
 		return err
 	}
-	
+
 	if !fraudResult.Approved {
 		return errors.NewForbiddenError("bid rejected by fraud check")
 	}
-	
+
 	return nil
 }
 
@@ -246,20 +274,24 @@ func (s *coordinatorService) handlePostBidCreation(ctx context.Context, b *bid.B
 	if s.auction != nil {
 		go func() {
 			if err := s.auction.HandleNewBid(context.Background(), b); err != nil {
-				// TODO: Add proper logging
-				// log.Error("failed to handle new bid in auction", "error", err, "bid_id", b.ID)
+				slog.Error("failed to handle new bid in auction",
+					"error", err,
+					"bid_id", b.ID,
+					"call_id", b.CallID,
+					"buyer_id", b.BuyerID,
+					"amount", b.Amount.ToFloat64())
 			}
 		}()
 	}
-	
+
 	// Send notification asynchronously
-	if s.notifier != nil {
-		go s.notifier.NotifyBidPlaced(context.Background(), b)
+	if s.infrastructure != nil {
+		go s.infrastructure.NotifyBidPlaced(context.Background(), b)
 	}
-	
+
 	// Record metrics synchronously (fast operation)
-	if s.metrics != nil {
-		s.metrics.RecordBidPlaced(ctx, b)
-		s.metrics.RecordBidAmount(ctx, b.Amount.ToFloat64())
+	if s.infrastructure != nil {
+		s.infrastructure.RecordBidPlaced(ctx, b)
+		s.infrastructure.RecordBidAmount(ctx, b.Amount.ToFloat64())
 	}
 }

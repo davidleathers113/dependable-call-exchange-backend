@@ -350,7 +350,7 @@ func TestService_GetCallStatus(t *testing.T) {
 					Cost:      &cost,
 				}
 				cr.On("GetByID", ctx, callID).Return(testCall, nil)
-				
+
 				providerStatus := &ProviderCallStatus{
 					CallSID:  "CALL123",
 					Status:   "in-progress",
@@ -619,13 +619,13 @@ func intPtr(i int) *int {
 
 func BenchmarkService_InitiateCall(b *testing.B) {
 	ctx := context.Background()
-	
+
 	// Create mocks
 	callRepo := new(MockCallRepository)
 	provider := new(MockProvider)
 	eventPub := new(MockEventPublisher)
 	metrics := new(MockMetricsCollector)
-	
+
 	// Setup mocks to always succeed
 	callRepo.On("Create", ctx, mock.AnythingOfType("*call.Call")).Return(nil)
 	provider.On("GetProviderName").Return("twilio")
@@ -634,10 +634,10 @@ func BenchmarkService_InitiateCall(b *testing.B) {
 	metrics.On("RecordProviderLatency", ctx, mock.Anything, mock.Anything, mock.Anything)
 	metrics.On("RecordCallInitiated", ctx, mock.Anything)
 	eventPub.On("PublishCallEvent", ctx, mock.Anything).Return(nil)
-	
+
 	// Create service
 	svc := NewService(callRepo, provider, eventPub, metrics)
-	
+
 	// Create request
 	req := &InitiateCallRequest{
 		FromNumber:  "+11234567890",
@@ -645,9 +645,9 @@ func BenchmarkService_InitiateCall(b *testing.B) {
 		BuyerID:     uuid.New(),
 		CallbackURL: "https://callback.url",
 	}
-	
+
 	b.ResetTimer()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, _ = svc.InitiateCall(ctx, req)
 	}

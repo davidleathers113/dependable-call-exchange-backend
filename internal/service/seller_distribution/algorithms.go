@@ -14,10 +14,10 @@ import (
 type DistributionAlgorithm interface {
 	// SelectSellers chooses which sellers to notify based on the algorithm
 	SelectSellers(ctx context.Context, availableSellers []*account.Account, incomingCall *call.Call, rules *SellerDistributionRules) ([]*account.Account, float64, map[string]interface{}, error)
-	
+
 	// Name returns the algorithm name
 	Name() string
-	
+
 	// Description returns a human-readable description
 	Description() string
 }
@@ -50,17 +50,17 @@ func (a *BroadcastAlgorithm) SelectSellers(ctx context.Context, availableSellers
 			"total_sellers": len(availableSellers),
 		}, nil
 	}
-	
+
 	// Sort by quality score descending
 	sortedSellers := make([]*account.Account, len(availableSellers))
 	copy(sortedSellers, availableSellers)
-	
+
 	sort.Slice(sortedSellers, func(i, j int) bool {
 		return sortedSellers[i].QualityMetrics.OverallScore() > sortedSellers[j].QualityMetrics.OverallScore()
 	})
-	
+
 	selected := sortedSellers[:maxSellers]
-	
+
 	return selected, 1.0, map[string]interface{}{
 		"algorithm":      "broadcast",
 		"total_sellers":  len(availableSellers),
@@ -100,15 +100,15 @@ func (a *TargetedAlgorithm) SelectSellers(ctx context.Context, availableSellers 
 		geoScore      float64
 		totalScore    float64
 	}
-	
+
 	scores := make([]sellerScore, 0, len(availableSellers))
-	
+
 	for _, seller := range availableSellers {
 		qs := seller.QualityMetrics.OverallScore() * rules.QualityWeight
 		cs := a.calculateCapacityScore(ctx, seller) * rules.CapacityWeight
 		gs := a.calculateGeographyScore(seller, incomingCall) * rules.GeographyWeight
 		total := qs + cs + gs
-		
+
 		scores = append(scores, sellerScore{
 			seller:        seller,
 			qualityScore:  qs,
@@ -117,25 +117,25 @@ func (a *TargetedAlgorithm) SelectSellers(ctx context.Context, availableSellers 
 			totalScore:    total,
 		})
 	}
-	
+
 	// Sort by total score descending
 	sort.Slice(scores, func(i, j int) bool {
 		return scores[i].totalScore > scores[j].totalScore
 	})
-	
+
 	// Select top sellers up to max limit
 	maxSellers := rules.MaxSellers
 	if len(scores) > maxSellers {
 		scores = scores[:maxSellers]
 	}
-	
+
 	// Extract selected sellers and calculate metrics
 	selected := make([]*account.Account, len(scores))
 	totalScore := 0.0
 	qualitySum := 0.0
 	capacitySum := 0.0
 	geoSum := 0.0
-	
+
 	for i, s := range scores {
 		selected[i] = s.seller
 		totalScore += s.totalScore
@@ -143,15 +143,15 @@ func (a *TargetedAlgorithm) SelectSellers(ctx context.Context, availableSellers 
 		capacitySum += s.capacityScore
 		geoSum += s.geoScore
 	}
-	
+
 	avgScore := totalScore / float64(len(scores))
-	
+
 	metadata := map[string]interface{}{
-		"algorithm":     "targeted",
-		"avg_score":     avgScore,
+		"algorithm": "targeted",
+		"avg_score": avgScore,
 		"score_breakdown": map[string]float64{
-			"avg_quality":  qualitySum / float64(len(scores)),
-			"avg_capacity": capacitySum / float64(len(scores)),
+			"avg_quality":   qualitySum / float64(len(scores)),
+			"avg_capacity":  capacitySum / float64(len(scores)),
 			"avg_geography": geoSum / float64(len(scores)),
 		},
 		"weights": map[string]float64{
@@ -161,7 +161,7 @@ func (a *TargetedAlgorithm) SelectSellers(ctx context.Context, availableSellers 
 		},
 		"selected_count": len(selected),
 	}
-	
+
 	return selected, avgScore, metadata, nil
 }
 
@@ -171,16 +171,16 @@ func (a *TargetedAlgorithm) calculateCapacityScore(ctx context.Context, seller *
 		// Default to middle score if capacity unavailable
 		return 0.5
 	}
-	
+
 	if capacity.MaxConcurrentCalls == 0 {
 		return 0.0
 	}
-	
+
 	utilizationRate := float64(capacity.CurrentCalls) / float64(capacity.MaxConcurrentCalls)
-	
+
 	// Invert utilization: lower utilization = higher score
 	capacityScore := 1.0 - utilizationRate
-	
+
 	// Ensure score is between 0 and 1
 	return math.Max(0.0, math.Min(1.0, capacityScore))
 }
@@ -190,11 +190,11 @@ func (a *TargetedAlgorithm) calculateGeographyScore(seller *account.Account, inc
 	if incomingCall.Location == nil {
 		return 0.5
 	}
-	
+
 	// This is a simplified implementation
 	// In practice, this would calculate geographic distance/proximity
 	// and factor in seller's service areas from their settings
-	
+
 	// For now, return a base score that could be enhanced
 	// with actual geographic calculations
 	return 0.75 // Assume reasonable geographic match
@@ -207,11 +207,11 @@ type CapacityBasedAlgorithm struct {
 
 // sellerCapacityScore represents a seller with their capacity and scoring information
 type sellerCapacityScore struct {
-	seller         *account.Account
-	capacity       *SellerCapacity
-	capacityScore  float64
-	qualityScore   float64
-	combinedScore  float64
+	seller        *account.Account
+	capacity      *SellerCapacity
+	capacityScore float64
+	qualityScore  float64
+	combinedScore float64
 }
 
 // NewCapacityBasedAlgorithm creates a new capacity-based algorithm
@@ -230,9 +230,9 @@ func (a *CapacityBasedAlgorithm) Description() string {
 }
 
 func (a *CapacityBasedAlgorithm) SelectSellers(ctx context.Context, availableSellers []*account.Account, incomingCall *call.Call, rules *SellerDistributionRules) ([]*account.Account, float64, map[string]interface{}, error) {
-	
+
 	scores := make([]sellerCapacityScore, 0, len(availableSellers))
-	
+
 	for _, seller := range availableSellers {
 		capacity, err := a.accountRepo.GetSellerCapacity(ctx, seller.ID)
 		if err != nil {
@@ -245,14 +245,14 @@ func (a *CapacityBasedAlgorithm) SelectSellers(ctx context.Context, availableSel
 				LastUpdated:        time.Now(),
 			}
 		}
-		
+
 		capacityScore := a.calculateCapacityScore(capacity)
 		qualityScore := seller.QualityMetrics.OverallScore()
-		
+
 		// Combine capacity and quality based on weights
-		combinedScore := (capacityScore * rules.CapacityWeight) + 
-						(qualityScore * rules.QualityWeight)
-		
+		combinedScore := (capacityScore * rules.CapacityWeight) +
+			(qualityScore * rules.QualityWeight)
+
 		scores = append(scores, sellerCapacityScore{
 			seller:        seller,
 			capacity:      capacity,
@@ -261,43 +261,43 @@ func (a *CapacityBasedAlgorithm) SelectSellers(ctx context.Context, availableSel
 			combinedScore: combinedScore,
 		})
 	}
-	
+
 	// Sort by combined score descending
 	sort.Slice(scores, func(i, j int) bool {
 		return scores[i].combinedScore > scores[j].combinedScore
 	})
-	
+
 	// Select top sellers up to max limit
 	maxSellers := rules.MaxSellers
 	if len(scores) > maxSellers {
 		scores = scores[:maxSellers]
 	}
-	
+
 	// Extract sellers and calculate metrics
 	selected := make([]*account.Account, len(scores))
 	totalScore := 0.0
 	totalCapacity := 0
 	totalQuality := 0.0
-	
+
 	for i, s := range scores {
 		selected[i] = s.seller
 		totalScore += s.combinedScore
 		totalCapacity += s.capacity.AvailableSlots
 		totalQuality += s.qualityScore
 	}
-	
+
 	avgScore := totalScore / float64(len(scores))
 	avgQuality := totalQuality / float64(len(scores))
-	
+
 	metadata := map[string]interface{}{
-		"algorithm":       "capacity-based",
-		"avg_score":       avgScore,
-		"avg_quality":     avgQuality,
-		"total_capacity":  totalCapacity,
-		"selected_count":  len(selected),
+		"algorithm":             "capacity-based",
+		"avg_score":             avgScore,
+		"avg_quality":           avgQuality,
+		"total_capacity":        totalCapacity,
+		"selected_count":        len(selected),
 		"capacity_distribution": a.getCapacityDistribution(scores),
 	}
-	
+
 	return selected, avgScore, metadata, nil
 }
 
@@ -305,17 +305,17 @@ func (a *CapacityBasedAlgorithm) calculateCapacityScore(capacity *SellerCapacity
 	if capacity.MaxConcurrentCalls == 0 {
 		return 0.0
 	}
-	
+
 	utilizationRate := float64(capacity.CurrentCalls) / float64(capacity.MaxConcurrentCalls)
-	
+
 	// Invert utilization so lower utilization = higher score
 	capacityScore := 1.0 - utilizationRate
-	
+
 	// Boost score for sellers with more absolute capacity
 	capacityBonus := math.Min(float64(capacity.AvailableSlots)/10.0, 0.2) // Up to 20% bonus
-	
+
 	finalScore := capacityScore + capacityBonus
-	
+
 	// Ensure score is between 0 and 1
 	return math.Max(0.0, math.Min(1.0, finalScore))
 }
@@ -324,11 +324,11 @@ func (a *CapacityBasedAlgorithm) getCapacityDistribution(scores []sellerCapacity
 	if len(scores) == 0 {
 		return map[string]interface{}{}
 	}
-	
+
 	minSlots := scores[0].capacity.AvailableSlots
 	maxSlots := scores[0].capacity.AvailableSlots
 	totalSlots := 0
-	
+
 	for _, s := range scores {
 		slots := s.capacity.AvailableSlots
 		if slots < minSlots {
@@ -339,9 +339,9 @@ func (a *CapacityBasedAlgorithm) getCapacityDistribution(scores []sellerCapacity
 		}
 		totalSlots += slots
 	}
-	
+
 	avgSlots := float64(totalSlots) / float64(len(scores))
-	
+
 	return map[string]interface{}{
 		"min_available_slots": minSlots,
 		"max_available_slots": maxSlots,

@@ -3,11 +3,11 @@ package compliance_test
 import (
 	"testing"
 	"time"
-	
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	
+
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/compliance"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil/fixtures"
 )
@@ -57,7 +57,7 @@ func TestNewComplianceRule(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := compliance.NewComplianceRule(tt.ruleName, tt.ruleType, tt.createdBy)
@@ -109,7 +109,7 @@ func TestNewConsentRecord(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := compliance.NewConsentRecord(tt.phoneNumber, tt.consentType, tt.source, tt.ipAddress, tt.userAgent)
@@ -152,15 +152,15 @@ func TestConsentRecord_Revoke(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := tt.setup()
 			oldUpdatedAt := c.UpdatedAt
-			
+
 			time.Sleep(10 * time.Millisecond)
 			c.Revoke()
-			
+
 			tt.validate(t, c, oldUpdatedAt)
 		})
 	}
@@ -178,7 +178,7 @@ func TestRuleType_String(t *testing.T) {
 		{compliance.RuleTypeCustom, "custom"},
 		{compliance.RuleType(999), "unknown"},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.ruleType.String())
@@ -193,7 +193,7 @@ func TestComplianceCheck_AddViolation(t *testing.T) {
 		Approved:    true,
 		Violations:  []compliance.ComplianceViolation{},
 	}
-	
+
 	violation := compliance.ComplianceViolation{
 		ID:            uuid.New(),
 		CallID:        cc.CallID,
@@ -204,9 +204,9 @@ func TestComplianceCheck_AddViolation(t *testing.T) {
 		Description:   "Test violation",
 		CreatedAt:     time.Now(),
 	}
-	
+
 	cc.AddViolation(violation)
-	
+
 	assert.Equal(t, 1, len(cc.Violations))
 	assert.False(t, cc.Approved)
 	assert.Equal(t, violation.ID, cc.Violations[0].ID)
@@ -254,7 +254,7 @@ func TestComplianceCheck_IsCallAllowed(t *testing.T) {
 			expected: false,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cc := tt.setup()
@@ -275,7 +275,7 @@ func TestCompliance_TimeWindows(t *testing.T) {
 				},
 			}).
 			Build()
-		
+
 		assert.Len(t, rule.TimeWindows, 1)
 		assert.Equal(t, 9, rule.TimeWindows[0].StartHour)
 		assert.Equal(t, 17, rule.TimeWindows[0].EndHour)
@@ -283,7 +283,7 @@ func TestCompliance_TimeWindows(t *testing.T) {
 		assert.NotContains(t, rule.TimeWindows[0].Days, "Sat")
 		assert.NotContains(t, rule.TimeWindows[0].Days, "Sun")
 	})
-	
+
 	t.Run("multiple time windows", func(t *testing.T) {
 		rule := fixtures.NewComplianceRuleBuilder(t).
 			WithTimeWindows([]compliance.TimeWindow{
@@ -301,7 +301,7 @@ func TestCompliance_TimeWindows(t *testing.T) {
 				},
 			}).
 			Build()
-		
+
 		assert.Len(t, rule.TimeWindows, 2)
 	})
 }
@@ -313,12 +313,12 @@ func TestCompliance_GeographicScope(t *testing.T) {
 				Countries: []string{"US", "CA", "MX"},
 			}).
 			Build()
-		
+
 		assert.Len(t, rule.Geography.Countries, 3)
 		assert.Contains(t, rule.Geography.Countries, "US")
 		assert.Empty(t, rule.Geography.States)
 	})
-	
+
 	t.Run("state level scope", func(t *testing.T) {
 		rule := fixtures.NewComplianceRuleBuilder(t).
 			WithGeography(compliance.GeographicScope{
@@ -326,10 +326,10 @@ func TestCompliance_GeographicScope(t *testing.T) {
 				States:    []string{"CA", "TX", "FL", "NY"},
 			}).
 			Build()
-		
+
 		assert.Len(t, rule.Geography.States, 4)
 	})
-	
+
 	t.Run("city and zip code scope", func(t *testing.T) {
 		rule := fixtures.NewComplianceRuleBuilder(t).
 			WithGeography(compliance.GeographicScope{
@@ -337,7 +337,7 @@ func TestCompliance_GeographicScope(t *testing.T) {
 				ZipCodes: []string{"90001", "90002", "90003"},
 			}).
 			Build()
-		
+
 		assert.Len(t, rule.Geography.Cities, 3)
 		assert.Len(t, rule.Geography.ZipCodes, 3)
 	})
@@ -354,12 +354,12 @@ func TestCompliance_Conditions(t *testing.T) {
 				},
 			}).
 			Build()
-		
+
 		assert.Len(t, rule.Conditions, 1)
 		assert.Equal(t, "time_of_day", rule.Conditions[0].Field)
 		assert.Equal(t, "between", rule.Conditions[0].Operator)
 	})
-	
+
 	t.Run("multiple conditions", func(t *testing.T) {
 		rule := fixtures.NewComplianceRuleBuilder(t).
 			WithConditions([]compliance.Condition{
@@ -380,7 +380,7 @@ func TestCompliance_Conditions(t *testing.T) {
 				},
 			}).
 			Build()
-		
+
 		assert.Len(t, rule.Conditions, 3)
 	})
 }
@@ -395,11 +395,11 @@ func TestCompliance_Actions(t *testing.T) {
 				},
 			}).
 			Build()
-		
+
 		assert.Len(t, rule.Actions, 1)
 		assert.Equal(t, compliance.ActionBlock, rule.Actions[0].Type)
 	})
-	
+
 	t.Run("multiple actions with params", func(t *testing.T) {
 		rule := fixtures.NewComplianceRuleBuilder(t).
 			WithActions([]compliance.Action{
@@ -417,7 +417,7 @@ func TestCompliance_Actions(t *testing.T) {
 				},
 			}).
 			Build()
-		
+
 		assert.Len(t, rule.Actions, 3)
 		assert.NotNil(t, rule.Actions[0].Params)
 	})
@@ -425,7 +425,7 @@ func TestCompliance_Actions(t *testing.T) {
 
 func TestCompliance_Scenarios(t *testing.T) {
 	scenarios := fixtures.NewComplianceScenarios(t)
-	
+
 	t.Run("TCPA time rule", func(t *testing.T) {
 		rule := scenarios.TCPATimeRule()
 		assert.Equal(t, compliance.RuleTypeTCPA, rule.Type)
@@ -434,12 +434,12 @@ func TestCompliance_Scenarios(t *testing.T) {
 		assert.NotEmpty(t, rule.Conditions)
 		assert.NotEmpty(t, rule.Actions)
 	})
-	
+
 	t.Run("DNC rule", func(t *testing.T) {
 		rule := scenarios.DNCRule()
 		assert.Equal(t, compliance.RuleTypeDNC, rule.Type)
 		assert.Equal(t, 2000, rule.Priority) // Highest priority
-		
+
 		// Should have DNC list check condition
 		found := false
 		for _, cond := range rule.Conditions {
@@ -450,14 +450,14 @@ func TestCompliance_Scenarios(t *testing.T) {
 		}
 		assert.True(t, found, "DNC rule should have dnc_list_check condition")
 	})
-	
+
 	t.Run("state specific rule", func(t *testing.T) {
 		rule := scenarios.StateSpecificRule("CA")
 		assert.Equal(t, compliance.RuleTypeCustom, rule.Type)
 		assert.Contains(t, rule.Geography.States, "CA")
 		assert.NotEmpty(t, rule.TimeWindows)
 	})
-	
+
 	t.Run("GDPR rule", func(t *testing.T) {
 		rule := scenarios.GDPRRule()
 		assert.Equal(t, compliance.RuleTypeGDPR, rule.Type)
@@ -470,7 +470,7 @@ func TestCompliance_Scenarios(t *testing.T) {
 
 func TestCompliance_ConsentScenarios(t *testing.T) {
 	scenarios := fixtures.NewComplianceScenarios(t)
-	
+
 	t.Run("express consent", func(t *testing.T) {
 		consent := scenarios.ExpressConsent("+15551234567")
 		assert.Equal(t, "+15551234567", consent.PhoneNumber)
@@ -478,7 +478,7 @@ func TestCompliance_ConsentScenarios(t *testing.T) {
 		assert.NotNil(t, consent.ExpiresAt)
 		assert.True(t, consent.ExpiresAt.After(time.Now()))
 	})
-	
+
 	t.Run("revoked consent", func(t *testing.T) {
 		consent := scenarios.RevokedConsent("+15559876543")
 		assert.Equal(t, compliance.ConsentStatusRevoked, consent.Status)
@@ -487,13 +487,13 @@ func TestCompliance_ConsentScenarios(t *testing.T) {
 
 func TestCompliance_ViolationScenarios(t *testing.T) {
 	scenarios := fixtures.NewComplianceScenarios(t)
-	
+
 	callID := uuid.New()
 	accountID := uuid.New()
 	ruleID := uuid.New()
-	
+
 	violation := scenarios.ViolationRecord(callID, accountID, ruleID)
-	
+
 	assert.NotEqual(t, uuid.Nil, violation.ID)
 	assert.Equal(t, callID, violation.CallID)
 	assert.Equal(t, accountID, violation.AccountID)
@@ -510,23 +510,23 @@ func TestCompliance_RuleExpiration(t *testing.T) {
 		rule := fixtures.NewComplianceRuleBuilder(t).Build()
 		assert.Nil(t, rule.ExpiresAt)
 	})
-	
+
 	t.Run("rule with future expiration", func(t *testing.T) {
 		expiresAt := time.Now().Add(30 * 24 * time.Hour)
 		rule := fixtures.NewComplianceRuleBuilder(t).
 			WithExpiration(expiresAt).
 			Build()
-		
+
 		assert.NotNil(t, rule.ExpiresAt)
 		assert.Equal(t, expiresAt.Unix(), rule.ExpiresAt.Unix())
 	})
-	
+
 	t.Run("expired rule", func(t *testing.T) {
 		expiresAt := time.Now().Add(-1 * time.Hour)
 		rule := fixtures.NewComplianceRuleBuilder(t).
 			WithExpiration(expiresAt).
 			Build()
-		
+
 		assert.True(t, time.Now().After(*rule.ExpiresAt))
 	})
 }
@@ -536,30 +536,30 @@ func TestCompliance_EdgeCases(t *testing.T) {
 		rule := fixtures.NewComplianceRuleBuilder(t).
 			WithConditions([]compliance.Condition{}).
 			Build()
-		
+
 		assert.Empty(t, rule.Conditions)
 	})
-	
+
 	t.Run("rule with no actions", func(t *testing.T) {
 		rule := fixtures.NewComplianceRuleBuilder(t).
 			WithActions([]compliance.Action{}).
 			Build()
-		
+
 		assert.Empty(t, rule.Actions)
 	})
-	
+
 	t.Run("consent already revoked", func(t *testing.T) {
 		consent := fixtures.NewConsentRecordBuilder(t).
 			WithStatus(compliance.ConsentStatusRevoked).
 			Build()
-		
+
 		optOut := time.Now().Add(-1 * time.Hour)
 		consent.OptOutTimestamp = &optOut
 		oldStatus := consent.Status
-		
+
 		consent.Revoke()
-		
-		assert.Equal(t, oldStatus, consent.Status) // Still revoked
+
+		assert.Equal(t, oldStatus, consent.Status)           // Still revoked
 		assert.NotEqual(t, optOut, *consent.OptOutTimestamp) // Updated timestamp
 	})
 }
@@ -568,30 +568,30 @@ func TestCompliance_Performance(t *testing.T) {
 	t.Run("rule creation performance", func(t *testing.T) {
 		start := time.Now()
 		count := 10000
-		
+
 		for i := 0; i < count; i++ {
 			_ = compliance.NewComplianceRule("Test Rule", compliance.RuleTypeTCPA, uuid.New())
 		}
-		
+
 		elapsed := time.Since(start)
 		perRule := elapsed / time.Duration(count)
-		
+
 		assert.Less(t, perRule, 10*time.Microsecond,
 			"Rule creation took %v per rule, expected < 10µs", perRule)
 	})
-	
+
 	t.Run("consent record creation performance", func(t *testing.T) {
 		start := time.Now()
 		count := 10000
-		
+
 		for i := 0; i < count; i++ {
-			_ = compliance.NewConsentRecord("+15551234567", compliance.ConsentTypeExpress, 
+			_ = compliance.NewConsentRecord("+15551234567", compliance.ConsentTypeExpress,
 				"web", "192.168.1.1", "Mozilla")
 		}
-		
+
 		elapsed := time.Since(start)
 		perConsent := elapsed / time.Duration(count)
-		
+
 		assert.Less(t, perConsent, 10*time.Microsecond,
 			"Consent creation took %v per record, expected < 10µs", perConsent)
 	})
@@ -605,7 +605,7 @@ func TestCompliance_TableDriven(t *testing.T) {
 		action   func(interface{}) error
 		validate func(*testing.T, interface{}, error)
 	}
-	
+
 	tests := []testCase{
 		{
 			name: "consent lifecycle",
@@ -657,7 +657,7 @@ func TestCompliance_TableDriven(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			entity := tc.setup()

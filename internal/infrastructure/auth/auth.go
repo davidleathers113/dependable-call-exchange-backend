@@ -20,19 +20,19 @@ type TokenClaims struct {
 type Service interface {
 	// GenerateToken creates a new JWT token
 	GenerateToken(userID uuid.UUID, email, userType string, scopes []string) (string, error)
-	
+
 	// ValidateToken validates and parses a JWT token
 	ValidateToken(token string) (*TokenClaims, error)
-	
+
 	// GenerateRefreshToken creates a new refresh token
 	GenerateRefreshToken(userID uuid.UUID) (string, error)
-	
+
 	// ValidateRefreshToken validates a refresh token
 	ValidateRefreshToken(token string) (uuid.UUID, error)
-	
+
 	// HashPassword hashes a password
 	HashPassword(password string) (string, error)
-	
+
 	// ComparePassword compares a password with its hash
 	ComparePassword(hash, password string) error
 }

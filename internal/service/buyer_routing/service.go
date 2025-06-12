@@ -33,7 +33,7 @@ func NewService(
 ) BuyerRoutingService {
 	// Create router based on initial rules
 	router := createRouter(initialRules)
-	
+
 	return &service{
 		callRepo:    callRepo,
 		bidRepo:     bidRepo,
@@ -47,7 +47,7 @@ func NewService(
 // RouteCallToBuyer finds the best buyer for a seller's call based on active bids
 func (s *service) RouteCallToBuyer(ctx context.Context, sellerCallID uuid.UUID) (*BuyerRoutingDecision, error) {
 	start := time.Now()
-	
+
 	// Get the seller's call
 	c, err := s.callRepo.GetByID(ctx, sellerCallID)
 	if err != nil {
@@ -58,11 +58,11 @@ func (s *service) RouteCallToBuyer(ctx context.Context, sellerCallID uuid.UUID) 
 
 	// Validate call is in correct state
 	if c.Status != call.StatusPending {
-		return nil, errors.NewValidationError("INVALID_CALL_STATE", 
+		return nil, errors.NewValidationError("INVALID_CALL_STATE",
 			fmt.Sprintf("call is not in pending state: %s", c.Status)).
 			WithDetails(map[string]interface{}{
 				"call_id": sellerCallID,
-				"status": c.Status.String(),
+				"status":  c.Status.String(),
 			})
 	}
 
@@ -75,7 +75,7 @@ func (s *service) RouteCallToBuyer(ctx context.Context, sellerCallID uuid.UUID) 
 	}
 
 	if len(bids) == 0 {
-		return nil, errors.NewBusinessError("NO_BIDS_AVAILABLE", 
+		return nil, errors.NewBusinessError("NO_BIDS_AVAILABLE",
 			"no bids available for call").
 			WithDetails(map[string]interface{}{"call_id": sellerCallID})
 	}
@@ -90,7 +90,7 @@ func (s *service) RouteCallToBuyer(ctx context.Context, sellerCallID uuid.UUID) 
 		return nil, errors.NewInternalError("routing failed").
 			WithCause(err).
 			WithDetails(map[string]interface{}{
-				"call_id": sellerCallID,
+				"call_id":   sellerCallID,
 				"algorithm": router.GetAlgorithm(),
 			})
 	}
@@ -102,14 +102,14 @@ func (s *service) RouteCallToBuyer(ctx context.Context, sellerCallID uuid.UUID) 
 	c.Status = call.StatusQueued
 	c.RouteID = &decision.BidID
 	c.UpdatedAt = time.Now()
-		
+
 	if err := s.callRepo.UpdateWithStatusCheck(ctx, c, call.StatusPending); err != nil {
 		// Check if this is a concurrent update issue
 		if err.Error() == fmt.Sprintf("call status has changed, expected %s", call.StatusPending) {
-			return nil, errors.NewValidationError("CALL_ALREADY_ROUTED", 
+			return nil, errors.NewValidationError("CALL_ALREADY_ROUTED",
 				"call has already been routed by another process").
 				WithDetails(map[string]interface{}{
-					"call_id": sellerCallID,
+					"call_id":         sellerCallID,
 					"expected_status": call.StatusPending.String(),
 				})
 		}
@@ -125,7 +125,7 @@ func (s *service) RouteCallToBuyer(ctx context.Context, sellerCallID uuid.UUID) 
 			WithCause(err).
 			WithDetails(map[string]interface{}{"bid_id": decision.BidID})
 	}
-	
+
 	winningBid.Accept() // This sets status to "won"
 	if err := s.bidRepo.Update(ctx, winningBid); err != nil {
 		return nil, errors.NewInternalError("failed to update winning bid").
@@ -138,8 +138,8 @@ func (s *service) RouteCallToBuyer(ctx context.Context, sellerCallID uuid.UUID) 
 		s.metrics.RecordBuyerRoutingDecision(ctx, decision)
 		s.metrics.RecordBuyerPerformance(ctx, decision.BuyerID, decision.CallID, map[string]interface{}{
 			"algorithm": decision.Algorithm,
-			"latency": decision.Latency,
-			"score": decision.Score,
+			"latency":   decision.Latency,
+			"score":     decision.Score,
 		})
 	}
 

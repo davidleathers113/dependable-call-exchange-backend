@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 	"time"
-	
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	
+
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/testutil"
@@ -15,20 +15,20 @@ import (
 
 // BidBuilder builds test Bid entities
 type BidBuilder struct {
-	t          *testing.T
-	testDB     *testutil.TestDB
-	id         uuid.UUID
-	callID     uuid.UUID
-	buyerID    uuid.UUID
-	sellerID   uuid.UUID
-	amount     values.Money
-	status     bid.Status
-	criteria   bid.BidCriteria
-	quality    values.QualityMetrics
-	auctionID  uuid.UUID
-	rank       int
-	placedAt   time.Time
-	expiresAt  time.Time
+	t         *testing.T
+	testDB    *testutil.TestDB
+	id        uuid.UUID
+	callID    uuid.UUID
+	buyerID   uuid.UUID
+	sellerID  uuid.UUID
+	amount    values.Money
+	status    bid.Status
+	criteria  bid.BidCriteria
+	quality   values.QualityMetrics
+	auctionID uuid.UUID
+	rank      int
+	placedAt  time.Time
+	expiresAt time.Time
 }
 
 // NewBidBuilder creates a new BidBuilder with defaults
@@ -36,9 +36,9 @@ func NewBidBuilder(testDB *testutil.TestDB) *BidBuilder {
 	id := uuid.New()
 	callID := uuid.New()
 	buyerID := uuid.New()
-	sellerID := uuid.New()
+	sellerID := uuid.Nil // Default to zero UUID since seller_id is optional in many cases
 	auctionID := uuid.New()
-	
+
 	now := time.Now().UTC()
 	return &BidBuilder{
 		t:         nil, // Will be set when Build is called
@@ -158,8 +158,8 @@ func (b *BidBuilder) WithQualityMetrics(conversionRate float64, avgCallTime int,
 		rating,         // historicalRating
 		conversionRate, // conversionRate
 		avgCallTime,    // averageCallTime
-		5.0,           // trustScore (default)
-		5.0,           // reliabilityScore (default)
+		5.0,            // trustScore (default)
+		5.0,            // reliabilityScore (default)
 	)
 	return b
 }
@@ -184,29 +184,29 @@ func (b *BidBuilder) Build(t *testing.T) *bid.Bid {
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	
+
 	// Set accepted time if bid is won
 	if b.status == bid.StatusWon {
 		acceptedAt := now
 		bidEntity.AcceptedAt = &acceptedAt
 	}
-	
+
 	// Note: The BuildWithRepo method should be used for DB persistence
-	
+
 	return bidEntity
 }
 
 // BuildWithRepo creates the Bid entity and saves it using the provided repository
-func (b *BidBuilder) BuildWithRepo(t *testing.T, repo interface{
+func (b *BidBuilder) BuildWithRepo(t *testing.T, repo interface {
 	Create(ctx context.Context, bid *bid.Bid) error
 }, ctx context.Context) *bid.Bid {
 	t.Helper()
 	bidEntity := b.Build(t)
-	
+
 	// Save using repository
 	err := repo.Create(ctx, bidEntity)
 	require.NoError(t, err, "failed to create bid via repository")
-	
+
 	return bidEntity
 }
 
@@ -237,18 +237,18 @@ func (bs *BidScenarios) HighValueBid(callID uuid.UUID) *bid.Bid {
 				EndHour:   24,
 				Days:      []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"},
 			},
-			CallType:   []string{"inbound", "outbound"},
-			MaxBudget:  values.MustNewMoneyFromFloat(500.00, values.USD),
-			Keywords:   []string{"premium", "high-value", "qualified"},
+			CallType:  []string{"inbound", "outbound"},
+			MaxBudget: values.MustNewMoneyFromFloat(500.00, values.USD),
+			Keywords:  []string{"premium", "high-value", "qualified"},
 		}).
 		WithQuality(values.MustNewQualityMetrics(
-			4.8, // qualityScore (use historical rating)
+			4.8,  // qualityScore (use historical rating)
 			0.01, // fraudScore
-			4.8, // historicalRating  
+			4.8,  // historicalRating
 			0.35, // conversionRate
-			420, // averageCallTime
-			5.0, // trustScore (default)
-			5.0, // reliabilityScore (default)
+			420,  // averageCallTime
+			5.0,  // trustScore (default)
+			5.0,  // reliabilityScore (default)
 		)).
 		Build(bs.t)
 }
@@ -273,13 +273,13 @@ func (bs *BidScenarios) LowValueBid(callID uuid.UUID) *bid.Bid {
 			MaxBudget: values.MustNewMoneyFromFloat(50.00, values.USD),
 		}).
 		WithQuality(values.MustNewQualityMetrics(
-			3.2, // qualityScore (use historical rating)
+			3.2,  // qualityScore (use historical rating)
 			0.15, // fraudScore
-			3.2, // historicalRating
+			3.2,  // historicalRating
 			0.08, // conversionRate
-			120, // averageCallTime
-			4.0, // trustScore (lower for low value)
-			4.0, // reliabilityScore (lower for low value)
+			120,  // averageCallTime
+			4.0,  // trustScore (lower for low value)
+			4.0,  // reliabilityScore (lower for low value)
 		)).
 		Build(bs.t)
 }
@@ -308,17 +308,17 @@ func (bs *BidScenarios) WinningBid(callID uuid.UUID) *bid.Bid {
 func (bs *BidScenarios) CompetingBids(callID uuid.UUID, count int) []*bid.Bid {
 	bs.t.Helper()
 	bids := make([]*bid.Bid, count)
-	
+
 	for i := 0; i < count; i++ {
 		buyerID := uuid.New()
 		amount := 5.00 + float64(i)*2.50
-		
+
 		bids[i] = NewBidBuilder(bs.testDB).
 			WithCallID(callID).
 			WithBuyerID(buyerID).
 			WithAmount(amount).
 			Build(bs.t)
 	}
-	
+
 	return bids
 }

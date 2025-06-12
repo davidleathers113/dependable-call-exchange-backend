@@ -14,28 +14,28 @@ import (
 type TracerInterface interface {
 	// StartSpan starts a new span with the given name
 	StartSpan(ctx context.Context, spanName string, opts ...trace.SpanStartOption) (context.Context, trace.Span)
-	
+
 	// StartSpanWithAttributes starts a new span with attributes
 	StartSpanWithAttributes(ctx context.Context, spanName string, attrs map[string]interface{}, opts ...trace.SpanStartOption) (context.Context, trace.Span)
-	
+
 	// GetSpan returns the current span from context
 	GetSpan(ctx context.Context) trace.Span
-	
+
 	// SetStatus sets the status of a span
 	SetStatus(span trace.Span, code codes.Code, description string)
-	
+
 	// RecordError records an error on the span
 	RecordError(span trace.Span, err error, description string)
-	
+
 	// AddEvent adds an event to the span
 	AddEvent(span trace.Span, name string, attrs map[string]interface{})
-	
+
 	// SetAttributes sets attributes on a span
 	SetAttributes(span trace.Span, attrs map[string]interface{})
-	
+
 	// GetTraceID returns the trace ID from the span
 	GetTraceID(span trace.Span) string
-	
+
 	// GetSpanID returns the span ID
 	GetSpanID(span trace.Span) string
 }
@@ -154,10 +154,10 @@ func (t *OpenTelemetryTracer) convertAttributes(attrs map[string]interface{}) []
 // StartHTTPSpan starts a span for HTTP requests
 func StartHTTPSpan(ctx context.Context, tracer TracerInterface, method, path string) (context.Context, trace.Span) {
 	return tracer.StartSpanWithAttributes(ctx, fmt.Sprintf("%s %s", method, path), map[string]interface{}{
-		"http.method":     method,
-		"http.target":     path,
-		"span.kind":       "server",
-		"component":       "http",
+		"http.method": method,
+		"http.target": path,
+		"span.kind":   "server",
+		"component":   "http",
 	})
 }
 

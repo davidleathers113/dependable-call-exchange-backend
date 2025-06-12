@@ -19,50 +19,50 @@ type Monitor struct {
 
 // MonitorConfig holds monitoring configuration
 type MonitorConfig struct {
-	SlowQueryThresholdMs   int64
-	LockWaitThresholdMs    int64
-	IndexBloatThreshold    float64
-	TableBloatThreshold    float64
+	SlowQueryThresholdMs    int64
+	LockWaitThresholdMs     int64
+	IndexBloatThreshold     float64
+	TableBloatThreshold     float64
 	ReplicationLagThreshold time.Duration
-	ConnectionThreshold    int
+	ConnectionThreshold     int
 }
 
 // QueryStats represents query performance statistics
 type QueryStats struct {
-	QueryID          string
-	Query            string
-	Calls            int64
-	TotalTimeMs      float64
-	MinTimeMs        float64
-	MaxTimeMs        float64
-	MeanTimeMs       float64
-	StddevTimeMs     float64
-	Rows             int64
-	SharedBlksHit    int64
-	SharedBlksRead   int64
+	QueryID           string
+	Query             string
+	Calls             int64
+	TotalTimeMs       float64
+	MinTimeMs         float64
+	MaxTimeMs         float64
+	MeanTimeMs        float64
+	StddevTimeMs      float64
+	Rows              int64
+	SharedBlksHit     int64
+	SharedBlksRead    int64
 	SharedBlksDirtied int64
 	SharedBlksWritten int64
-	TempBlksRead     int64
-	TempBlksWritten  int64
+	TempBlksRead      int64
+	TempBlksWritten   int64
 }
 
 // TableStats represents table statistics
 type TableStats struct {
-	SchemaName       string
-	TableName        string
-	TableSize        int64
-	IndexSize        int64
-	ToastSize        int64
-	TotalSize        int64
-	RowEstimate      int64
-	DeadTuples       int64
-	LiveTuples       int64
-	BloatBytes       int64
-	BloatPercentage  float64
-	LastVacuum       *time.Time
-	LastAutovacuum   *time.Time
-	LastAnalyze      *time.Time
-	LastAutoanalyze  *time.Time
+	SchemaName      string
+	TableName       string
+	TableSize       int64
+	IndexSize       int64
+	ToastSize       int64
+	TotalSize       int64
+	RowEstimate     int64
+	DeadTuples      int64
+	LiveTuples      int64
+	BloatBytes      int64
+	BloatPercentage float64
+	LastVacuum      *time.Time
+	LastAutovacuum  *time.Time
+	LastAnalyze     *time.Time
+	LastAutoanalyze *time.Time
 }
 
 // IndexStats represents index statistics
@@ -382,7 +382,7 @@ func (m *Monitor) GetConnectionStats(ctx context.Context) (*ConnectionStats, err
 	for rows.Next() {
 		var category, appName string
 		var count int
-		
+
 		err := rows.Scan(&category, &appName, &count)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan connection stats: %w", err)
@@ -637,9 +637,9 @@ func (m *Monitor) GeneratePerformanceReport(ctx context.Context) (string, error)
 	if err == nil {
 		report.WriteString("## TOP 10 SLOW QUERIES ##\n")
 		for i, query := range slowQueries {
-			report.WriteString(fmt.Sprintf("%d. Mean time: %.2fms, Calls: %d\n", 
+			report.WriteString(fmt.Sprintf("%d. Mean time: %.2fms, Calls: %d\n",
 				i+1, query.MeanTimeMs, query.Calls))
-			report.WriteString(fmt.Sprintf("   Query: %s\n\n", 
+			report.WriteString(fmt.Sprintf("   Query: %s\n\n",
 				strings.ReplaceAll(query.Query, "\n", " ")))
 		}
 	}
@@ -648,7 +648,7 @@ func (m *Monitor) GeneratePerformanceReport(ctx context.Context) (string, error)
 	connStats, err := m.GetConnectionStats(ctx)
 	if err == nil {
 		report.WriteString("## CONNECTION STATISTICS ##\n")
-		report.WriteString(fmt.Sprintf("- Total connections: %d/%d\n", 
+		report.WriteString(fmt.Sprintf("- Total connections: %d/%d\n",
 			connStats.TotalConnections, connStats.MaxConnections))
 		report.WriteString(fmt.Sprintf("- Active: %d, Idle: %d, Idle in transaction: %d\n",
 			connStats.ActiveConnections, connStats.IdleConnections, connStats.IdleInTransaction))

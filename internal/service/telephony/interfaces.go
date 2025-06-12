@@ -78,14 +78,14 @@ type MetricsCollector interface {
 
 // InitiateCallRequest represents a request to initiate a call
 type InitiateCallRequest struct {
-	FromNumber   string
-	ToNumber     string
-	BuyerID      uuid.UUID
-	SellerID     *uuid.UUID
-	CallbackURL  string
-	RecordCall   bool
-	MaxDuration  int // Maximum call duration in seconds
-	Metadata     map[string]string
+	FromNumber  string
+	ToNumber    string
+	BuyerID     uuid.UUID
+	SellerID    *uuid.UUID
+	CallbackURL string
+	RecordCall  bool
+	MaxDuration int // Maximum call duration in seconds
+	Metadata    map[string]string
 }
 
 // CallResponse represents a response from call operations

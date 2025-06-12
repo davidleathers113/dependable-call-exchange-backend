@@ -193,7 +193,6 @@ func (m *AccountRepository) GetBuyerQualityMetrics(ctx context.Context, buyerID 
 	return args.Get(0).(*values.QualityMetrics), args.Error(1)
 }
 
-
 // NotificationService mock
 type NotificationService struct {
 	mock.Mock
@@ -239,7 +238,17 @@ func (m *NotificationService) NotifyBidExpired(ctx context.Context, b *bid.Bid) 
 	return args.Error(0)
 }
 
-// PaymentService mock  
+func (m *NotificationService) NotifyAuctionStarted(ctx context.Context, callID uuid.UUID) error {
+	args := m.Called(ctx, callID)
+	return args.Error(0)
+}
+
+func (m *NotificationService) NotifyAuctionClosed(ctx context.Context, result any) error {
+	args := m.Called(ctx, result)
+	return args.Error(0)
+}
+
+// PaymentService mock
 type PaymentService struct {
 	mock.Mock
 }
@@ -326,6 +335,14 @@ func (m *MetricsCollector) RecordBidAmount(ctx context.Context, amount float64) 
 	m.Called(ctx, amount)
 }
 
+func (m *MetricsCollector) RecordBidValidation(ctx context.Context, bidID uuid.UUID, valid bool, reason string) {
+	m.Called(ctx, bidID, valid, reason)
+}
+
+func (m *MetricsCollector) RecordAuctionParticipants(ctx context.Context, callID uuid.UUID, count int) {
+	m.Called(ctx, callID, count)
+}
+
 // Helper methods to setup common mock behaviors
 
 // WithDelay adds a delay to mock method calls (useful for testing timeouts)
@@ -339,7 +356,7 @@ func (m *CallRepository) ExpectCallLifecycle(ctx context.Context, callID uuid.UU
 		ID:     callID,
 		Status: call.StatusPending,
 	}
-	
+
 	m.On("GetByID", ctx, callID).Return(testCall, nil)
 	m.On("Update", ctx, mock.MatchedBy(func(c *call.Call) bool {
 		return c.ID == callID && c.Status == call.StatusQueued

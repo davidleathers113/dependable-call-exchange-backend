@@ -29,16 +29,16 @@ func NewPostgresContainer(ctx context.Context) (*PostgresContainer, error) {
 				WithStartupTimeout(30*time.Second),
 		),
 	)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to start postgres container: %w", err)
 	}
-	
+
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get connection string: %w", err)
 	}
-	
+
 	return &PostgresContainer{
 		PostgresContainer: pgContainer,
 		ConnectionString:  connStr,

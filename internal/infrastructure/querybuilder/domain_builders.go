@@ -3,10 +3,10 @@ package querybuilder
 import (
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
+	"github.com/google/uuid"
 )
 
 // Domain-specific query builders that provide type-safe, semantic query construction

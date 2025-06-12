@@ -12,7 +12,7 @@ import (
 // SetupLogger creates a new structured logger with OpenTelemetry integration
 func SetupLogger(level string) (*slog.Logger, error) {
 	var logLevel slog.Level
-	
+
 	switch strings.ToLower(level) {
 	case "debug":
 		logLevel = slog.LevelDebug
@@ -27,7 +27,7 @@ func SetupLogger(level string) (*slog.Logger, error) {
 	}
 
 	opts := &slog.HandlerOptions{
-		Level: logLevel,
+		Level:     logLevel,
 		AddSource: logLevel == slog.LevelDebug,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			// Add custom formatting if needed
@@ -39,7 +39,7 @@ func SetupLogger(level string) (*slog.Logger, error) {
 	handler := &TracedHandler{
 		Handler: slog.NewJSONHandler(os.Stdout, opts),
 	}
-	
+
 	logger := slog.New(handler)
 
 	return logger, nil
@@ -60,13 +60,13 @@ func (h *TracedHandler) Handle(ctx context.Context, r slog.Record) error {
 			slog.String("trace_id", span.SpanContext().TraceID().String()),
 			slog.String("span_id", span.SpanContext().SpanID().String()),
 		)
-		
+
 		// Add trace flags if sampled
 		if span.SpanContext().IsSampled() {
 			r.AddAttrs(slog.Bool("sampled", true))
 		}
 	}
-	
+
 	return h.Handler.Handle(ctx, r)
 }
 
@@ -81,16 +81,16 @@ func extractTraceAttrs(ctx context.Context) []any {
 	if !span.SpanContext().IsValid() {
 		return nil
 	}
-	
+
 	attrs := []any{
 		"trace_id", span.SpanContext().TraceID().String(),
 		"span_id", span.SpanContext().SpanID().String(),
 	}
-	
+
 	if span.SpanContext().IsSampled() {
 		attrs = append(attrs, "sampled", true)
 	}
-	
+
 	return attrs
 }
 

@@ -23,11 +23,11 @@ func TestRoundRobinRouter_Route(t *testing.T) {
 	bid4ID := uuid.MustParse("00000000-0000-0000-0000-000000000004")
 
 	tests := []struct {
-		name            string
-		call            *call.Call
-		bids            []*bid.Bid
-		expectedError   bool
-		expectedBidIDs  []uuid.UUID // Expected sequence of bid IDs
+		name           string
+		call           *call.Call
+		bids           []*bid.Bid
+		expectedError  bool
+		expectedBidIDs []uuid.UUID // Expected sequence of bid IDs
 	}{
 		{
 			name: "cycles through bids in order",
@@ -111,7 +111,7 @@ func TestRoundRobinRouter_Route(t *testing.T) {
 
 func TestSkillBasedRouter_Route(t *testing.T) {
 	ctx := context.Background()
-	
+
 	tests := []struct {
 		name           string
 		call           *call.Call
@@ -242,9 +242,9 @@ func TestSkillBasedRouter_Route(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := NewSkillBasedRouter(tt.skillWeights)
-			
+
 			decision, err := router.Route(ctx, tt.call, tt.bids)
-			
+
 			if tt.expectedError {
 				require.Error(t, err)
 			} else {
@@ -259,16 +259,16 @@ func TestSkillBasedRouter_Route(t *testing.T) {
 
 func TestCostBasedRouter_Route(t *testing.T) {
 	ctx := context.Background()
-	
+
 	tests := []struct {
-		name            string
-		call            *call.Call
-		bids            []*bid.Bid
-		qualityWeight   float64
-		priceWeight     float64
-		capacityWeight  float64
-		expectedError   bool
-		expectedWinner  int
+		name           string
+		call           *call.Call
+		bids           []*bid.Bid
+		qualityWeight  float64
+		priceWeight    float64
+		capacityWeight float64
+		expectedError  bool
+		expectedWinner int
 	}{
 		{
 			name: "balances quality and price",
@@ -339,28 +339,28 @@ func TestCostBasedRouter_Route(t *testing.T) {
 			expectedWinner: 0, // First bid when equal
 		},
 		{
-			name:           "errors with no bids",
-			call:           &call.Call{ID: uuid.New(), Status: call.StatusPending},
-			bids:           []*bid.Bid{},
-			qualityWeight:  0.5,
-			priceWeight:    0.5,
-			expectedError:  true,
+			name:          "errors with no bids",
+			call:          &call.Call{ID: uuid.New(), Status: call.StatusPending},
+			bids:          []*bid.Bid{},
+			qualityWeight: 0.5,
+			priceWeight:   0.5,
+			expectedError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := NewCostBasedRouter(tt.qualityWeight, tt.priceWeight, tt.capacityWeight)
-			
+
 			decision, err := router.Route(ctx, tt.call, tt.bids)
-			
+
 			if tt.expectedError {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 				assert.Equal(t, tt.bids[tt.expectedWinner].ID, decision.BidID)
 				assert.Equal(t, "cost-based", decision.Algorithm)
-				
+
 				// Verify metadata contains scores
 				metadata := decision.Metadata
 				assert.Contains(t, metadata, "quality_score")
@@ -374,47 +374,47 @@ func TestCostBasedRouter_Route(t *testing.T) {
 
 func TestCostBasedRouter_WeightNormalization(t *testing.T) {
 	tests := []struct {
-		name                    string
-		qualityWeight           float64
-		priceWeight             float64
-		capacityWeight          float64
-		expectedQualityWeight   float64
-		expectedPriceWeight     float64
-		expectedCapacityWeight  float64
+		name                   string
+		qualityWeight          float64
+		priceWeight            float64
+		capacityWeight         float64
+		expectedQualityWeight  float64
+		expectedPriceWeight    float64
+		expectedCapacityWeight float64
 	}{
 		{
-			name:                    "normalizes non-unit weights",
-			qualityWeight:           2.0,
-			priceWeight:             3.0,
-			capacityWeight:          5.0,
-			expectedQualityWeight:   0.2,
-			expectedPriceWeight:     0.3,
-			expectedCapacityWeight:  0.5,
+			name:                   "normalizes non-unit weights",
+			qualityWeight:          2.0,
+			priceWeight:            3.0,
+			capacityWeight:         5.0,
+			expectedQualityWeight:  0.2,
+			expectedPriceWeight:    0.3,
+			expectedCapacityWeight: 0.5,
 		},
 		{
-			name:                    "handles zero weights with defaults",
-			qualityWeight:           0,
-			priceWeight:             0,
-			capacityWeight:          0,
-			expectedQualityWeight:   0.33,
-			expectedPriceWeight:     0.33,
-			expectedCapacityWeight:  0.34,
+			name:                   "handles zero weights with defaults",
+			qualityWeight:          0,
+			priceWeight:            0,
+			capacityWeight:         0,
+			expectedQualityWeight:  0.33,
+			expectedPriceWeight:    0.33,
+			expectedCapacityWeight: 0.34,
 		},
 		{
-			name:                    "preserves unit weights",
-			qualityWeight:           0.4,
-			priceWeight:             0.4,
-			capacityWeight:          0.2,
-			expectedQualityWeight:   0.4,
-			expectedPriceWeight:     0.4,
-			expectedCapacityWeight:  0.2,
+			name:                   "preserves unit weights",
+			qualityWeight:          0.4,
+			priceWeight:            0.4,
+			capacityWeight:         0.2,
+			expectedQualityWeight:  0.4,
+			expectedPriceWeight:    0.4,
+			expectedCapacityWeight: 0.2,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := NewCostBasedRouter(tt.qualityWeight, tt.priceWeight, tt.capacityWeight)
-			
+
 			assert.InDelta(t, tt.expectedQualityWeight, router.qualityWeight, 0.01)
 			assert.InDelta(t, tt.expectedPriceWeight, router.priceWeight, 0.01)
 			assert.InDelta(t, tt.expectedCapacityWeight, router.capacityWeight, 0.01)
@@ -425,12 +425,12 @@ func TestCostBasedRouter_WeightNormalization(t *testing.T) {
 func BenchmarkRoundRobinRouter_Route(b *testing.B) {
 	ctx := context.Background()
 	router := NewRoundRobinRouter()
-	
+
 	call := &call.Call{
 		ID:     uuid.New(),
 		Status: call.StatusPending,
 	}
-	
+
 	bids := make([]*bid.Bid, 100)
 	for i := 0; i < 100; i++ {
 		bids[i] = &bid.Bid{
@@ -439,9 +439,9 @@ func BenchmarkRoundRobinRouter_Route(b *testing.B) {
 			BuyerID: uuid.New(),
 		}
 	}
-	
+
 	b.ResetTimer()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, _ = router.Route(ctx, call, bids)
 	}
@@ -450,19 +450,19 @@ func BenchmarkRoundRobinRouter_Route(b *testing.B) {
 func BenchmarkCostBasedRouter_Route(b *testing.B) {
 	ctx := context.Background()
 	router := NewCostBasedRouter(0.4, 0.4, 0.2)
-	
+
 	call := &call.Call{
 		ID:     uuid.New(),
 		Status: call.StatusPending,
 	}
-	
+
 	bids := make([]*bid.Bid, 100)
 	for i := 0; i < 100; i++ {
 		bids[i] = &bid.Bid{
 			ID:      uuid.New(),
 			Status:  bid.StatusActive,
 			BuyerID: uuid.New(),
-			Amount:  values.MustNewMoneyFromFloat(float64(i%50) + 1.0, "USD"),
+			Amount:  values.MustNewMoneyFromFloat(float64(i%50)+1.0, "USD"),
 			Quality: values.QualityMetrics{
 				ConversionRate:   float64(i%20) / 100.0,
 				AverageCallTime:  150 + i%100,
@@ -471,9 +471,9 @@ func BenchmarkCostBasedRouter_Route(b *testing.B) {
 			},
 		}
 	}
-	
+
 	b.ResetTimer()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, _ = router.Route(ctx, call, bids)
 	}

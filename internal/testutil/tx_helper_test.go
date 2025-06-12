@@ -70,7 +70,7 @@ func TestWithTransactionContext(t *testing.T) {
 
 	t.Run("context cancellation", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
-		
+
 		WithTransactionContext(t, ctx, db, func(ctx context.Context, tx *sql.Tx) {
 			// Insert test data
 			_, err := tx.ExecContext(ctx, `
@@ -109,7 +109,7 @@ func TestWithParallelTransactions(t *testing.T) {
 		func(tx *sql.Tx) {
 			wg.Add(1)
 			defer wg.Done()
-			
+
 			// Transaction 1: Insert buyer
 			_, err := tx.Exec(`
 				INSERT INTO accounts (email, name, type, status) 
@@ -121,7 +121,7 @@ func TestWithParallelTransactions(t *testing.T) {
 		func(tx *sql.Tx) {
 			wg.Add(1)
 			defer wg.Done()
-			
+
 			// Transaction 2: Insert seller
 			_, err := tx.Exec(`
 				INSERT INTO accounts (email, name, type, status) 
@@ -133,7 +133,7 @@ func TestWithParallelTransactions(t *testing.T) {
 		func(tx *sql.Tx) {
 			wg.Add(1)
 			defer wg.Done()
-			
+
 			// Transaction 3: Insert admin
 			_, err := tx.Exec(`
 				INSERT INTO accounts (email, name, type, status) 

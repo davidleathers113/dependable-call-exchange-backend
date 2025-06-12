@@ -36,21 +36,21 @@ func TestService_RouteCall(t *testing.T) {
 		validate      func(*testing.T, *RoutingDecision)
 	}{
 		{
-			name: "successful round-robin routing",
+			name:   "successful round-robin routing",
 			callID: testCallID1,
 			setupMocks: func(cr *mocks.CallRepository, br *mocks.BidRepository, ar *mocks.AccountRepository, callID uuid.UUID) {
 				testCall := &call.Call{
 					ID:     callID,
 					Status: call.StatusPending,
 				}
-				
+
 				bids := []*bid.Bid{
 					{
-						ID:           uuid.New(),
-						CallID:       callID,
-						BuyerID:      uuid.New(),
-						Amount:       values.MustNewMoneyFromFloat(5.0, "USD"),
-						Status:       bid.StatusActive,
+						ID:      uuid.New(),
+						CallID:  callID,
+						BuyerID: uuid.New(),
+						Amount:  values.MustNewMoneyFromFloat(5.0, "USD"),
+						Status:  bid.StatusActive,
 						Quality: values.QualityMetrics{
 							ConversionRate:   0.15,
 							AverageCallTime:  180,
@@ -59,11 +59,11 @@ func TestService_RouteCall(t *testing.T) {
 						},
 					},
 					{
-						ID:           uuid.New(),
-						CallID:       callID,
-						BuyerID:      uuid.New(),
-						Amount:       values.MustNewMoneyFromFloat(4.5, "USD"),
-						Status:       bid.StatusActive,
+						ID:      uuid.New(),
+						CallID:  callID,
+						BuyerID: uuid.New(),
+						Amount:  values.MustNewMoneyFromFloat(4.5, "USD"),
+						Status:  bid.StatusActive,
 						Quality: values.QualityMetrics{
 							ConversionRate:   0.20,
 							AverageCallTime:  160,
@@ -72,11 +72,11 @@ func TestService_RouteCall(t *testing.T) {
 						},
 					},
 				}
-				
+
 				cr.On("GetByID", ctx, callID).Return(testCall, nil)
 				br.On("GetActiveBidsForCall", ctx, callID).Return(bids, nil)
 				cr.On("Update", ctx, testCall).Return(nil)
-				
+
 				// Mock GetBidByID for any bid ID (round-robin will select the first bid)
 				br.On("GetBidByID", ctx, mock.Anything).Return(bids[0], nil)
 				br.On("Update", ctx, mock.Anything).Return(nil)
@@ -94,7 +94,7 @@ func TestService_RouteCall(t *testing.T) {
 			},
 		},
 		{
-			name: "successful skill-based routing",
+			name:   "successful skill-based routing",
 			callID: testCallID2,
 			setupMocks: func(cr *mocks.CallRepository, br *mocks.BidRepository, ar *mocks.AccountRepository, callID uuid.UUID) {
 				testCall := &call.Call{
@@ -102,14 +102,14 @@ func TestService_RouteCall(t *testing.T) {
 					Status:    call.StatusPending,
 					Direction: call.DirectionInbound,
 				}
-				
+
 				bids := []*bid.Bid{
 					{
-						ID:           uuid.New(),
-						CallID:       callID,
-						BuyerID:      uuid.New(),
-						Amount:       values.MustNewMoneyFromFloat(5.0, "USD"),
-						Status:       bid.StatusActive,
+						ID:      uuid.New(),
+						CallID:  callID,
+						BuyerID: uuid.New(),
+						Amount:  values.MustNewMoneyFromFloat(5.0, "USD"),
+						Status:  bid.StatusActive,
 						Criteria: bid.BidCriteria{
 							CallType: []string{"outbound"}, // Won't match
 						},
@@ -121,11 +121,11 @@ func TestService_RouteCall(t *testing.T) {
 						},
 					},
 					{
-						ID:           uuid.New(),
-						CallID:       callID,
-						BuyerID:      uuid.New(),
-						Amount:       values.MustNewMoneyFromFloat(4.5, "USD"),
-						Status:       bid.StatusActive,
+						ID:      uuid.New(),
+						CallID:  callID,
+						BuyerID: uuid.New(),
+						Amount:  values.MustNewMoneyFromFloat(4.5, "USD"),
+						Status:  bid.StatusActive,
 						Criteria: bid.BidCriteria{
 							CallType: []string{"inbound"}, // Will match
 						},
@@ -137,11 +137,11 @@ func TestService_RouteCall(t *testing.T) {
 						},
 					},
 				}
-				
+
 				cr.On("GetByID", ctx, callID).Return(testCall, nil)
 				br.On("GetActiveBidsForCall", ctx, callID).Return(bids, nil)
 				cr.On("Update", ctx, testCall).Return(nil)
-				
+
 				// Mock GetBidByID for any bid ID (skill-based will select the second bid)
 				br.On("GetBidByID", ctx, mock.Anything).Return(bids[1], nil)
 				br.On("Update", ctx, mock.Anything).Return(nil)
@@ -157,21 +157,21 @@ func TestService_RouteCall(t *testing.T) {
 			},
 		},
 		{
-			name: "successful cost-based routing",
+			name:   "successful cost-based routing",
 			callID: testCallID3,
 			setupMocks: func(cr *mocks.CallRepository, br *mocks.BidRepository, ar *mocks.AccountRepository, callID uuid.UUID) {
 				testCall := &call.Call{
 					ID:     callID,
 					Status: call.StatusPending,
 				}
-				
+
 				bids := []*bid.Bid{
 					{
-						ID:           uuid.New(),
-						CallID:       callID,
-						BuyerID:      uuid.New(),
-						Amount:       values.MustNewMoneyFromFloat(5.0, "USD"),
-						Status:       bid.StatusActive,
+						ID:      uuid.New(),
+						CallID:  callID,
+						BuyerID: uuid.New(),
+						Amount:  values.MustNewMoneyFromFloat(5.0, "USD"),
+						Status:  bid.StatusActive,
 						Quality: values.QualityMetrics{
 							ConversionRate:   0.10,
 							AverageCallTime:  200,
@@ -180,11 +180,11 @@ func TestService_RouteCall(t *testing.T) {
 						},
 					},
 					{
-						ID:           uuid.New(),
-						CallID:       callID,
-						BuyerID:      uuid.New(),
-						Amount:       values.MustNewMoneyFromFloat(3.0, "USD"),
-						Status:       bid.StatusActive,
+						ID:      uuid.New(),
+						CallID:  callID,
+						BuyerID: uuid.New(),
+						Amount:  values.MustNewMoneyFromFloat(3.0, "USD"),
+						Status:  bid.StatusActive,
 						Quality: values.QualityMetrics{
 							ConversionRate:   0.25,
 							AverageCallTime:  180,
@@ -193,11 +193,11 @@ func TestService_RouteCall(t *testing.T) {
 						},
 					},
 				}
-				
+
 				cr.On("GetByID", ctx, callID).Return(testCall, nil)
 				br.On("GetActiveBidsForCall", ctx, callID).Return(bids, nil)
 				cr.On("Update", ctx, testCall).Return(nil)
-				
+
 				// Mock GetBidByID for any bid ID
 				br.On("GetBidByID", ctx, mock.Anything).Return(bids[0], nil)
 				br.On("Update", ctx, mock.Anything).Return(nil)
@@ -219,7 +219,7 @@ func TestService_RouteCall(t *testing.T) {
 			},
 		},
 		{
-			name: "call not found",
+			name:   "call not found",
 			callID: testCallID4,
 			setupMocks: func(cr *mocks.CallRepository, br *mocks.BidRepository, ar *mocks.AccountRepository, callID uuid.UUID) {
 				cr.On("GetByID", ctx, callID).Return(nil, assert.AnError)
@@ -229,7 +229,7 @@ func TestService_RouteCall(t *testing.T) {
 			errorContains: "not found",
 		},
 		{
-			name: "call not in pending state",
+			name:   "call not in pending state",
 			callID: testCallID5,
 			setupMocks: func(cr *mocks.CallRepository, br *mocks.BidRepository, ar *mocks.AccountRepository, callID uuid.UUID) {
 				testCall := &call.Call{
@@ -243,7 +243,7 @@ func TestService_RouteCall(t *testing.T) {
 			errorContains: "not in pending state",
 		},
 		{
-			name: "no bids available",
+			name:   "no bids available",
 			callID: testCallID6,
 			setupMocks: func(cr *mocks.CallRepository, br *mocks.BidRepository, ar *mocks.AccountRepository, callID uuid.UUID) {
 				testCall := &call.Call{
@@ -258,14 +258,14 @@ func TestService_RouteCall(t *testing.T) {
 			errorContains: "no bids available",
 		},
 		{
-			name: "no active bids",
+			name:   "no active bids",
 			callID: testCallID7,
 			setupMocks: func(cr *mocks.CallRepository, br *mocks.BidRepository, ar *mocks.AccountRepository, callID uuid.UUID) {
 				testCall := &call.Call{
 					ID:     callID,
 					Status: call.StatusPending,
 				}
-				
+
 				bids := []*bid.Bid{
 					{
 						ID:      uuid.New(),
@@ -274,7 +274,7 @@ func TestService_RouteCall(t *testing.T) {
 						Status:  bid.StatusExpired,
 					},
 				}
-				
+
 				cr.On("GetByID", ctx, callID).Return(testCall, nil)
 				br.On("GetActiveBidsForCall", ctx, callID).Return(bids, nil)
 			},
@@ -291,22 +291,22 @@ func TestService_RouteCall(t *testing.T) {
 			bidRepo := new(mocks.BidRepository)
 			accountRepo := new(mocks.AccountRepository)
 			metrics := new(MockMetricsCollector)
-			
+
 			// Setup mocks
 			tt.setupMocks(callRepo, bidRepo, accountRepo, tt.callID)
-			
+
 			// Setup metrics expectations if metrics is provided
 			if !tt.expectedError {
 				metrics.On("RecordRoutingDecision", ctx, mock.Anything).Return()
 				metrics.On("RecordRoutingLatency", ctx, mock.Anything, mock.Anything).Return()
 			}
-			
+
 			// Create service
 			svc := NewService(callRepo, bidRepo, accountRepo, metrics, tt.rules)
-			
+
 			// Execute
 			decision, err := svc.RouteCall(ctx, tt.callID)
-			
+
 			// Validate
 			if tt.expectedError {
 				require.Error(t, err)
@@ -315,7 +315,7 @@ func TestService_RouteCall(t *testing.T) {
 				require.NoError(t, err)
 				tt.validate(t, decision)
 			}
-			
+
 			// Assert expectations
 			callRepo.AssertExpectations(t)
 			bidRepo.AssertExpectations(t)
@@ -341,14 +341,14 @@ func TestService_UpdateRoutingRules(t *testing.T) {
 		PriceWeight:    0.3,
 		CapacityWeight: 0.2,
 	}
-	
+
 	err := svc.UpdateRoutingRules(context.Background(), newRules)
 	require.NoError(t, err)
-	
+
 	// Verify router was updated (would need to expose router type or test behavior)
 	s := svc.(*service)
 	assert.Equal(t, "cost-based", s.router.GetAlgorithm())
-	
+
 	// Test nil rules
 	err = svc.UpdateRoutingRules(context.Background(), nil)
 	require.Error(t, err)
@@ -357,31 +357,31 @@ func TestService_UpdateRoutingRules(t *testing.T) {
 
 func TestService_ConcurrentRouting(t *testing.T) {
 	ctx := context.Background()
-	
+
 	// Setup mocks
 	callRepo := new(mocks.CallRepository)
 	bidRepo := new(mocks.BidRepository)
 	accountRepo := new(mocks.AccountRepository)
-	
+
 	// Create multiple calls and bids
 	numCalls := 10
 	calls := make([]*call.Call, numCalls)
 	allBids := make(map[uuid.UUID][]*bid.Bid)
-	
+
 	for i := 0; i < numCalls; i++ {
 		callID := uuid.New()
 		calls[i] = &call.Call{
 			ID:     callID,
 			Status: call.StatusPending,
 		}
-		
+
 		bids := []*bid.Bid{
 			{
-				ID:           uuid.New(),
-				CallID:       callID,
-				BuyerID:      uuid.New(),
-				Amount:       values.MustNewMoneyFromFloat(5.0, "USD"),
-				Status:       bid.StatusActive,
+				ID:      uuid.New(),
+				CallID:  callID,
+				BuyerID: uuid.New(),
+				Amount:  values.MustNewMoneyFromFloat(5.0, "USD"),
+				Status:  bid.StatusActive,
 				Quality: values.QualityMetrics{
 					ConversionRate:   0.15,
 					AverageCallTime:  180,
@@ -390,14 +390,14 @@ func TestService_ConcurrentRouting(t *testing.T) {
 				},
 			},
 		}
-		
+
 		allBids[callID] = bids
-		
+
 		callRepo.On("GetByID", ctx, callID).Return(calls[i], nil)
 		bidRepo.On("GetActiveBidsForCall", ctx, callID).Return(bids, nil)
 		callRepo.On("Update", ctx, calls[i]).Return(nil)
 	}
-	
+
 	// Set up generic mocks for GetBidByID and Update that work for any bid
 	// We need to set up individual mocks for each bid since testify doesn't support dynamic returns
 	for _, bids := range allBids {
@@ -406,9 +406,9 @@ func TestService_ConcurrentRouting(t *testing.T) {
 			bidRepo.On("GetBidByID", ctx, bidCopy.ID).Return(bidCopy, nil).Maybe()
 		}
 	}
-	
+
 	bidRepo.On("Update", ctx, mock.Anything).Return(nil)
-	
+
 	// Create service
 	svc := NewService(
 		callRepo,
@@ -417,7 +417,7 @@ func TestService_ConcurrentRouting(t *testing.T) {
 		nil,
 		&RoutingRules{Algorithm: "round-robin"},
 	)
-	
+
 	// Route calls concurrently
 	errors := make(chan error, numCalls)
 	for i := 0; i < numCalls; i++ {
@@ -426,13 +426,13 @@ func TestService_ConcurrentRouting(t *testing.T) {
 			errors <- err
 		}(calls[i].ID)
 	}
-	
+
 	// Collect results
 	for i := 0; i < numCalls; i++ {
 		err := <-errors
 		require.NoError(t, err)
 	}
-	
+
 	// Verify all calls were processed
 	callRepo.AssertExpectations(t)
 	bidRepo.AssertExpectations(t)
@@ -440,26 +440,26 @@ func TestService_ConcurrentRouting(t *testing.T) {
 
 func BenchmarkService_RouteCall(b *testing.B) {
 	ctx := context.Background()
-	
+
 	// Setup
 	callRepo := new(mocks.CallRepository)
 	bidRepo := new(mocks.BidRepository)
 	accountRepo := new(mocks.AccountRepository)
-	
+
 	callID := uuid.New()
 	testCall := &call.Call{
 		ID:     callID,
 		Status: call.StatusPending,
 	}
-	
+
 	bids := make([]*bid.Bid, 100)
 	for i := 0; i < 100; i++ {
 		bids[i] = &bid.Bid{
-			ID:           uuid.New(),
-			CallID:       callID,
-			BuyerID:      uuid.New(),
-			Amount:       values.MustNewMoneyFromFloat(float64(i) + 1.0, "USD"),
-			Status:       bid.StatusActive,
+			ID:      uuid.New(),
+			CallID:  callID,
+			BuyerID: uuid.New(),
+			Amount:  values.MustNewMoneyFromFloat(float64(i)+1.0, "USD"),
+			Status:  bid.StatusActive,
 			Quality: values.QualityMetrics{
 				ConversionRate:   float64(i%20) / 100.0,
 				AverageCallTime:  150 + i%100,
@@ -468,11 +468,11 @@ func BenchmarkService_RouteCall(b *testing.B) {
 			},
 		}
 	}
-	
+
 	callRepo.On("GetByID", ctx, callID).Return(testCall, nil)
 	bidRepo.On("GetActiveBidsForCall", ctx, callID).Return(bids, nil)
 	callRepo.On("Update", ctx, testCall).Return(nil)
-	
+
 	svc := NewService(
 		callRepo,
 		bidRepo,
@@ -485,9 +485,9 @@ func BenchmarkService_RouteCall(b *testing.B) {
 			CapacityWeight: 0.2,
 		},
 	)
-	
+
 	b.ResetTimer()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, _ = svc.RouteCall(ctx, callID)
 	}
