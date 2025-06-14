@@ -31,7 +31,7 @@ Parse the following arguments from "$ARGUMENTS":
 1. `analysis_scope` - What to analyze (default: full)
    Options: full, domain-gaps, service-coverage, security-audit, performance-bottlenecks
    
-2. `output_dir` - Directory for plan and specs (default: ./dce-planning/)
+2. `output_dir` - Directory for plan and specs (default: ./.claude/planning/)
    
 3. `priority_focus` - Business priority for planning (default: balanced)
    Options: revenue-generation, compliance-critical, performance-optimization, reliability

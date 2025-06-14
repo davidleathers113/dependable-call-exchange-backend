@@ -130,9 +130,13 @@ func initializeServices(repos *repository.Repositories, cfg *config.Config) *res
 	// Create service factories with proper dependency injection
 	factories := service.NewServiceFactories(repos)
 
+	// Create consent service first as it's needed by call routing
+	consentService := factories.CreateConsentService()
+
 	// Initialize all core services using factory methods
 	return &rest.Services{
-		CallRouting:  factories.CreateCallRoutingService(),
+		Consent:      consentService,
+		CallRouting:  factories.CreateCallRoutingService(consentService),
 		Bidding:      factories.CreateBiddingService(),
 		Telephony:    factories.CreateTelephonyService(),
 		Fraud:        factories.CreateFraudService(),

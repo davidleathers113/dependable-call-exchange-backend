@@ -13,13 +13,14 @@ import (
 
 // service implements the Service interface
 type service struct {
-	callRepo    CallRepository
-	bidRepo     BidRepository
-	accountRepo AccountRepository
-	metrics     MetricsCollector
-	router      Router
-	rules       *RoutingRules
-	mu          sync.RWMutex
+	callRepo       CallRepository
+	bidRepo        BidRepository
+	accountRepo    AccountRepository
+	consentService ConsentService
+	metrics        MetricsCollector
+	router         Router
+	rules          *RoutingRules
+	mu             sync.RWMutex
 }
 
 // NewService creates a new call routing service
@@ -27,6 +28,7 @@ func NewService(
 	callRepo CallRepository,
 	bidRepo BidRepository,
 	accountRepo AccountRepository,
+	consentService ConsentService,
 	metrics MetricsCollector,
 	initialRules *RoutingRules,
 ) Service {
@@ -34,12 +36,13 @@ func NewService(
 	router := createRouter(initialRules)
 
 	return &service{
-		callRepo:    callRepo,
-		bidRepo:     bidRepo,
-		accountRepo: accountRepo,
-		metrics:     metrics,
-		router:      router,
-		rules:       initialRules,
+		callRepo:       callRepo,
+		bidRepo:        bidRepo,
+		accountRepo:    accountRepo,
+		consentService: consentService,
+		metrics:        metrics,
+		router:         router,
+		rules:          initialRules,
 	}
 }
 
@@ -62,6 +65,36 @@ func (s *service) RouteCall(ctx context.Context, callID uuid.UUID) (*RoutingDeci
 			WithDetails(map[string]interface{}{
 				"call_id": callID,
 				"status":  c.Status.String(),
+			})
+	}
+
+	// Check consent for the call
+	// For inbound calls, check if the caller has given consent
+	// For outbound calls, check if the callee has given consent
+	phoneNumberToCheck := ""
+	if c.Direction == call.DirectionInbound {
+		phoneNumberToCheck = c.FromNumber.String()
+	} else {
+		phoneNumberToCheck = c.ToNumber.String()
+	}
+
+	hasConsent, err := s.consentService.CheckConsent(ctx, phoneNumberToCheck, "CALL")
+	if err != nil {
+		return nil, errors.NewInternalError("failed to check consent").
+			WithCause(err).
+			WithDetails(map[string]interface{}{
+				"call_id":      callID,
+				"phone_number": phoneNumberToCheck,
+			})
+	}
+
+	if !hasConsent {
+		return nil, errors.NewComplianceError("NO_CONSENT",
+			"no consent found for phone number").
+			WithDetails(map[string]interface{}{
+				"call_id":      callID,
+				"phone_number": phoneNumberToCheck,
+				"direction":    c.Direction.String(),
 			})
 	}
 

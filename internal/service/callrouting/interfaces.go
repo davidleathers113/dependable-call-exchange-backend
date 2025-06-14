@@ -54,6 +54,12 @@ type AccountRepository interface {
 	UpdateQualityScore(ctx context.Context, accountID uuid.UUID, score float64) error
 }
 
+// ConsentService defines the interface for consent checking
+type ConsentService interface {
+	// CheckConsent verifies if consent exists for a phone number
+	CheckConsent(ctx context.Context, phoneNumber string, consentType string) (bool, error)
+}
+
 // MetricsCollector defines the interface for collecting routing metrics
 type MetricsCollector interface {
 	// RecordRoutingDecision records a routing decision

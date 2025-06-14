@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -241,6 +242,22 @@ func (tdb *TestDB) DB() *sql.DB {
 	return tdb.db
 }
 
+// PgxPool returns a pgx connection pool for tests that need it
+func (tdb *TestDB) PgxPool() *pgxpool.Pool {
+	tdb.t.Helper()
+	
+	connStr := tdb.ConnectionString()
+	pool, err := pgxpool.New(context.Background(), connStr)
+	require.NoError(tdb.t, err)
+	
+	// Register cleanup to close the pool
+	tdb.t.Cleanup(func() {
+		pool.Close()
+	})
+	
+	return pool
+}
+
 // InitSchema initializes the database schema
 func (tdb *TestDB) InitSchema() {
 	tdb.t.Helper()
@@ -427,6 +444,78 @@ func (tdb *TestDB) InitSchema() {
 		CREATE TRIGGER update_compliance_rules_updated_at BEFORE UPDATE ON compliance_rules
 			FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 	`)
+
+	// Add consent management tables
+	tdb.execMulti(ctx, `
+		-- Create consent consumers table
+		CREATE TABLE IF NOT EXISTS consent_consumers (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			phone_number VARCHAR(20),
+			email VARCHAR(255),
+			first_name VARCHAR(100) NOT NULL,
+			last_name VARCHAR(100) NOT NULL,
+			metadata JSONB DEFAULT '{}',
+			created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+			CONSTRAINT check_contact CHECK (phone_number IS NOT NULL OR email IS NOT NULL)
+		);
+
+		-- Create consent aggregates table
+		CREATE TABLE IF NOT EXISTS consent_aggregates (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			consumer_id UUID NOT NULL REFERENCES consent_consumers(id),
+			business_id UUID NOT NULL,
+			consent_type VARCHAR(20) NOT NULL DEFAULT 'tcpa',
+			current_version INTEGER NOT NULL DEFAULT 1,
+			created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+		);
+
+		-- Create consent versions table
+		CREATE TABLE IF NOT EXISTS consent_versions (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			consent_id UUID NOT NULL REFERENCES consent_aggregates(id) ON DELETE CASCADE,
+			version_number INTEGER NOT NULL,
+			status VARCHAR(20) NOT NULL CHECK (status IN ('pending', 'active', 'revoked', 'expired')),
+			channels TEXT[] NOT NULL CHECK (array_length(channels, 1) > 0),
+			purpose VARCHAR(50) NOT NULL,
+			source VARCHAR(50) NOT NULL,
+			source_details JSONB DEFAULT '{}',
+			consented_at TIMESTAMP WITH TIME ZONE,
+			expires_at TIMESTAMP WITH TIME ZONE,
+			revoked_at TIMESTAMP WITH TIME ZONE,
+			created_by UUID NOT NULL,
+			created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+			CONSTRAINT uk_consent_version UNIQUE (consent_id, version_number)
+		);
+
+		-- Create consent proofs table
+		CREATE TABLE IF NOT EXISTS consent_proofs (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			consent_version_id UUID NOT NULL REFERENCES consent_versions(id) ON DELETE CASCADE,
+			proof_type VARCHAR(50) NOT NULL,
+			storage_location TEXT NOT NULL,
+			hash VARCHAR(256) NOT NULL,
+			algorithm VARCHAR(20) NOT NULL DEFAULT 'SHA256',
+			metadata JSONB DEFAULT '{}',
+			created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+		);
+
+		-- Create indexes for consent tables
+		CREATE INDEX IF NOT EXISTS idx_consent_consumers_phone ON consent_consumers(phone_number) WHERE phone_number IS NOT NULL;
+		CREATE INDEX IF NOT EXISTS idx_consent_consumers_email ON consent_consumers(email) WHERE email IS NOT NULL;
+		CREATE INDEX IF NOT EXISTS idx_consent_aggregates_consumer_id ON consent_aggregates(consumer_id);
+		CREATE INDEX IF NOT EXISTS idx_consent_aggregates_business_id ON consent_aggregates(business_id);
+		CREATE INDEX IF NOT EXISTS idx_consent_versions_consent_id ON consent_versions(consent_id);
+		CREATE INDEX IF NOT EXISTS idx_consent_versions_status ON consent_versions(status);
+		CREATE INDEX IF NOT EXISTS idx_consent_proofs_version_id ON consent_proofs(consent_version_id);
+
+		-- Add consent triggers
+		CREATE TRIGGER update_consent_consumers_updated_at BEFORE UPDATE ON consent_consumers
+			FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+		CREATE TRIGGER update_consent_aggregates_updated_at BEFORE UPDATE ON consent_aggregates
+			FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+	`)
 }
 
 // execMulti executes multiple SQL statements
@@ -442,6 +531,10 @@ func (tdb *TestDB) TruncateTables() {
 
 	ctx := context.Background()
 	tables := []string{
+		"consent_proofs",
+		"consent_versions", 
+		"consent_aggregates",
+		"consent_consumers",
 		"consent_records",
 		"compliance_rules",
 		"bids",

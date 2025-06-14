@@ -34,9 +34,9 @@ type AppError struct {
 
 func (e *AppError) Error() string {
 	if e.Cause != nil {
-		return fmt.Sprintf("%s: %v", e.Message, e.Cause)
+		return fmt.Sprintf("%s: %s: %v", e.Code, e.Message, e.Cause)
 	}
-	return e.Message
+	return fmt.Sprintf("%s: %s", e.Code, e.Message)
 }
 
 func (e *AppError) Unwrap() error {
@@ -218,4 +218,14 @@ func GetStatusCode(err error) int {
 		return appErr.StatusCode
 	}
 	return 500
+}
+
+// IsNotFound checks if an error is a not found error
+func IsNotFound(err error) bool {
+	return IsType(err, ErrorTypeNotFound)
+}
+
+// IsConflict checks if an error is a conflict error
+func IsConflict(err error) bool {
+	return IsType(err, ErrorTypeConflict)
 }

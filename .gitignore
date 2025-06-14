@@ -152,3 +152,8 @@ analysis/reports/*.json
 analysis/reports/*.html
 analysis/ci/
 analysis/baseline/
+
+# Claude runtime files
+.claude/context/
+.claude/planning/master-plan.md
+.claude/planning/execute-plan.sh

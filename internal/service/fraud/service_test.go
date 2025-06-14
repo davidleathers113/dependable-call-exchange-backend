@@ -39,12 +39,12 @@ func TestService_CheckCall(t *testing.T) {
 				}, nil)
 				vc.On("RecordAction", ctx, mock.AnythingOfType("uuid.UUID"), "call_placement").Return(nil)
 
-				ml.On("Predict", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&Prediction{
+				ml.On("Predict", ctx, mock.AnythingOfType("fraud.MLFeatures")).Return(&Prediction{
 					FraudProbability: 0.1,
 					Confidence:       0.9,
 				}, nil)
 
-				re.On("Evaluate", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&RuleResult{
+				re.On("Evaluate", ctx, mock.AnythingOfType("fraud.MLFeatures")).Return(&RuleResult{
 					Matched: false,
 				}, nil)
 
@@ -96,12 +96,12 @@ func TestService_CheckCall(t *testing.T) {
 				}, nil)
 				vc.On("RecordAction", ctx, mock.AnythingOfType("uuid.UUID"), "call_placement").Return(nil)
 
-				ml.On("Predict", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&Prediction{
+				ml.On("Predict", ctx, mock.AnythingOfType("fraud.MLFeatures")).Return(&Prediction{
 					FraudProbability: 0.2,
 					Confidence:       0.8,
 				}, nil)
 
-				re.On("Evaluate", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&RuleResult{
+				re.On("Evaluate", ctx, mock.AnythingOfType("fraud.MLFeatures")).Return(&RuleResult{
 					Matched: false,
 				}, nil)
 
@@ -130,13 +130,13 @@ func TestService_CheckCall(t *testing.T) {
 				}, nil)
 				vc.On("RecordAction", ctx, mock.AnythingOfType("uuid.UUID"), "call_placement").Return(nil)
 
-				ml.On("Predict", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&Prediction{
+				ml.On("Predict", ctx, mock.AnythingOfType("fraud.MLFeatures")).Return(&Prediction{
 					FraudProbability: 0.85,
 					Confidence:       0.95,
 					Explanations:     []string{"Unusual calling pattern", "Time anomaly"},
 				}, nil)
 
-				re.On("Evaluate", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&RuleResult{
+				re.On("Evaluate", ctx, mock.AnythingOfType("fraud.MLFeatures")).Return(&RuleResult{
 					Matched: false,
 				}, nil)
 
@@ -165,11 +165,11 @@ func TestService_CheckCall(t *testing.T) {
 				}, nil)
 				vc.On("RecordAction", ctx, mock.AnythingOfType("uuid.UUID"), "call_placement").Return(nil)
 
-				ml.On("Predict", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&Prediction{
+				ml.On("Predict", ctx, mock.AnythingOfType("fraud.MLFeatures")).Return(&Prediction{
 					FraudProbability: 0.2,
 				}, nil)
 
-				re.On("Evaluate", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&RuleResult{
+				re.On("Evaluate", ctx, mock.AnythingOfType("fraud.MLFeatures")).Return(&RuleResult{
 					Matched:      true,
 					MatchedRules: []string{"international_call_spike", "night_time_pattern"},
 					TotalScore:   0.65,
@@ -246,7 +246,7 @@ func TestService_CheckBid(t *testing.T) {
 				}, nil)
 				vc.On("RecordAction", ctx, mock.AnythingOfType("uuid.UUID"), "bid_placement").Return(nil)
 
-				ml.On("Predict", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&Prediction{
+				ml.On("Predict", ctx, mock.AnythingOfType("fraud.MLFeatures")).Return(&Prediction{
 					FraudProbability: 0.05,
 					Confidence:       0.95,
 				}, nil)
@@ -276,7 +276,7 @@ func TestService_CheckBid(t *testing.T) {
 				}, nil)
 				vc.On("RecordAction", ctx, mock.AnythingOfType("uuid.UUID"), "bid_placement").Return(nil)
 
-				ml.On("Predict", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&Prediction{
+				ml.On("Predict", ctx, mock.AnythingOfType("fraud.MLFeatures")).Return(&Prediction{
 					FraudProbability: 0.1,
 				}, nil)
 
@@ -303,7 +303,7 @@ func TestService_CheckBid(t *testing.T) {
 				}, nil)
 				vc.On("RecordAction", ctx, mock.AnythingOfType("uuid.UUID"), "bid_placement").Return(nil)
 
-				ml.On("Predict", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&Prediction{
+				ml.On("Predict", ctx, mock.AnythingOfType("fraud.MLFeatures")).Return(&Prediction{
 					FraudProbability: 0.1,
 				}, nil)
 
@@ -333,7 +333,7 @@ func TestService_CheckBid(t *testing.T) {
 				}, nil)
 				vc.On("RecordAction", ctx, mock.AnythingOfType("uuid.UUID"), "bid_placement").Return(nil)
 
-				ml.On("Predict", ctx, mock.AnythingOfType("map[string]interface {}")).Return(&Prediction{
+				ml.On("Predict", ctx, mock.AnythingOfType("fraud.MLFeatures")).Return(&Prediction{
 					FraudProbability: 0.1,
 				}, nil)
 
@@ -607,7 +607,15 @@ type mockMLEngine struct {
 	mock.Mock
 }
 
-func (m *mockMLEngine) Predict(ctx context.Context, features map[string]interface{}) (*Prediction, error) {
+func (m *mockMLEngine) Predict(ctx context.Context, features MLFeatures) (*Prediction, error) {
+	args := m.Called(ctx, features)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*Prediction), args.Error(1)
+}
+
+func (m *mockMLEngine) PredictLegacy(ctx context.Context, features map[string]interface{}) (*Prediction, error) {
 	args := m.Called(ctx, features)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -632,7 +640,15 @@ type mockRuleEngine struct {
 	mock.Mock
 }
 
-func (m *mockRuleEngine) Evaluate(ctx context.Context, data map[string]interface{}) (*RuleResult, error) {
+func (m *mockRuleEngine) Evaluate(ctx context.Context, features MLFeatures) (*RuleResult, error) {
+	args := m.Called(ctx, features)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*RuleResult), args.Error(1)
+}
+
+func (m *mockRuleEngine) EvaluateLegacy(ctx context.Context, data map[string]interface{}) (*RuleResult, error) {
 	args := m.Called(ctx, data)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)

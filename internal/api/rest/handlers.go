@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/api/websocket"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/call"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/errors"
@@ -78,25 +80,41 @@ type Services struct {
 	Bidding     bidding.Service
 	Telephony   telephony.Service
 	Fraud       fraud.Service
+	Consent     interface{} // Placeholder for consent service
 	Analytics   interface{} // Placeholder for analytics service
 	Marketplace interface{} // Placeholder for marketplace service
 	
 	// Repositories for direct CRUD operations
 	Repositories *repository.Repositories
+	
+	// Logger for structured logging
+	Logger *zap.Logger
 }
 
 // Handler is the main HTTP handler with embedded services
 type Handler struct {
-	Services *Services
-	mux      *http.ServeMux
+	Services       *Services
+	mux            *http.ServeMux
+	wsHandler      *websocket.Handler
 }
 
 // NewHandler creates a new REST API handler with proper routing and middleware
 func NewHandler(services *Services) *Handler {
-	h := &Handler{
-		Services: services,
-		mux:      http.NewServeMux(),
+	logger := services.Logger
+	if logger == nil {
+		// Create a default zap logger if none provided
+		logger, _ = zap.NewProduction()
 	}
+	
+	h := &Handler{
+		Services:  services,
+		mux:       http.NewServeMux(),
+		wsHandler: websocket.NewHandler(logger),
+	}
+
+	// Start WebSocket handler
+	ctx := context.Background()
+	h.wsHandler.Start(ctx)
 
 	// Register all routes
 	h.registerRoutes()
@@ -226,6 +244,10 @@ func (h *Handler) registerRoutes() {
 	h.mux.HandleFunc("GET "+apiPrefix+"/accounts/{id}", h.handleGetAccount)
 	h.mux.HandleFunc("PUT "+apiPrefix+"/accounts/{id}", h.handleUpdateAccount)
 	h.mux.HandleFunc("DELETE "+apiPrefix+"/accounts/{id}", h.handleDeleteAccount)
+	
+	// WebSocket endpoints
+	h.mux.HandleFunc("GET /ws/v1/consent/events", h.wsHandler.HandleConsentEvents)
+	h.mux.HandleFunc("GET /ws/v1/info", h.handleWebSocketInfo)
 }
 
 // Response represents the standard API response format
@@ -1077,4 +1099,17 @@ type AuctionService interface {
 	CreateAuction(ctx context.Context, auction *bid.Auction) error
 	GetAuction(ctx context.Context, auctionID uuid.UUID) (*bid.Auction, error)
 	CompleteAuction(ctx context.Context, auctionID uuid.UUID) (*bid.Auction, error)
+}
+
+// handleWebSocketInfo returns information about active WebSocket connections
+func (h *Handler) handleWebSocketInfo(w http.ResponseWriter, r *http.Request) {
+	info := h.wsHandler.GetWebSocketInfo()
+	h.writeResponse(w, http.StatusOK, info)
+}
+
+// Stop gracefully shuts down the handler including WebSocket connections
+func (h *Handler) Stop() {
+	if h.wsHandler != nil {
+		h.wsHandler.Stop()
+	}
 }
