@@ -337,6 +337,8 @@ func validateEventType(eventType EventType) error {
 		// Financial events
 		EventPaymentProcessed, EventTransactionCompleted, EventChargebackInitiated,
 		EventRefundProcessed, EventPayoutInitiated, EventFinancialComplianceCheck,
+		// DNC events
+		EventDNCNumberSuppressed, EventDNCNumberReleased, EventDNCCheckPerformed, EventDNCListSynced,
 		// System events
 		EventAPICall, EventDatabaseQuery, EventSystemStartup, EventSystemShutdown,
 	}
@@ -410,6 +412,10 @@ func deriveCategory(eventType EventType) string {
 		EventBidWon:             "marketplace",
 		EventBidLost:            "marketplace",
 		EventPaymentProcessed:   "financial",
+		EventDNCNumberSuppressed: "dnc",
+		EventDNCNumberReleased:   "dnc",
+		EventDNCCheckPerformed:   "dnc",
+		EventDNCListSynced:       "dnc",
 		EventAPICall:            "system",
 		EventDatabaseQuery:      "system",
 		EventSystemStartup:      "system",
