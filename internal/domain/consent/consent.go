@@ -252,6 +252,10 @@ func (c *ConsentAggregate) RevokeConsent(reason string, revokedBy uuid.UUID) err
 		return errors.NewInternalError("no current version found")
 	}
 
+	if current.Status == StatusRevoked {
+		return errors.NewValidationError("ALREADY_REVOKED", "consent is already revoked")
+	}
+	
 	if current.Status != StatusActive {
 		return errors.NewValidationError("NOT_ACTIVE", "only active consent can be revoked")
 	}
@@ -441,6 +445,72 @@ func (c *ConsentAggregate) Grant(proof ConsentProof, preferences map[string]stri
 	
 	proofs := []ConsentProof{proof}
 	return c.ActivateConsent(proofs, expiresAt)
+}
+
+// RegrantConsent creates a new version for re-granting existing consent
+func (c *ConsentAggregate) RegrantConsent(channels []Channel, proof ConsentProof, preferences map[string]string, expiresAt *time.Time, updatedBy uuid.UUID) error {
+	current := c.getCurrentVersion()
+	if current == nil {
+		return errors.NewInternalError("no current version found")
+	}
+
+	// Can re-grant consent in any state except pending
+	if current.Status == StatusPending {
+		return errors.NewValidationError("ALREADY_PENDING", "consent is already pending activation")
+	}
+
+	// Add preferences to the proof metadata if provided
+	if preferences != nil {
+		if proof.Metadata.FormData == nil {
+			proof.Metadata.FormData = make(map[string]string)
+		}
+		for k, v := range preferences {
+			proof.Metadata.FormData[k] = v
+		}
+	}
+
+	// Create new version
+	now := time.Now()
+	newVersion := ConsentVersion{
+		ID:            uuid.New(),
+		ConsentID:     c.ID,
+		Version:       c.CurrentVersion + 1,
+		Status:        StatusActive, // Directly set to active for re-granting
+		Channels:      channels,
+		Purpose:       current.Purpose, // Keep same purpose
+		ConsentedAt:   &now,
+		ExpiresAt:     expiresAt,
+		Source:        current.Source, // Keep same source type
+		SourceDetails: make(map[string]string),
+		Proofs:        []ConsentProof{proof},
+		CreatedAt:     now,
+		CreatedBy:     updatedBy,
+	}
+
+	// Add preferences to source details
+	if preferences != nil {
+		for k, v := range preferences {
+			newVersion.SourceDetails[k] = v
+		}
+	}
+
+	// Add the new version and update current version
+	c.Versions = append(c.Versions, newVersion)
+	c.CurrentVersion = newVersion.Version
+	c.UpdatedAt = now
+
+	// Emit domain event
+	c.addEvent(ConsentUpdatedEvent{
+		ConsentID:   c.ID,
+		ConsumerID:  c.ConsumerID,
+		BusinessID:  c.BusinessID,
+		UpdatedAt:   now,
+		UpdatedBy:   updatedBy,
+		OldChannels: current.Channels,
+		NewChannels: channels,
+	})
+
+	return nil
 }
 
 // Revoke revokes consent with default reason (alias for RevokeConsent for service compatibility)
