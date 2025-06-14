@@ -119,4 +119,8 @@ Always grep for existing `AIDEV-*` comments before scanning files.
 3. **Performance**: Sub-millisecond routing decisions
 4. **Compliance**: Real-time TCPA/DNC validation
 
+## Efficiency Principles
+
+- For maximum efficiency, whenever you need to perform multiple independent operations, invoke all relevant tools simultaneously rather than sequentially.
+
 For detailed information, refer to the comprehensive documentation in the `docs/` directory.
