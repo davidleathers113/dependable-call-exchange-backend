@@ -163,9 +163,14 @@ func NewServer(cfg *config.Config) (*Server, error) {
 
 	// Initialize services using factories
 	factories := service.NewServiceFactories(repos)
+	
+	// Create consent service first as it's needed by call routing
+	consentService := factories.CreateConsentService()
+	
 	services := &Services{
 		Repositories: repos,
-		CallRouting:  factories.CreateCallRoutingService(),
+		Consent:      consentService,
+		CallRouting:  factories.CreateCallRoutingService(consentService),
 		Bidding:      factories.CreateBiddingService(),
 		Fraud:        factories.CreateFraudService(),
 		Telephony:    factories.CreateTelephonyService(),
