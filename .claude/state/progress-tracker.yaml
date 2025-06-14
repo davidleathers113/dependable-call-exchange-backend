@@ -1,0 +1,127 @@
+# DCE Progress Tracker Configuration
+# Defines how progress is tracked across feature implementation
+
+tracking_configuration:
+  update_frequency: "per_wave_completion"
+  persistence_location: ".claude/state/feature-progress.yaml"
+  backup_location: ".claude/state/backups/"
+  
+progress_metrics:
+  wave_level:
+    - metric: "files_created"
+      type: "count"
+      validation: "files_exist"
+      
+    - metric: "tests_written"
+      type: "count"
+      validation: "tests_pass"
+      
+    - metric: "coverage_percentage"
+      type: "percentage"
+      threshold: 80
+      
+    - metric: "compilation_status"
+      type: "boolean"
+      validation: "go build ./..."
+      
+    - metric: "lint_status"
+      type: "boolean"
+      validation: "make lint"
+      
+  feature_level:
+    - metric: "overall_progress"
+      type: "percentage"
+      calculation: "weighted_wave_average"
+      
+    - metric: "blockers_count"
+      type: "count"
+      alert_threshold: 1
+      
+    - metric: "dependencies_met"
+      type: "percentage"
+      calculation: "completed_deps / total_deps"
+      
+    - metric: "quality_score"
+      type: "score"
+      range: "0-100"
+      calculation: "composite_quality_metrics"
+      
+wave_weights:
+  wave_1_domain: 0.25
+  wave_2_infrastructure: 0.20
+  wave_3_service: 0.25
+  wave_4_api: 0.20
+  wave_5_quality: 0.10
+  
+progress_states:
+  wave_states:
+    - pending: "Not started"
+    - in_progress: "Currently implementing"
+    - completed: "Successfully completed"
+    - failed: "Failed with errors"
+    - blocked: "Blocked by dependencies"
+    
+  feature_states:
+    - pending: "Not started"
+    - in_progress: "Implementation ongoing"
+    - paused: "Temporarily paused"
+    - blocked: "Blocked by dependencies"
+    - testing: "In testing phase"
+    - completed: "Fully implemented"
+    - deployed: "Deployed to production"
+    
+checkpoint_strategy:
+  auto_checkpoint:
+    - trigger: "wave_completion"
+    - trigger: "compilation_success"
+    - trigger: "test_suite_pass"
+    
+  checkpoint_data:
+    - current_wave
+    - artifacts_created
+    - test_coverage
+    - compilation_status
+    - blockers_encountered
+    - time_spent
+    
+  recovery_data:
+    - last_successful_command
+    - environment_state
+    - dependency_versions
+    - configuration_snapshot
+    
+alerts_and_notifications:
+  blocker_detected:
+    severity: "high"
+    notification: "Feature blocked: {feature_id} - {blocker_description}"
+    
+  wave_completed:
+    severity: "info"
+    notification: "Wave {wave_number} completed for {feature_id}"
+    
+  quality_threshold_missed:
+    severity: "medium"
+    notification: "Quality threshold not met: {metric} = {value} (required: {threshold})"
+    
+  dependency_ready:
+    severity: "info"
+    notification: "Dependency {dependency_id} is now ready for {feature_id}"
+    
+progress_reporting:
+  formats:
+    - yaml: "Machine-readable progress data"
+    - markdown: "Human-readable progress report"
+    - json: "API-compatible progress data"
+    
+  report_sections:
+    - executive_summary
+    - wave_by_wave_progress
+    - blockers_and_risks
+    - quality_metrics
+    - next_steps
+    - time_estimates
+    
+  visualization:
+    - progress_bars: "ASCII progress bars for terminal"
+    - gantt_chart: "Mermaid gantt for timeline view"
+    - dependency_graph: "Graphviz for dependency visualization"

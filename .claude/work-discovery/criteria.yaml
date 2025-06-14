@@ -1,0 +1,138 @@
+# DCE Work Discovery Criteria
+# Defines filters and scoring for intelligent work discovery
+
+work_filters:
+  business_priority:
+    revenue_critical:
+      - "financial_service"
+      - "billing_integration"
+      - "dynamic_pricing_engine"
+      - "marketplace_orchestration"
+      weight: 1.5
+      
+    compliance_required:
+      - "tcpa_validation"
+      - "gdpr_compliance"
+      - "consent_management"
+      - "immutable_audit"
+      - "dnc_integration"
+      weight: 1.4
+      
+    performance_critical:
+      - "advanced_caching"
+      - "query_optimization"
+      - "realtime_bidding"
+      - "call_routing_optimization"
+      weight: 1.2
+      
+    reliability_critical:
+      - "auth_authorization"
+      - "rate_limiting"
+      - "fraud_detection"
+      - "monitoring_platform"
+      weight: 1.3
+      
+  technical_readiness:
+    no_blockers:
+      query: "blockers.length == 0"
+      weight: 2.0
+      
+    dependencies_ready:
+      query: "all(dependencies, status == 'completed')"
+      weight: 1.8
+      
+    partial_dependencies:
+      query: "some(dependencies, status == 'completed')"
+      weight: 1.2
+      
+    external_dependencies:
+      query: "requires_external_api OR requires_third_party"
+      weight: 0.8
+      
+  effort_estimates:
+    low:
+      max_weeks: 2
+      ideal_for: "quick_wins"
+      team_size: 1
+      weight: 1.3
+      
+    medium:
+      max_weeks: 6
+      ideal_for: "standard_features"
+      team_size: 2
+      weight: 1.0
+      
+    high:
+      max_weeks: 12
+      ideal_for: "major_initiatives"
+      team_size: 3
+      weight: 0.7
+      
+  team_assignments:
+    backend:
+      skills: ["go", "postgresql", "redis", "kafka"]
+      domains: ["domain", "service", "infrastructure"]
+      capacity_hours_per_week: 40
+      
+    frontend:
+      skills: ["react", "typescript", "websocket"]
+      domains: ["api_consumption", "real_time_updates"]
+      capacity_hours_per_week: 40
+      
+    devops:
+      skills: ["kubernetes", "prometheus", "terraform"]
+      domains: ["deployment", "monitoring", "scaling"]
+      capacity_hours_per_week: 30
+      
+    fullstack:
+      skills: ["go", "react", "postgresql"]
+      domains: ["end_to_end_features"]
+      capacity_hours_per_week: 40
+      
+readiness_scoring:
+  factors:
+    dependency_completion:
+      weight: 0.3
+      calculation: "completed_dependencies / total_dependencies"
+      
+    blocker_absence:
+      weight: 0.2
+      calculation: "1.0 if blockers.empty else 0.3"
+      
+    team_availability:
+      weight: 0.2
+      calculation: "available_hours / required_hours"
+      
+    business_value:
+      weight: 0.2
+      calculation: "priority_weight * value_score"
+      
+    technical_risk:
+      weight: 0.1
+      calculation: "1.0 - risk_score"
+      
+  thresholds:
+    ready_to_start: 0.8
+    needs_planning: 0.6
+    blocked: 0.3
+    
+smart_queries:
+  quick_wins:
+    filter: "effort:low AND ready AND priority:high"
+    description: "High-value features that can be completed quickly"
+    
+  compliance_sprint:
+    filter: "compliance-required AND (ready OR blockers:resolvable)"
+    description: "Focus on compliance features"
+    
+  performance_boost:
+    filter: "performance-critical AND technical:ready"
+    description: "Performance improvements with clear path"
+    
+  revenue_focus:
+    filter: "revenue-critical AND dependencies:80%+"
+    description: "Revenue features nearly ready"
+    
+  technical_debt:
+    filter: "technical:refactoring OR technical:testing"
+    description: "Improve code quality and testing"
