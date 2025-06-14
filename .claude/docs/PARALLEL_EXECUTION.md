@@ -6,8 +6,6 @@ The DCE system achieves genuine parallel execution through Claude's Task tool, w
 
 **IMPORTANT**: This document accurately describes the real parallel execution system. The Task tool genuinely spawns multiple concurrent Claude instances that execute simultaneously. This is NOT simulation or conceptual - it's actual parallelism.
 
-**IMPORTANT NOTE**: The "Task tool" referenced throughout this documentation is a conceptual pattern for organizing work, not a literal API. The parallel execution is achieved through sophisticated prompt engineering that allows Claude to efficiently manage multiple contexts simultaneously.
-
 ## The Key Difference
 
 ### ❌ Narrative Parallelism (Sequential)

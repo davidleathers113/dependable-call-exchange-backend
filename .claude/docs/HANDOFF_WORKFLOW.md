@@ -235,7 +235,7 @@ def detect_execution_mode():
 ### Step 1: Run Master Planning
 ```bash
 # Execute comprehensive planning
-python scripts/dce-master-plan.py plan \
+/dce-master-plan plan \
   --scope "Q1 2025 Roadmap" \
   --priorities "performance,scalability"
 
@@ -248,7 +248,7 @@ python scripts/dce-master-plan.py plan \
 # ✓ Phase 5b: Feature handoff prepared
 #
 # Ready for implementation! Run:
-#   python scripts/dce-feature.py
+#   /dce-feature
 ```
 
 ### Step 2: Review Bridge Files
@@ -266,7 +266,7 @@ ls -la .claude/planning/
 ### Step 3: Execute Feature Implementation
 ```bash
 # Run feature implementation (auto-detects handoff mode)
-python scripts/dce-feature.py
+/dce-feature
 
 # Output:
 # 🔍 Detected handoff mode from master-plan
@@ -329,10 +329,10 @@ execution_queue:
 **Fix**:
 ```bash
 # Re-run just the handoff phase
-python scripts/dce-master-plan.py handoff
+/dce-master-plan handoff
 
 # Or manually create from planning outputs
-python scripts/create-handoff-files.py
+/dce-create-handoff-files
 ```
 
 #### 2. Incomplete Context
@@ -341,7 +341,7 @@ python scripts/create-handoff-files.py
 **Fix**:
 ```bash
 # Validate handoff files
-python scripts/dce-feature.py --validate-only
+/dce-feature --validate-only
 
 # Update context file manually if needed
 vi .claude/planning/feature-context.yaml
@@ -353,10 +353,10 @@ vi .claude/planning/feature-context.yaml
 **Fix**:
 ```bash
 # Analyze dependency graph
-python scripts/analyze-dependencies.py
+/dce-analyze-dependencies
 
 # Regenerate execution queue
-python scripts/rebuild-execution-queue.py
+/dce-rebuild-execution-queue
 ```
 
 ### Verifying Bridge Files
@@ -381,7 +381,7 @@ python scripts/rebuild-execution-queue.py
 cp -r .claude/planning .claude/planning.backup
 
 # Regenerate from planning artifacts
-python scripts/dce-master-plan.py handoff --force
+/dce-master-plan handoff --force
 
 # Verify regeneration
 diff -r .claude/planning .claude/planning.backup
@@ -390,10 +390,10 @@ diff -r .claude/planning .claude/planning.backup
 #### Lost Planning Context
 ```bash
 # If planning reports are lost but specs exist
-python scripts/reconstruct-planning.py --from-specs
+/dce-reconstruct-planning --from-specs
 
 # If everything is lost, re-run planning
-python scripts/dce-master-plan.py plan --quick
+/dce-master-plan plan --quick
 ```
 
 #### Manual Bridge Creation
@@ -423,3 +423,9 @@ The handoff workflow provides:
 - **Improved Quality**: Implementation follows careful planning
 
 This innovation transforms the DCE development workflow from a series of disconnected steps into a smooth, automated pipeline from conception to completion.
+
+## Related Documentation
+
+- **[WORKFLOWS.md](WORKFLOWS.md)** - Complete workflow examples including handoffs
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Solutions for handoff issues
+- **[COMMAND_REFERENCE.md](../COMMAND_REFERENCE.md)** - Detailed command documentation

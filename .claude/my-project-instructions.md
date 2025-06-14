@@ -1346,3 +1346,9 @@ psql $DATABASE_URL -c "VACUUM ANALYZE"
 ```
 
 This comprehensive guide should be used alongside CLAUDE.md for effective development on the DCE project.
+
+## Related Documentation
+
+- **[docs/QUICKSTART.md](../docs/QUICKSTART.md)** - Getting started with DCE development
+- **[COMMAND_REFERENCE.md](COMMAND_REFERENCE.md)** - Complete DCE command reference
+- **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Solutions for DCE-specific issues

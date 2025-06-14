@@ -197,7 +197,7 @@ When changes are detected:
 # First run creates initial state
 dce-feature analyze my-feature
 
-# State files created in .claude/.dce-state/
+# State files created in .claude/state/
 # Initial snapshots taken
 # Baseline metrics established
 ```
@@ -268,13 +268,13 @@ Clear state when:
 2. **Manual Backups**
    ```bash
    # Create named backup
-   cp -r .claude/.dce-state .claude/.dce-state.backup-$(date +%Y%m%d)
+   cp -r .claude/state .claude/state.backup-$(date +%Y%m%d)
    ```
 
 3. **Git Integration**
    ```bash
    # Commit state for team sharing (optional)
-   git add .claude/.dce-state
+   git add .claude/state
    git commit -m "chore: checkpoint DCE state"
    ```
 
@@ -307,7 +307,7 @@ When upgrading DCE tools:
 
 2. **Lock Files**
    - Symptom: "State locked" errors
-   - Fix: `rm .claude/.dce-state/*.lock`
+   - Fix: `rm .claude/state/*.lock`
 
 3. **Corrupt State**
    - Symptom: Parse errors
@@ -337,3 +337,9 @@ Planned improvements:
 - Machine learning for cache optimization
 - Predictive pre-warming of caches
 - State compression for large projects
+
+## Related Documentation
+
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture and state components
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Solutions for state corruption issues
+- **[WORKFLOWS.md](WORKFLOWS.md)** - Examples of state usage in workflows
