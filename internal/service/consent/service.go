@@ -110,8 +110,11 @@ func (s *service) GrantConsent(ctx context.Context, req GrantConsentRequest) (*C
 
 	var consentAggregate *consent.ConsentAggregate
 	if existing != nil {
-		// Update existing consent
-		if err := existing.Grant(proof, req.Preferences, req.ExpiresAt); err != nil {
+		// Re-grant existing consent with new version
+		channels := []consent.Channel{req.Channel}
+		systemUserID := uuid.MustParse("00000000-0000-0000-0000-000000000000") // TODO: Get from context
+		
+		if err := existing.RegrantConsent(channels, proof, req.Preferences, req.ExpiresAt, systemUserID); err != nil {
 			return nil, err
 		}
 		consentAggregate = existing
