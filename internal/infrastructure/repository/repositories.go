@@ -13,6 +13,8 @@ type Repositories struct {
 	Call       CallRepository
 	Compliance *ComplianceRepository
 	Financial  *FinancialRepository
+	Consent    interface{} // Placeholder for consent repository
+	Consumer   interface{} // Placeholder for consumer repository
 }
 
 // NewRepositories creates a new repository collection
@@ -27,5 +29,7 @@ func NewRepositories(pool *pgxpool.Pool) *Repositories {
 		Call:       NewCallRepository(db),
 		Compliance: NewComplianceRepository(pool),
 		Financial:  NewFinancialRepository(pool),
+		Consent:    nil, // TODO: Initialize when consent repository is ready
+		Consumer:   nil, // TODO: Initialize when consumer repository is ready
 	}
 }

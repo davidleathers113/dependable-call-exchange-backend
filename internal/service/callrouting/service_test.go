@@ -14,6 +14,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// mockConsentService implements ConsentService for testing
+type mockConsentService struct {
+	mock.Mock
+}
+
+func (m *mockConsentService) CheckConsent(ctx context.Context, phoneNumber string, consentType string) (bool, error) {
+	args := m.Called(ctx, phoneNumber, consentType)
+	return args.Bool(0), args.Error(1)
+}
+
 func TestService_RouteCall(t *testing.T) {
 	ctx := context.Background()
 
@@ -302,7 +312,9 @@ func TestService_RouteCall(t *testing.T) {
 			}
 
 			// Create service
-			svc := NewService(callRepo, bidRepo, accountRepo, metrics, tt.rules)
+			consentSvc := new(mockConsentService)
+			consentSvc.On("CheckConsent", ctx, mock.Anything, mock.Anything).Return(true, nil)
+			svc := NewService(callRepo, bidRepo, accountRepo, consentSvc, metrics, tt.rules)
 
 			// Execute
 			decision, err := svc.RouteCall(ctx, tt.callID)
@@ -326,10 +338,12 @@ func TestService_RouteCall(t *testing.T) {
 
 func TestService_UpdateRoutingRules(t *testing.T) {
 	// Create service with initial rules
+	consentSvc := new(mockConsentService)
 	svc := NewService(
 		new(mocks.CallRepository),
 		new(mocks.BidRepository),
 		new(mocks.AccountRepository),
+		consentSvc,
 		nil,
 		&RoutingRules{Algorithm: "round-robin"},
 	)
@@ -410,10 +424,13 @@ func TestService_ConcurrentRouting(t *testing.T) {
 	bidRepo.On("Update", ctx, mock.Anything).Return(nil)
 
 	// Create service
+	consentSvc := new(mockConsentService)
+	consentSvc.On("CheckConsent", ctx, mock.Anything, mock.Anything).Return(true, nil)
 	svc := NewService(
 		callRepo,
 		bidRepo,
 		accountRepo,
+		consentSvc,
 		nil,
 		&RoutingRules{Algorithm: "round-robin"},
 	)
@@ -473,10 +490,13 @@ func BenchmarkService_RouteCall(b *testing.B) {
 	bidRepo.On("GetActiveBidsForCall", ctx, callID).Return(bids, nil)
 	callRepo.On("Update", ctx, testCall).Return(nil)
 
+	consentSvc := new(mockConsentService)
+	consentSvc.On("CheckConsent", ctx, mock.Anything, mock.Anything).Return(true, nil)
 	svc := NewService(
 		callRepo,
 		bidRepo,
 		accountRepo,
+		consentSvc,
 		nil,
 		&RoutingRules{
 			Algorithm:      "cost-based",

@@ -445,13 +445,28 @@ func (s *service) extractCallFeatures(c *call.Call) map[string]interface{} {
 }
 
 func (s *service) extractCallMLFeatures(c *call.Call) MLFeatures {
+	if c == nil {
+		return MLFeatures{}
+	}
+	
+	// Calculate duration safely
+	var duration time.Duration
+	var timeOfDay, dayOfWeek int
+	if c.EndTime != nil && !c.EndTime.IsZero() && !c.StartTime.IsZero() {
+		duration = c.EndTime.Sub(c.StartTime)
+	}
+	if !c.StartTime.IsZero() {
+		timeOfDay = c.StartTime.Hour()
+		dayOfWeek = int(c.StartTime.Weekday())
+	}
+	
 	return MLFeatures{
 		Call: &CallFeatures{
-			Duration:          c.EndTime.Sub(c.StartTime),
+			Duration:          duration,
 			CallerReputation:  0.8, // Default reputation - would be fetched from data
 			CalleeReputation:  0.8, // Default reputation
-			TimeOfDay:         c.StartTime.Hour(),
-			DayOfWeek:         int(c.StartTime.Weekday()),
+			TimeOfDay:         timeOfDay,
+			DayOfWeek:         dayOfWeek,
 			CallFrequency:     1, // Would be calculated from recent calls
 			GeographicRisk:    0.1, // Would be calculated based on locations
 			PriceDeviation:   0.0, // Would be calculated vs average

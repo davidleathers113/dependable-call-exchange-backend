@@ -41,6 +41,23 @@ compliance:
     - "America/Denver"
     - "America/Los_Angeles"
 
+consent:
+  cache_ttl: "1h"
+  check_timeout: "2s"
+  batch_size: 100
+  retention_days: 2555  # 7 years for TCPA compliance
+  proof_storage:
+    provider: "s3"
+    bucket: "dce-consent-proofs"
+    encryption: true
+  performance:
+    target_latency_ms: 2
+    cache_hit_ratio_target: 0.95
+  features:
+    parallel_processing: true
+    real_time_events: true
+    audit_logging: true
+
 security:
   jwt_secret: "your-jwt-secret-change-in-production"
   token_expiry: "24h"

@@ -6,12 +6,17 @@ import (
 
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/bid"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/compliance"
+	domainConsent "github.com/davidleathers/dependable-call-exchange-backend/internal/domain/consent"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/values"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/infrastructure/repository"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/service/bidding"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/service/callrouting"
+	"github.com/davidleathers/dependable-call-exchange-backend/internal/service/consent"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/service/fraud"
 	"github.com/davidleathers/dependable-call-exchange-backend/internal/service/telephony"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 // ServiceFactories holds all service factory functions
@@ -220,6 +225,170 @@ func (m *mockFraudRepository) SaveFraudReport(ctx context.Context, report *fraud
 	return nil
 }
 
+// Mock consent repositories
+type mockConsentRepository struct{}
+
+// Implement consent.Repository interface
+func (m *mockConsentRepository) Save(ctx context.Context, consent *domainConsent.ConsentAggregate) error {
+	return nil
+}
+
+func (m *mockConsentRepository) GetByID(ctx context.Context, id uuid.UUID) (*domainConsent.ConsentAggregate, error) {
+	// Return a mock consent aggregate
+	return &domainConsent.ConsentAggregate{}, nil
+}
+
+func (m *mockConsentRepository) GetByConsumerAndType(ctx context.Context, consumerID uuid.UUID, consentType domainConsent.Type) (*domainConsent.ConsentAggregate, error) {
+	// Return nil to simulate no existing consent
+	return nil, nil
+}
+
+func (m *mockConsentRepository) GetByConsumerAndBusiness(ctx context.Context, consumerID, businessID uuid.UUID) ([]*domainConsent.ConsentAggregate, error) {
+	return []*domainConsent.ConsentAggregate{}, nil
+}
+
+func (m *mockConsentRepository) FindActiveConsent(ctx context.Context, consumerID, businessID uuid.UUID, channel domainConsent.Channel) (*domainConsent.ConsentAggregate, error) {
+	return nil, nil
+}
+
+func (m *mockConsentRepository) FindByPhoneNumber(ctx context.Context, phoneNumber string, businessID uuid.UUID) ([]*domainConsent.ConsentAggregate, error) {
+	return []*domainConsent.ConsentAggregate{}, nil
+}
+
+func (m *mockConsentRepository) ListExpired(ctx context.Context, before time.Time) ([]*domainConsent.ConsentAggregate, error) {
+	return []*domainConsent.ConsentAggregate{}, nil
+}
+
+func (m *mockConsentRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+
+// Mock consumer repository
+type mockConsumerRepository struct{}
+
+// Implement consent.ConsumerRepository interface
+func (m *mockConsumerRepository) Save(ctx context.Context, consumer *domainConsent.Consumer) error {
+	return nil
+}
+
+func (m *mockConsumerRepository) GetByID(ctx context.Context, id uuid.UUID) (*domainConsent.Consumer, error) {
+	return &domainConsent.Consumer{}, nil
+}
+
+func (m *mockConsumerRepository) GetByPhoneNumber(ctx context.Context, phoneNumber string) (*domainConsent.Consumer, error) {
+	// Return nil to simulate no existing consumer
+	return nil, nil
+}
+
+func (m *mockConsumerRepository) GetByEmail(ctx context.Context, email string) (*domainConsent.Consumer, error) {
+	return nil, nil
+}
+
+func (m *mockConsumerRepository) FindOrCreate(ctx context.Context, phoneNumber string, email *string, firstName, lastName string) (*domainConsent.Consumer, error) {
+	// Create a mock consumer
+	consumer := &domainConsent.Consumer{
+		ID:        uuid.New(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	
+	// Create PhoneNumber value object if phoneNumber is provided
+	if phoneNumber != "" {
+		phone, err := values.NewPhoneNumber(phoneNumber)
+		if err != nil {
+			return nil, err
+		}
+		consumer.PhoneNumber = &phone
+	}
+	
+	if email != nil {
+		consumer.Email = email
+	}
+	consumer.FirstName = firstName
+	consumer.LastName = lastName
+	return consumer, nil
+}
+
+// Mock consent query repository
+type mockConsentQueryRepository struct{}
+
+// Implement consent.QueryRepository interface
+func (m *mockConsentQueryRepository) Find(ctx context.Context, filter domainConsent.ConsentFilter) ([]*domainConsent.ConsentAggregate, error) {
+	return []*domainConsent.ConsentAggregate{}, nil
+}
+
+func (m *mockConsentQueryRepository) FindActiveByConsumer(ctx context.Context, consumerID uuid.UUID) ([]*domainConsent.ConsentAggregate, error) {
+	return []*domainConsent.ConsentAggregate{}, nil
+}
+
+func (m *mockConsentQueryRepository) FindByFilters(ctx context.Context, filters domainConsent.QueryFilters) ([]*domainConsent.ConsentAggregate, error) {
+	return []*domainConsent.ConsentAggregate{}, nil
+}
+
+func (m *mockConsentQueryRepository) Count(ctx context.Context, filter domainConsent.ConsentFilter) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockConsentQueryRepository) GetConsentHistory(ctx context.Context, consentID uuid.UUID) ([]domainConsent.ConsentVersion, error) {
+	return []domainConsent.ConsentVersion{}, nil
+}
+
+func (m *mockConsentQueryRepository) GetProofs(ctx context.Context, consentID uuid.UUID) ([]domainConsent.ConsentProof, error) {
+	return []domainConsent.ConsentProof{}, nil
+}
+
+func (m *mockConsentQueryRepository) GetMetrics(ctx context.Context, query domainConsent.MetricsQuery) (*domainConsent.ConsentMetrics, error) {
+	return &domainConsent.ConsentMetrics{
+		TotalGrants:  0,
+		TotalRevokes: 0,
+		ActiveCount:  0,
+		Trends:       []domainConsent.MetricTrend{},
+	}, nil
+}
+
+func (m *mockConsentQueryRepository) FindExpiring(ctx context.Context, days int) ([]*domainConsent.ConsentAggregate, error) {
+	return []*domainConsent.ConsentAggregate{}, nil
+}
+
+// Mock compliance checker
+type mockComplianceChecker struct{}
+
+func (m *mockComplianceChecker) CheckConsentRequirements(ctx context.Context, phoneNumber string, consentType domainConsent.Type) (*compliance.ComplianceRule, error) {
+	// Return a basic compliance rule
+	return &compliance.ComplianceRule{
+		ID:          uuid.New(),
+		Name:        "TCPA Basic",
+		Type:        compliance.RuleTypeTCPA,
+		Status:      compliance.RuleStatusActive,
+		Description: "Basic TCPA compliance",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+		EffectiveAt: time.Now(),
+		CreatedBy:   uuid.New(),
+		Priority:    1,
+	}, nil
+}
+
+func (m *mockComplianceChecker) ValidateConsentGrant(ctx context.Context, req consent.GrantConsentRequest) error {
+	// Always pass validation for now
+	return nil
+}
+
+// Mock consent event publisher
+type mockConsentEventPublisher struct{}
+
+func (m *mockConsentEventPublisher) PublishConsentGranted(ctx context.Context, event domainConsent.ConsentCreatedEvent) error {
+	return nil
+}
+
+func (m *mockConsentEventPublisher) PublishConsentRevoked(ctx context.Context, event domainConsent.ConsentRevokedEvent) error {
+	return nil
+}
+
+func (m *mockConsentEventPublisher) PublishConsentUpdated(ctx context.Context, event domainConsent.ConsentUpdatedEvent) error {
+	return nil
+}
+
 // CreateBiddingService creates a new bidding service with all dependencies
 func (f *ServiceFactories) CreateBiddingService() bidding.Service {
 	// Create external service dependencies (mocks for now)
@@ -244,7 +413,7 @@ func (f *ServiceFactories) CreateBiddingService() bidding.Service {
 }
 
 // CreateCallRoutingService creates a new call routing service with all dependencies
-func (f *ServiceFactories) CreateCallRoutingService() callrouting.Service {
+func (f *ServiceFactories) CreateCallRoutingService(consentService consent.Service) callrouting.Service {
 	// Create external service dependencies (mocks for now)
 	metrics := &mockRoutingMetricsCollector{}
 
@@ -255,14 +424,18 @@ func (f *ServiceFactories) CreateCallRoutingService() callrouting.Service {
 		PriceWeight:    0.4,
 		CapacityWeight: 0.2,
 	}
+	
+	// Create consent adapter
+	consentAdapter := consent.NewRoutingAdapter(consentService)
 
 	// Create service with proper dependency injection using adapters
 	return callrouting.NewService(
 		f.repositories.Call, // CallRepository
 		repository.NewCallRoutingBidRepository(f.repositories.Bid),         // BidRepository
 		repository.NewCallRoutingAccountRepository(f.repositories.Account), // AccountRepository
-		metrics,      // MetricsCollector
-		initialRules, // RoutingRules
+		consentAdapter, // ConsentService
+		metrics,        // MetricsCollector
+		initialRules,   // RoutingRules
 	)
 }
 
@@ -327,5 +500,28 @@ func (f *ServiceFactories) CreateTelephonyService() telephony.Service {
 		provider,            // Provider
 		eventPublisher,      // EventPublisher
 		metrics,             // MetricsCollector
+	)
+}
+
+// CreateConsentService creates a new consent service with all dependencies
+func (f *ServiceFactories) CreateConsentService() consent.Service {
+	// Create logger
+	logger, _ := zap.NewProduction()
+	
+	// Create mock dependencies
+	consentRepo := &mockConsentRepository{}
+	consumerRepo := &mockConsumerRepository{}
+	queryRepo := &mockConsentQueryRepository{}
+	complianceChecker := &mockComplianceChecker{}
+	eventPublisher := &mockConsentEventPublisher{}
+	
+	// Create service with proper dependency injection
+	return consent.NewService(
+		logger,
+		consentRepo,       // ConsentRepository
+		consumerRepo,      // ConsumerRepository  
+		queryRepo,         // ConsentQueryRepository
+		complianceChecker, // ComplianceChecker
+		eventPublisher,    // EventPublisher
 	)
 }
