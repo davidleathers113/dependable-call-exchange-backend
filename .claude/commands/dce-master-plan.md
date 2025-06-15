@@ -142,4 +142,10 @@ Phase 4: [====== Plan Assembler ======]
          Complete Master Plan with Parallel Execution Strategy
 ```
 
+## Related Documentation
+
+- **[../COMMAND_REFERENCE.md](../COMMAND_REFERENCE.md)** - Complete command reference
+- **[../docs/WORKFLOWS.md](../docs/WORKFLOWS.md)** - Master planning in context
+- **[../docs/TROUBLESHOOTING.md](../docs/TROUBLESHOOTING.md)** - Solutions for planning issues
+
 Begin orchestration with PARALLEL Task deployment. Monitor all Tasks and ensure complete execution before proceeding to next phase.

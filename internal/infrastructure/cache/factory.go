@@ -16,6 +16,7 @@ type CacheManager struct {
 	Cache        Cache
 	RateLimiter  RateLimiter
 	SessionStore SessionStore
+	DNCCache     *DNCCache
 	client       *redis.Client
 	logger       *zap.Logger
 }
@@ -66,6 +67,14 @@ func NewCacheManager(cfg *config.RedisConfig, logger *zap.Logger) (*CacheManager
 	// Create session store
 	sessionStore := NewRedisSessionStore(cache, client, logger)
 
+	// Create DNC cache
+	dncCache, err := NewDNCCache(cfg, logger)
+	if err != nil {
+		client.Close()
+		cache.Close()
+		return nil, fmt.Errorf("failed to create DNC cache: %w", err)
+	}
+
 	logger.Info("cache manager initialized",
 		zap.String("addr", cfg.URL),
 		zap.Int("db", cfg.DB),
@@ -75,6 +84,7 @@ func NewCacheManager(cfg *config.RedisConfig, logger *zap.Logger) (*CacheManager
 		Cache:        cache,
 		RateLimiter:  rateLimiter,
 		SessionStore: sessionStore,
+		DNCCache:     dncCache,
 		client:       client,
 		logger:       logger,
 	}, nil
@@ -87,6 +97,11 @@ func (cm *CacheManager) Close() error {
 	// Close cache
 	if err := cm.Cache.Close(); err != nil {
 		errors = append(errors, fmt.Errorf("cache close failed: %w", err))
+	}
+
+	// Close DNC cache
+	if err := cm.DNCCache.Close(); err != nil {
+		errors = append(errors, fmt.Errorf("DNC cache close failed: %w", err))
 	}
 
 	// Close Redis client

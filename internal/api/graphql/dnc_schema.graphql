@@ -1,0 +1,794 @@
+# DNC (Do Not Call) GraphQL Schema
+# This schema provides advanced querying capabilities for DNC data
+# with real-time subscriptions and complex filtering
+
+# ================================================================================
+# SCALAR TYPES
+# ================================================================================
+
+scalar PhoneNumber
+scalar DateTime
+scalar Duration
+scalar UUID
+scalar JSON
+
+# ================================================================================
+# ENUMS
+# ================================================================================
+
+enum ProviderType {
+  FEDERAL
+  STATE
+  INTERNAL
+  CUSTOM
+}
+
+enum ProviderStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+  SYNCING
+}
+
+enum AuthType {
+  NONE
+  API_KEY
+  OAUTH
+  BASIC
+}
+
+enum ListSource {
+  FEDERAL_DNC
+  STATE_DNC
+  INTERNAL
+  CUSTOM
+  COMPANY_POLICY
+}
+
+enum SuppressReason {
+  FEDERAL_DNC
+  STATE_DNC
+  USER_REQUEST
+  CONSUMER_REQUEST
+  FRAUD
+  FRAUD_PREVENTION
+  COMPANY_POLICY
+  TCPA_VIOLATION
+  GDPR_REQUEST
+  CCPA_REQUEST
+}
+
+enum CheckResult {
+  BLOCKED
+  ALLOWED
+  ERROR
+  TIMEOUT
+  PARTIAL
+  UNKNOWN
+}
+
+enum Severity {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum ComplianceLevel {
+  STRICT
+  STANDARD
+  RELAXED
+}
+
+enum CheckType {
+  REAL_TIME
+  BATCH
+  MANUAL
+}
+
+# ================================================================================
+# INPUT TYPES
+# ================================================================================
+
+input DNCEntryFilter {
+  phoneNumbers: [PhoneNumber!]
+  listSources: [ListSource!]
+  suppressReasons: [SuppressReason!]
+  addedAfter: DateTime
+  addedBefore: DateTime
+  expiresAfter: DateTime
+  expiresBefore: DateTime
+  isExpired: Boolean
+  isActive: Boolean
+  addedByUser: UUID
+  search: String
+  metadata: JSON
+}
+
+input DNCProviderFilter {
+  types: [ProviderType!]
+  statuses: [ProviderStatus!]
+  enabled: Boolean
+  needsSync: Boolean
+  hasErrors: Boolean
+  search: String
+  lastSyncAfter: DateTime
+  lastSyncBefore: DateTime
+}
+
+input DNCCheckResultFilter {
+  phoneNumbers: [PhoneNumber!]
+  isBlocked: Boolean
+  checkedAfter: DateTime
+  checkedBefore: DateTime
+  sources: [ListSource!]
+  checkTypes: [CheckType!]
+  complianceLevels: [ComplianceLevel!]
+  minRiskScore: Float
+  maxRiskScore: Float
+  hasErrors: Boolean
+  search: String
+}
+
+input DNCEntryInput {
+  phoneNumber: PhoneNumber!
+  listSource: ListSource!
+  suppressReason: SuppressReason!
+  expiresAt: DateTime
+  sourceReference: String
+  notes: String
+  metadata: JSON
+}
+
+input DNCProviderInput {
+  name: String!
+  type: ProviderType!
+  baseURL: String!
+  authType: AuthType!
+  apiKey: String
+  updateFrequency: Duration!
+  enabled: Boolean!
+  priority: Int!
+  retryAttempts: Int
+  timeoutSeconds: Int
+  rateLimitPerMin: Int
+  config: JSON
+}
+
+input PageInfo {
+  limit: Int = 20
+  offset: Int = 0
+  cursor: String
+}
+
+input SortOrder {
+  field: String!
+  direction: SortDirection = ASC
+}
+
+enum SortDirection {
+  ASC
+  DESC
+}
+
+# ================================================================================
+# OBJECT TYPES
+# ================================================================================
+
+type DNCEntry {
+  id: UUID!
+  phoneNumber: PhoneNumber!
+  listSource: ListSource!
+  suppressReason: SuppressReason!
+  addedAt: DateTime!
+  expiresAt: DateTime
+  sourceReference: String
+  notes: String
+  metadata: JSON
+  
+  # Audit fields
+  addedBy: User!
+  updatedAt: DateTime!
+  updatedBy: User
+  
+  # Computed fields
+  isExpired: Boolean!
+  isActive: Boolean!
+  canCall: Boolean!
+  timeUntilExpiration: Duration
+  priority: Int!
+  complianceCode: String!
+  requiresDocumentation: Boolean!
+  retentionDays: Int!
+  isTemporary: Boolean!
+  isPermanent: Boolean!
+  
+  # Related data
+  provider: DNCProvider
+  checkResults: [DNCCheckResult!]!
+  complianceInfo: JSON!
+}
+
+type DNCProvider {
+  id: UUID!
+  name: String!
+  type: ProviderType!
+  baseURL: String!
+  authType: AuthType!
+  updateFrequency: Duration!
+  lastSyncAt: DateTime
+  nextSyncAt: DateTime
+  status: ProviderStatus!
+  
+  # Configuration
+  enabled: Boolean!
+  priority: Int!
+  retryAttempts: Int!
+  timeoutSeconds: Int!
+  rateLimitPerMin: Int!
+  
+  # Sync statistics
+  lastSyncDuration: Duration
+  lastSyncRecords: Int
+  lastError: String
+  errorCount: Int!
+  successCount: Int!
+  successRate: Float!
+  
+  # Metadata
+  config: JSON
+  
+  # Audit fields
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  createdBy: User!
+  updatedBy: User
+  
+  # Computed fields
+  needsSync: Boolean!
+  syncInterval: Duration!
+  healthStatus: JSON!
+  isRegulatory: Boolean!
+  listSource: ListSource!
+  requiresCompliance: Boolean!
+  defaultSuppressReason: SuppressReason!
+  isHighPriority: Boolean!
+  complianceCode: String
+  
+  # Related data
+  entries: [DNCEntry!]!
+  entryCount: Int!
+  recentSyncHistory: [SyncHistoryEntry!]!
+}
+
+type BlockReason {
+  source: ListSource!
+  reason: SuppressReason!
+  description: String!
+  providerName: String!
+  providerId: UUID!
+  expiresAt: DateTime
+  severity: Severity!
+  complianceCode: String!
+}
+
+type DNCCheckResult {
+  id: UUID!
+  phoneNumber: PhoneNumber!
+  isBlocked: Boolean!
+  reasons: [BlockReason!]!
+  checkedAt: DateTime!
+  sources: [ListSource!]!
+  ttl: Duration!
+  
+  # Performance metrics
+  checkDuration: Duration!
+  sourcesCount: Int!
+  
+  # Compliance metadata
+  complianceLevel: ComplianceLevel!
+  riskScore: Float!
+  confidenceScore: Float!
+  
+  # Additional metadata
+  metadata: JSON
+  
+  # Computed fields
+  blockingReasons: [BlockReason!]!
+  complianceInfo: JSON!
+  highestSeverity: Severity
+  hasPermanentBlock: Boolean!
+  earliestExpiration: DateTime
+  isExpired: Boolean!
+  complianceRecommendation: String!
+  complianceCodes: [String!]!
+  summary: String!
+  canCall: Boolean!
+  highestAuthoritySource: ListSource
+  violationCount: JSON!
+  isHighRisk: Boolean!
+  
+  # Related data
+  entries: [DNCEntry!]!
+  checkEvents: [DNCCheckEvent!]!
+}
+
+type DNCCheckEvent {
+  id: UUID!
+  eventType: String!
+  phoneNumber: PhoneNumber!
+  result: CheckResult!
+  checkedAt: DateTime!
+  sources: [String!]!
+  latency: Duration!
+  
+  # Performance metrics
+  totalSources: Int!
+  successfulSources: Int!
+  failedSources: Int!
+  cacheHits: Int!
+  cacheMisses: Int!
+  
+  # Result details
+  isBlocked: Boolean!
+  blockingReasons: [String!]
+  highestSeverity: Severity
+  riskScore: Float!
+  confidenceScore: Float!
+  
+  # Check context
+  checkReason: String!
+  initiatedBy: User!
+  callId: UUID
+  checkType: CheckType!
+  
+  # Compliance metadata
+  complianceLevel: ComplianceLevel!
+  tcpaRelevant: Boolean!
+  gdprRelevant: Boolean!
+  
+  # Error information
+  errorCode: String
+  errorMessage: String
+  warningMessages: [String!]!
+  
+  # Audit trail metadata
+  requestId: String!
+  sessionId: String
+  userAgent: String
+  ipAddress: String
+  
+  # Computed fields
+  isSuccessful: Boolean!
+  isError: Boolean!
+  isTimeout: Boolean!
+  isPartialResult: Boolean!
+  isRealTimeCheck: Boolean!
+  isBatchCheck: Boolean!
+  isManualCheck: Boolean!
+  isHighRisk: Boolean!
+  successRate: Float!
+  cacheHitRate: Float!
+  hasWarnings: Boolean!
+  performanceMetrics: JSON!
+  complianceMetadata: JSON!
+}
+
+type SyncHistoryEntry {
+  id: UUID!
+  providerId: UUID!
+  startedAt: DateTime!
+  completedAt: DateTime
+  duration: Duration
+  recordsProcessed: Int
+  recordsAdded: Int
+  recordsUpdated: Int
+  recordsSkipped: Int
+  success: Boolean!
+  errorMessage: String
+}
+
+type User {
+  id: UUID!
+  name: String!
+  email: String!
+}
+
+# ================================================================================
+# CONNECTION TYPES (for pagination)
+# ================================================================================
+
+type DNCEntryConnection {
+  edges: [DNCEntryEdge!]!
+  pageInfo: ConnectionPageInfo!
+  totalCount: Int!
+  aggregations: DNCEntryAggregations
+}
+
+type DNCEntryEdge {
+  node: DNCEntry!
+  cursor: String!
+}
+
+type DNCProviderConnection {
+  edges: [DNCProviderEdge!]!
+  pageInfo: ConnectionPageInfo!
+  totalCount: Int!
+  aggregations: DNCProviderAggregations
+}
+
+type DNCProviderEdge {
+  node: DNCProvider!
+  cursor: String!
+}
+
+type DNCCheckResultConnection {
+  edges: [DNCCheckResultEdge!]!
+  pageInfo: ConnectionPageInfo!
+  totalCount: Int!
+  aggregations: DNCCheckResultAggregations
+}
+
+type DNCCheckResultEdge {
+  node: DNCCheckResult!
+  cursor: String!
+}
+
+type ConnectionPageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+  totalCount: Int!
+}
+
+# ================================================================================
+# AGGREGATION TYPES
+# ================================================================================
+
+type DNCEntryAggregations {
+  totalCount: Int!
+  activeCount: Int!
+  expiredCount: Int!
+  byListSource: [ListSourceCount!]!
+  bySuppressReason: [SuppressReasonCount!]!
+  byProvider: [ProviderCount!]!
+  recentlyAdded: Int!
+  expiringSoon: Int!
+}
+
+type DNCProviderAggregations {
+  totalCount: Int!
+  activeCount: Int!
+  errorCount: Int!
+  syncingCount: Int!
+  byType: [ProviderTypeCount!]!
+  byStatus: [ProviderStatusCount!]!
+  needingSyncCount: Int!
+  averageSuccessRate: Float!
+}
+
+type DNCCheckResultAggregations {
+  totalCount: Int!
+  blockedCount: Int!
+  allowedCount: Int!
+  errorCount: Int!
+  byComplianceLevel: [ComplianceLevelCount!]!
+  byCheckType: [CheckTypeCount!]!
+  averageRiskScore: Float!
+  averageLatency: Duration!
+  recentChecks: Int!
+}
+
+type ListSourceCount {
+  source: ListSource!
+  count: Int!
+}
+
+type SuppressReasonCount {
+  reason: SuppressReason!
+  count: Int!
+}
+
+type ProviderCount {
+  providerId: UUID!
+  providerName: String!
+  count: Int!
+}
+
+type ProviderTypeCount {
+  type: ProviderType!
+  count: Int!
+}
+
+type ProviderStatusCount {
+  status: ProviderStatus!
+  count: Int!
+}
+
+type ComplianceLevelCount {
+  level: ComplianceLevel!
+  count: Int!
+}
+
+type CheckTypeCount {
+  type: CheckType!
+  count: Int!
+}
+
+# ================================================================================
+# QUERY ROOT
+# ================================================================================
+
+type Query {
+  # DNC Entry Queries
+  dncEntry(id: UUID!): DNCEntry
+  dncEntries(
+    filter: DNCEntryFilter
+    sort: [SortOrder!]
+    page: PageInfo
+  ): DNCEntryConnection!
+  
+  # DNC Provider Queries
+  dncProvider(id: UUID!): DNCProvider
+  dncProviders(
+    filter: DNCProviderFilter
+    sort: [SortOrder!]
+    page: PageInfo
+  ): DNCProviderConnection!
+  
+  # DNC Check Queries
+  dncCheck(phoneNumber: PhoneNumber!): DNCCheckResult
+  dncCheckResult(id: UUID!): DNCCheckResult
+  dncCheckResults(
+    filter: DNCCheckResultFilter
+    sort: [SortOrder!]
+    page: PageInfo
+  ): DNCCheckResultConnection!
+  
+  # Bulk DNC Check
+  dncCheckBulk(phoneNumbers: [PhoneNumber!]!): [DNCCheckResult!]!
+  
+  # Analytics and Reports
+  dncAnalytics(
+    dateRange: DateRange
+    groupBy: [String!]
+    filters: JSON
+  ): JSON!
+  
+  dncComplianceReport(
+    dateRange: DateRange
+    includeDetails: Boolean = false
+  ): JSON!
+  
+  # Search and Discovery
+  searchDNCEntries(
+    query: String!
+    filters: DNCEntryFilter
+    limit: Int = 10
+  ): [DNCEntry!]!
+  
+  # Health and Status
+  dncSystemHealth: JSON!
+  providerHealthStatus: [JSON!]!
+}
+
+input DateRange {
+  start: DateTime!
+  end: DateTime!
+}
+
+# ================================================================================
+# MUTATION ROOT
+# ================================================================================
+
+type Mutation {
+  # DNC Entry Management
+  addDNCEntry(input: DNCEntryInput!): DNCEntry!
+  updateDNCEntry(id: UUID!, input: DNCEntryInput!): DNCEntry!
+  removeDNCEntry(id: UUID!): Boolean!
+  
+  # Bulk DNC Entry Operations
+  addDNCEntriesBulk(entries: [DNCEntryInput!]!): [DNCEntry!]!
+  removeDNCEntriesBulk(ids: [UUID!]!): Boolean!
+  
+  # DNC Provider Management
+  addDNCProvider(input: DNCProviderInput!): DNCProvider!
+  updateDNCProvider(id: UUID!, input: DNCProviderInput!): DNCProvider!
+  removeDNCProvider(id: UUID!): Boolean!
+  enableDNCProvider(id: UUID!): DNCProvider!
+  disableDNCProvider(id: UUID!): DNCProvider!
+  
+  # Provider Sync Operations
+  syncProvider(id: UUID!, force: Boolean = false): Boolean!
+  syncAllProviders(force: Boolean = false): Boolean!
+  
+  # Suppression Operations
+  addToSuppression(
+    phoneNumber: PhoneNumber!
+    reason: SuppressReason!
+    source: ListSource = INTERNAL
+    expiresAt: DateTime
+    notes: String
+  ): DNCEntry!
+  
+  removeFromSuppression(
+    phoneNumber: PhoneNumber!
+    source: ListSource = INTERNAL
+  ): Boolean!
+  
+  # Cache Management
+  clearDNCCache(phoneNumbers: [PhoneNumber!]): Boolean!
+  refreshDNCCache(phoneNumbers: [PhoneNumber!]): Boolean!
+  
+  # System Operations
+  rebuildDNCIndex: Boolean!
+  optimizeDNCDatabase: Boolean!
+}
+
+# ================================================================================
+# SUBSCRIPTION ROOT
+# ================================================================================
+
+type Subscription {
+  # Real-time DNC Events
+  dncEvents(
+    phoneNumbers: [PhoneNumber!]
+    eventTypes: [String!]
+  ): DNCEvent!
+  
+  # Provider Status Updates
+  providerStatusUpdates(
+    providerIds: [UUID!]
+  ): ProviderStatusUpdate!
+  
+  # Compliance Alerts
+  complianceAlerts(
+    severityLevels: [Severity!]
+    sources: [ListSource!]
+  ): ComplianceAlert!
+  
+  # DNC Check Events (real-time)
+  dncCheckEvents(
+    phoneNumbers: [PhoneNumber!]
+    checkTypes: [CheckType!]
+  ): DNCCheckEvent!
+  
+  # Sync Progress Updates
+  syncProgress(
+    providerIds: [UUID!]
+  ): SyncProgressUpdate!
+  
+  # System Health Updates
+  systemHealthUpdates: SystemHealthUpdate!
+}
+
+# ================================================================================
+# SUBSCRIPTION EVENT TYPES
+# ================================================================================
+
+union DNCEvent = 
+    DNCEntryAdded
+  | DNCEntryUpdated
+  | DNCEntryRemoved
+  | DNCCheckPerformed
+  | DNCCacheInvalidated
+
+type DNCEntryAdded {
+  entry: DNCEntry!
+  timestamp: DateTime!
+  addedBy: User!
+}
+
+type DNCEntryUpdated {
+  entry: DNCEntry!
+  previousEntry: DNCEntry!
+  timestamp: DateTime!
+  updatedBy: User!
+  changes: [String!]!
+}
+
+type DNCEntryRemoved {
+  entryId: UUID!
+  phoneNumber: PhoneNumber!
+  timestamp: DateTime!
+  removedBy: User!
+  reason: String
+}
+
+type DNCCheckPerformed {
+  checkResult: DNCCheckResult!
+  timestamp: DateTime!
+  initiatedBy: User!
+}
+
+type DNCCacheInvalidated {
+  phoneNumbers: [PhoneNumber!]!
+  reason: String!
+  timestamp: DateTime!
+}
+
+type ProviderStatusUpdate {
+  provider: DNCProvider!
+  previousStatus: ProviderStatus!
+  newStatus: ProviderStatus!
+  timestamp: DateTime!
+  reason: String
+}
+
+type ComplianceAlert {
+  id: UUID!
+  type: String!
+  severity: Severity!
+  message: String!
+  phoneNumber: PhoneNumber
+  source: ListSource
+  timestamp: DateTime!
+  metadata: JSON
+  requiresAction: Boolean!
+  actionDeadline: DateTime
+}
+
+type SyncProgressUpdate {
+  providerId: UUID!
+  providerName: String!
+  status: String!
+  progress: Float!
+  recordsProcessed: Int!
+  estimatedTimeRemaining: Duration
+  startedAt: DateTime!
+  lastUpdate: DateTime!
+  errorMessage: String
+}
+
+type SystemHealthUpdate {
+  timestamp: DateTime!
+  overall: String!
+  components: [ComponentHealth!]!
+  metrics: JSON!
+}
+
+type ComponentHealth {
+  name: String!
+  status: String!
+  latency: Duration
+  errorRate: Float
+  lastCheck: DateTime!
+  details: JSON
+}
+
+# ================================================================================
+# DIRECTIVES
+# ================================================================================
+
+directive @auth(
+  requires: [String!]
+) on FIELD_DEFINITION | OBJECT
+
+directive @rateLimit(
+  max: Int!
+  window: Duration!
+) on FIELD_DEFINITION
+
+directive @cache(
+  maxAge: Duration!
+  scope: String = "PUBLIC"
+) on FIELD_DEFINITION
+
+directive @cost(
+  complexity: Int!
+  multipliers: [String!]
+) on FIELD_DEFINITION
+
+directive @deprecated(
+  reason: String = "No longer supported"
+) on FIELD_DEFINITION | ENUM_VALUE
+
+# ================================================================================
+# SCHEMA DEFINITION
+# ================================================================================
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}

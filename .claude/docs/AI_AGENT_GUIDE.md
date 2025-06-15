@@ -250,6 +250,51 @@ Filtering options:
 - `--status`: pending, in-progress, blocked
 - `--limit`: Maximum results (default: 20)
 
+### System Improvement
+
+The `/dce-system-improve` command implements the comprehensive improvement pipeline based on the System Improvement Guide:
+
+```bash
+# Run complete improvement pipeline
+/dce-system-improve --phase=all --depth=thorough --output=./.claude/improve
+
+# Run specific phases only
+/dce-system-improve --phase=0-2 --depth=exhaustive --incremental=true
+
+# Quick performance analysis
+/dce-system-improve --phase=5 --depth=quick --review=auto
+```
+
+**Command Options**:
+- `--phase`: Which phases to run (0-5 or "all")
+  - Phase 0: Critical handoff fix (bridges planning to implementation)
+  - Phase 1: Foundation upgrades (state engine, work discovery)
+  - Phase 2: Progress tracking & resumption infrastructure
+  - Phase 3: Inter-wave coordination mechanisms
+  - Phase 3.5: Implementation detail generation
+  - Phase 4: Enhanced coordination & dependency scheduling
+  - Phase 5: Self-review & continuous improvement loop
+- `--depth`: Analysis depth (quick, thorough, exhaustive)
+- `--output`: Output directory for artifacts
+- `--incremental`: Use state files for delta runs
+- `--review`: Enable self-review report (auto, skip)
+
+**What It Does**:
+1. **Fixes Critical Gaps**: Updates master-plan to create proper handoff files
+2. **Builds State Infrastructure**: Creates comprehensive state tracking
+3. **Enables Smart Work Discovery**: Implements intelligent task finding
+4. **Adds Coordination**: Manages parallel execution conflicts
+5. **Generates Implementation Details**: Creates code-ready specifications
+6. **Self-Reviews**: Scores artifacts and identifies improvements
+
+**Output Files**:
+- `${OUTPUT_DIR}/state/*` - System state and history
+- `${OUTPUT_DIR}/context/*` - Bridge files and execution queue
+- `${OUTPUT_DIR}/specs-implementation/` - Detailed implementation specs
+- `${OUTPUT_DIR}/reviews/review-report.md` - Self-audit results
+- `${OUTPUT_DIR}/metrics/` - Execution metrics
+- `${OUTPUT_DIR}/execution-log.json` - Detailed timing data
+
 ### Progress Tracking
 
 New YAML-based progress format:
@@ -593,3 +638,10 @@ The Task tool enables what was previously impossible: actual parallel AI executi
 
 For the comprehensive improvement guide that led to the current system implementation, see:
 - **Archived**: `.claude/archives/docs/SYSTEM_IMPROVEMENT_GUIDE.md` - Contains the original analysis and recommendations that were successfully implemented in January 2025.
+
+## Related Documentation
+
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture and design patterns
+- **[PARALLEL_EXECUTION.md](PARALLEL_EXECUTION.md)** - Details on parallel execution patterns
+- **[WORKFLOWS.md](WORKFLOWS.md)** - Practical examples of complex workflows
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Solutions for common development issues

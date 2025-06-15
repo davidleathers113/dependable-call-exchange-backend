@@ -188,6 +188,58 @@ test-security-suite: ## Run complete security test suite
 	@echo "Running complete security test suite..."
 	$(GOTEST) -tags=security -timeout=20m -v -run TestSecuritySuite ./test/security/
 
+# Compliance Testing Targets
+
+test-compliance: ## Run all compliance validation tests (GDPR, TCPA, SOX, CCPA)
+	@echo "Running comprehensive compliance validation tests..."
+	$(GOTEST) -tags=compliance -timeout=30m -v ./test/compliance/...
+
+test-compliance-gdpr: ## Run GDPR compliance validation tests
+	@echo "Running GDPR compliance tests..."
+	$(GOTEST) -tags=compliance -timeout=15m -v -run TestImmutableAuditComplianceTestSuite/TestGDPRComplianceValidation ./test/compliance/
+
+test-compliance-tcpa: ## Run TCPA compliance validation tests
+	@echo "Running TCPA compliance tests..."
+	$(GOTEST) -tags=compliance -timeout=15m -v -run TestImmutableAuditComplianceTestSuite/TestTCPAComplianceValidation ./test/compliance/
+
+test-compliance-sox: ## Run SOX audit trail verification tests
+	@echo "Running SOX audit trail tests..."
+	$(GOTEST) -tags=compliance -timeout=15m -v -run TestImmutableAuditComplianceTestSuite/TestSOXAuditTrailVerification ./test/compliance/
+
+test-compliance-ccpa: ## Run CCPA privacy controls tests
+	@echo "Running CCPA privacy controls tests..."
+	$(GOTEST) -tags=compliance -timeout=15m -v -run TestImmutableAuditComplianceTestSuite/TestCCPAPrivacyControlsTesting ./test/compliance/
+
+test-compliance-retention: ## Run data retention policy validation tests
+	@echo "Running retention policy validation tests..."
+	$(GOTEST) -tags=compliance -timeout=10m -v -run TestRetentionPolicyValidation ./test/compliance/
+
+test-compliance-rights: ## Run data subject rights testing
+	@echo "Running data subject rights tests..."
+	$(GOTEST) -tags=compliance -timeout=15m -v -run TestDataSubjectRightsTesting ./test/compliance/
+
+test-compliance-cross-regulation: ## Run cross-regulation compatibility tests
+	@echo "Running cross-regulation compatibility tests..."
+	$(GOTEST) -tags=compliance -timeout=15m -v -run TestCrossRegulationCompatibility ./test/compliance/
+
+test-compliance-audit-trail: ## Run audit trail completeness tests
+	@echo "Running audit trail completeness tests..."
+	$(GOTEST) -tags=compliance -timeout=10m -v -run TestAuditTrailCompleteness ./test/compliance/
+
+test-compliance-coverage: ## Run compliance tests with coverage reporting
+	@echo "Running compliance tests with coverage..."
+	$(GOTEST) -tags=compliance -timeout=30m -v -coverprofile=coverage-compliance.out -covermode=atomic ./test/compliance/...
+	$(GOTOOL) cover -html=coverage-compliance.out -o coverage-compliance.html
+	@echo "Compliance coverage report generated: coverage-compliance.html"
+
+test-compliance-quick: ## Run quick compliance validation (subset of tests)
+	@echo "Running quick compliance validation..."
+	$(GOTEST) -tags=compliance -short -timeout=10m -v ./test/compliance/
+
+test-compliance-parallel: ## Run compliance tests in parallel
+	@echo "Running compliance tests in parallel..."
+	$(GOTEST) -tags=compliance -timeout=30m -v -p 4 ./test/compliance/...
+
 docker-clean: ## Clean up test containers and volumes
 	@echo "Cleaning up Docker containers..."
 	@docker ps -a | grep "dce-test" | awk '{print $$1}' | xargs -r docker rm -f || true
@@ -196,6 +248,40 @@ docker-clean: ## Clean up test containers and volumes
 
 bench: ## Run benchmarks
 	$(GOTEST) -bench=. -benchmem ./...
+
+bench-audit: ## Run IMMUTABLE_AUDIT performance benchmarks with validation
+	@echo "Running IMMUTABLE_AUDIT performance benchmarks..."
+	./scripts/run-audit-benchmarks.sh
+
+bench-audit-quick: ## Run audit benchmarks quickly for development
+	@echo "Running quick audit benchmarks..."
+	$(GOTEST) -bench=BenchmarkLogger_SingleEventLogging -benchtime=5s ./internal/service/audit/
+	$(GOTEST) -bench=BenchmarkQuery_1MillionEvents -benchtime=5s ./internal/service/audit/
+	$(GOTEST) -bench=BenchmarkExport_Throughput -benchtime=5s ./internal/service/audit/
+
+bench-audit-logger: ## Run audit logger benchmarks (< 5ms write latency validation)
+	@echo "Running audit logger performance benchmarks..."
+	$(GOTEST) -bench=BenchmarkLogger -benchtime=10s -benchmem ./internal/service/audit/
+
+bench-audit-query: ## Run audit query benchmarks (< 1s for 1M events validation)
+	@echo "Running audit query performance benchmarks..."
+	$(GOTEST) -bench=BenchmarkQuery -benchtime=10s -benchmem ./internal/service/audit/
+
+bench-audit-export: ## Run audit export benchmarks (> 10K events/sec validation)
+	@echo "Running audit export performance benchmarks..."
+	$(GOTEST) -bench=BenchmarkExport -benchtime=10s -benchmem ./internal/service/audit/
+
+bench-audit-integrity: ## Run audit integrity benchmarks
+	@echo "Running audit integrity performance benchmarks..."
+	$(GOTEST) -bench=BenchmarkIntegrity -benchtime=10s -benchmem ./internal/service/audit/
+
+bench-audit-cache: ## Run audit cache benchmarks
+	@echo "Running audit cache performance benchmarks..."
+	$(GOTEST) -bench=BenchmarkCache -benchtime=10s -benchmem ./internal/service/audit/
+
+bench-audit-regression: ## Run audit performance regression tests
+	@echo "Running audit performance regression benchmarks..."
+	$(GOTEST) -bench=.*PerformanceRegression -benchtime=30s -benchmem ./internal/service/audit/
 
 bench-property: ## Run property-based benchmarks
 	$(GOTEST) -bench=Property -benchmem ./...
@@ -403,7 +489,28 @@ ci: deps fmt vet lint security test test-contract ## Run CI pipeline
 
 ci-contract: deps fmt vet lint security test test-contract-full ## Run CI pipeline with full contract validation
 
+ci-compliance: deps fmt vet lint security test test-contract test-compliance ## Run CI pipeline with compliance validation
+
 ci-fast: deps fmt vet lint security-sarif security-deps-ci semgrep-ci test-parallel ## Fast CI pipeline (2025 optimization)
+
+ci-performance: ## Performance-focused CI pipeline with audit benchmarks
+	@echo "Running performance-focused CI pipeline..."
+	$(MAKE) deps
+	$(MAKE) fmt
+	$(MAKE) vet
+	$(MAKE) test-short
+	$(MAKE) bench-audit-quick
+	@echo "Performance CI complete."
+
+ci-audit-validation: ## Full audit performance validation for releases
+	@echo "Running comprehensive audit performance validation..."
+	$(MAKE) deps
+	$(MAKE) fmt
+	$(MAKE) vet
+	$(MAKE) lint
+	$(MAKE) test
+	$(MAKE) bench-audit
+	@echo "Audit validation complete - ready for release."
 
 ci-security: ## Security-focused CI pipeline with comprehensive scanning
 	@echo "Running security-focused CI pipeline..."

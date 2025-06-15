@@ -1,0 +1,117 @@
+# Archive Configuration
+# S3-based audit event archival system with 7-year retention
+
+archive:
+  # Storage provider (currently only s3 is supported)
+  provider: s3
+  
+  # S3 Configuration
+  # Bucket naming: dce-audit-archive-{environment}
+  bucket: ${ARCHIVE_BUCKET:-dce-audit-archive-${ENVIRONMENT}}
+  region: ${AWS_REGION:-us-east-1}
+  # endpoint: http://localhost:9000  # Uncomment for MinIO testing
+  
+  # Archive Settings
+  batch_size: 1000                    # Number of events per archive batch
+  compression: snappy                 # Options: snappy (fast), gzip (balanced), zstd (best compression)
+  row_group_size: 100000             # Parquet row group size for query optimization
+  retention_days: 2555               # 7 years (7 * 365 = 2555 days)
+  
+  # Performance Settings
+  max_concurrency: 10                # Parallel upload threads
+  upload_part_size: 5242880          # 5MB multipart upload size
+  timeout: 5m                        # Operation timeout
+  
+  # S3 Lifecycle Policies
+  enable_lifecycle: true             # Automatically configure S3 lifecycle rules
+  transition_days: 90                # Days before transitioning to Glacier
+  
+  # Security Settings
+  enable_encryption: true            # Enable server-side encryption
+  # kms_key_id: arn:aws:kms:...     # Optional: Use KMS for encryption
+
+# Archive Schedule (for cron jobs or scheduled tasks)
+archive_schedule:
+  enabled: true
+  
+  # Archive events older than this many days
+  archive_after_days: 90
+  
+  # Cron expressions for scheduled operations
+  schedules:
+    # Archive old events daily at 2 AM
+    archive_events: "0 2 * * *"
+    
+    # Verify archive integrity weekly on Sunday at 3 AM
+    verify_integrity: "0 3 * * 0"
+    
+    # Delete expired archives monthly on the 1st at 4 AM
+    delete_expired: "0 4 1 * *"
+    
+    # Generate archive statistics daily at 6 AM
+    update_stats: "0 6 * * *"
+
+# Archive Query Settings
+archive_query:
+  # Maximum events to return per query
+  max_results: 10000
+  
+  # Query timeout
+  timeout: 30s
+  
+  # Enable query result caching
+  enable_cache: true
+  cache_ttl: 1h
+
+# Monitoring and Alerts
+archive_monitoring:
+  # Alert thresholds
+  alerts:
+    # Alert if archival backlog exceeds this many days
+    backlog_days_threshold: 7
+    
+    # Alert if compression ratio falls below this
+    min_compression_ratio: 2.0
+    
+    # Alert if archive operation fails this many times
+    max_consecutive_failures: 3
+    
+    # Alert if storage growth exceeds this percentage monthly
+    max_monthly_growth_percent: 20
+
+  # Metrics to track
+  metrics:
+    - archive_operation_duration
+    - events_archived_per_second
+    - compression_ratio
+    - storage_usage_bytes
+    - query_response_time
+    - integrity_check_status
+
+# Development/Testing Overrides
+development:
+  archive:
+    bucket: dce-audit-archive-dev
+    endpoint: http://localhost:9000    # MinIO endpoint
+    batch_size: 100                    # Smaller batches for testing
+    retention_days: 30                 # Shorter retention for dev
+    enable_lifecycle: false            # Disable lifecycle in dev
+    enable_encryption: false           # Disable encryption in dev
+  
+  archive_schedule:
+    enabled: false                     # Disable automatic archival in dev
+
+# Production Overrides
+production:
+  archive:
+    bucket: dce-audit-archive-prod
+    compression: zstd                  # Best compression for long-term storage
+    batch_size: 5000                   # Larger batches for efficiency
+    max_concurrency: 20                # More parallelism
+    enable_encryption: true
+    kms_key_id: ${KMS_KEY_ARN}        # Use KMS in production
+  
+  archive_monitoring:
+    alerts:
+      backlog_days_threshold: 3        # Stricter in production
+      max_consecutive_failures: 1      # Alert on first failure

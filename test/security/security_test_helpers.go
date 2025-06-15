@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/davidleathers/dependable-call-exchange-backend/internal/domain/account"
 	"github.com/davidleathers/dependable-call-exchange-backend/test/e2e/infrastructure"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -158,21 +157,17 @@ func NewRequest(method, path string, body interface{}) *http.Request {
 	return req
 }
 
-// Do performs an HTTP request using the API client
-func (c *infrastructure.APIClient) Do(req *http.Request) *http.Response {
-	// Prepend base URL if not already present
-	if req.URL.Scheme == "" {
-		req.URL.Scheme = "http"
-		req.URL.Host = c.BaseURL[7:] // Remove "http://" prefix
+// Helper function to create HTTP requests
+func createHTTPRequest(method, path string, body interface{}) *http.Request {
+	var bodyReader *bytes.Reader
+	if body != nil {
+		bodyBytes, _ := json.Marshal(body)
+		bodyReader = bytes.NewReader(bodyBytes)
+	} else {
+		bodyReader = bytes.NewReader([]byte{})
 	}
 
-	// Add token if present
-	if c.Token != "" && req.Header.Get("Authorization") == "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(c.t, err)
-
-	return resp
+	req, _ := http.NewRequest(method, path, bodyReader)
+	req.Header.Set("Content-Type", "application/json")
+	return req
 }

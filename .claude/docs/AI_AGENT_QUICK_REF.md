@@ -15,6 +15,45 @@ A true parallel execution system using Task tools to spawn multiple concurrent C
 /dce-feature ./docs/specs/feature.md . adaptive production
 ```
 
+## 📋 Complete Command Reference
+
+| Command | Purpose | Key Options |
+|---------|---------|-------------|
+| `/dce-master-plan` | Strategic planning & analysis | scope, output_dir, priority, depth |
+| `/dce-feature` | Feature implementation | spec_file, output_dir, mode, quality |
+| `/dce-find-work` | Discover ready work | --ready, --criteria, --team, --capacity |
+| `/dce-check-work` | Self-review for gaps | (none) |
+| `/dce-research` | Web research solutions | topic |
+| `/dce-system-improve` | System optimization | --phase, --depth, --output |
+| `/dce-feature-resume` | Resume interrupted work | feature_id, --from-wave, --status |
+| `/dce-feature-continue` | Continue from wave | feature_id, --from-wave |
+| `/dce-feature-retry` | Retry failed wave | feature_id, --wave, --with-context |
+| `/github` | Git commits & PRs | branch_name |
+
+### Quick Command Examples
+```bash
+# Planning & analysis
+/dce-master-plan full . compliance-critical thorough
+
+# Feature implementation
+/dce-feature ./spec.md . adaptive production
+
+# Quality checks
+/dce-check-work
+/dce-research "Go 1.24 performance patterns"
+
+# Work management
+/dce-find-work --ready
+/dce-feature-resume consent-v2
+/dce-feature-retry consent-v2 --wave=3
+
+# System optimization
+/dce-system-improve --phase=all
+
+# Version control
+/github feature/new-implementation
+```
+
 ## 📊 True Parallel Execution Model
 
 ```

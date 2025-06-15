@@ -71,6 +71,14 @@ const (
 	EventFinancialComplianceCheck EventType = "financial.compliance_check"
 )
 
+// DNC Events
+const (
+	EventDNCNumberSuppressed   EventType = "dnc.number_suppressed"
+	EventDNCNumberReleased     EventType = "dnc.number_released"
+	EventDNCCheckPerformed     EventType = "dnc.check_performed"
+	EventDNCListSynced         EventType = "dnc.list_synced"
+)
+
 // System Events
 const (
 	EventAPICall        EventType = "system.api_call"

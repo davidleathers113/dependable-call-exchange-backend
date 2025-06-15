@@ -88,6 +88,12 @@ const (
 	UserPrefix      = "dce:user:"
 	CallPrefix      = "dce:call:"
 	BidPrefix       = "dce:bid:"
+	// DNC cache prefixes (defined in dnc_cache.go)
+	// DNCEntryPrefix    = "dce:dnc:entry:"
+	// DNCCheckPrefix    = "dce:dnc:check:"
+	// DNCBloomPrefix    = "dce:dnc:bloom:"
+	// DNCProviderPrefix = "dce:dnc:provider:"
+	// DNCSourcePrefix   = "dce:dnc:source:"
 )
 
 // Common TTL values
@@ -98,6 +104,11 @@ const (
 	RouteCacheTTL = 10 * time.Minute
 	RateLimitTTL  = 1 * time.Minute
 	ShortCacheTTL = 30 * time.Second
+	// DNC cache TTL values (defined in dnc_cache.go)
+	// DNCEntryTTL    = 24 * time.Hour
+	// DNCCheckTTL    = 6 * time.Hour
+	// DNCBloomTTL    = 12 * time.Hour
+	// DNCProviderTTL = 2 * time.Hour
 )
 
 // ErrCacheKeyNotFound is returned when a cache key doesn't exist
